@@ -12,7 +12,8 @@ export interface TDRow {
   lm: number; // projected expected TDs — median (the headline forecast)
   lc: number; // projected expected TDs — ceiling
   a: number; // actual TD count
-  av: number; // opportunity volume (attempts / targets)
+  av: number; // actual opportunity volume (attempts / targets)
+  pv: number; // projected median opportunity volume
 }
 
 export interface TDFilters {
@@ -21,6 +22,7 @@ export interface TDFilters {
   positions: Set<Position>;
   teams: Set<string>;
   minVolume: number;
+  minProjVolume: number;
   excludeInjury: boolean;
 }
 
@@ -36,6 +38,7 @@ export function filterTd(
     if (f.teams.size > 0 && !f.teams.has(r.team)) return false;
     if (f.excludeInjury && r.inj) return false;
     if (r.av < f.minVolume) return false;
+    if (r.pv < f.minProjVolume) return false;
     return true;
   });
 }

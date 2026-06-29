@@ -315,6 +315,7 @@ function main() {
         err: round(err),
         pe: pctErr === null ? null : round(pctErr, 4),
         av: round(actualVol, 1), // actual volume (for min-volume UI filtering)
+        pv: round(projMedVol, 1), // projected median volume (for min-projected filtering)
       };
     }
 
@@ -355,7 +356,8 @@ function main() {
         lm: round(num(p.M[t.proj]), 4), // projected expected TDs — median
         lc: round(num(p.C[t.proj]), 4), // projected expected TDs — ceiling
         a: actualTD, // actual TD count
-        av: round(actualVol, 1),
+        av: round(actualVol, 1), // actual opportunity volume
+        pv: round(num(p.M[t.projVol]), 1), // projected median opportunity volume
       });
     }
 

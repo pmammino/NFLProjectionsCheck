@@ -122,6 +122,20 @@ export default function FilterBar({
         />
       </div>
 
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-400">
+          Min projected volume: {filters.minProjVolume}
+        </label>
+        <input
+          type="range"
+          min={0}
+          max={20}
+          value={filters.minProjVolume}
+          onChange={(e) => update({ minProjVolume: Number(e.target.value) })}
+          className="w-40"
+        />
+      </div>
+
       <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
         <input
           type="checkbox"

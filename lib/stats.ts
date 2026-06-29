@@ -1,4 +1,5 @@
 import type { MetricMeta, Row } from "./types";
+import { passesVol } from "./aggregate";
 
 // Pull the per-row arrays we need for a metric (respecting position + volume).
 interface Series {
@@ -10,12 +11,17 @@ interface Series {
   hi: number[]; // max(f,c) — interval upper bound
 }
 
-function seriesFor(rows: Row[], metric: MetricMeta, minVolume: number): Series {
+function seriesFor(
+  rows: Row[],
+  metric: MetricMeta,
+  minVolume: number,
+  minProjVolume: number
+): Series {
   const s: Series = { m: [], a: [], f: [], c: [], lo: [], hi: [] };
   for (const r of rows) {
     if (!metric.positions.includes(r.pos)) continue;
     const cell = r.m[metric.key];
-    if (!cell || cell.av < minVolume) continue;
+    if (!cell || !passesVol(cell, minVolume, minProjVolume)) continue;
     s.m.push(cell.m);
     s.a.push(cell.a);
     s.f.push(cell.f);
@@ -126,9 +132,10 @@ const ALPHA = 0.5; // central 50% interval (Floor=25th, Ceiling=75th)
 export function deepStats(
   rows: Row[],
   metric: MetricMeta,
-  minVolume: number
+  minVolume: number,
+  minProjVolume = 0
 ): DeepStats | null {
-  const s = seriesFor(rows, metric, minVolume);
+  const s = seriesFor(rows, metric, minVolume, minProjVolume);
   const n = s.a.length;
   if (n === 0) return null;
 
@@ -283,12 +290,17 @@ interface CellLite {
   pos: string;
 }
 
-function cellsFor(rows: Row[], metric: MetricMeta, minVolume: number): CellLite[] {
+function cellsFor(
+  rows: Row[],
+  metric: MetricMeta,
+  minVolume: number,
+  minProjVolume: number
+): CellLite[] {
   const out: CellLite[] = [];
   for (const r of rows) {
     if (!metric.positions.includes(r.pos)) continue;
     const c = r.m[metric.key];
-    if (!c || c.av < minVolume) continue;
+    if (!c || !passesVol(c, minVolume, minProjVolume)) continue;
     out.push({
       a: c.a,
       m: c.m,
@@ -310,9 +322,10 @@ export interface Conditional {
 export function conditional(
   rows: Row[],
   metric: MetricMeta,
-  minVolume: number
+  minVolume: number,
+  minProjVolume = 0
 ): Conditional {
-  const cells = cellsFor(rows, metric, minVolume);
+  const cells = cellsFor(rows, metric, minVolume, minProjVolume);
 
   // by week
   const wkMap = new Map<number, CellLite[]>();

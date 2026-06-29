@@ -20,6 +20,7 @@ export interface MetricCell {
   err: number; // actual - median
   pe: number | null; // (actual - median) / |median|
   av: number; // actual volume (for min-volume filtering)
+  pv: number; // projected median volume (for min-projected filtering)
 }
 
 export interface Row {
@@ -51,6 +52,7 @@ export interface TDRecord {
   lc: number;
   a: number;
   av: number;
+  pv: number;
 }
 
 export interface Dataset {

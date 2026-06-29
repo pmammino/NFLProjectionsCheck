@@ -48,6 +48,7 @@ export default function Dashboard() {
           positions: new Set<Position>(data.meta.positions),
           teams: new Set<string>(),
           minVolume: 0,
+          minProjVolume: 0,
           excludeInjury: false,
         });
       })
@@ -83,7 +84,7 @@ export default function Dashboard() {
   const scatterPts = useMemo(
     () =>
       ds && filters && selectedMetric
-        ? scatterFor(filteredRows, selectedMetric, filters.minVolume)
+        ? scatterFor(filteredRows, selectedMetric, filters.minVolume, filters.minProjVolume)
         : [],
     [ds, filters, filteredRows, selectedMetric]
   );
@@ -92,7 +93,7 @@ export default function Dashboard() {
     () =>
       ds && filters
         ? availableMetrics
-            .map((m) => deepStats(filteredRows, m, filters.minVolume))
+            .map((m) => deepStats(filteredRows, m, filters.minVolume, filters.minProjVolume))
             .filter((s): s is NonNullable<typeof s> => s !== null)
         : [],
     [ds, filters, filteredRows, availableMetrics]
@@ -101,7 +102,7 @@ export default function Dashboard() {
   const selectedDeep = useMemo(
     () =>
       ds && filters && selectedMetric
-        ? deepStats(filteredRows, selectedMetric, filters.minVolume)
+        ? deepStats(filteredRows, selectedMetric, filters.minVolume, filters.minProjVolume)
         : null,
     [ds, filters, filteredRows, selectedMetric]
   );
@@ -109,7 +110,7 @@ export default function Dashboard() {
   const cond = useMemo(
     () =>
       ds && filters && selectedMetric
-        ? conditional(filteredRows, selectedMetric, filters.minVolume)
+        ? conditional(filteredRows, selectedMetric, filters.minVolume, filters.minProjVolume)
         : null,
     [ds, filters, filteredRows, selectedMetric]
   );
@@ -251,6 +252,7 @@ export default function Dashboard() {
           rows={filteredRows}
           metric={selectedMetric}
           minVolume={filters.minVolume}
+          minProjVolume={filters.minProjVolume}
         />
       )}
     </main>

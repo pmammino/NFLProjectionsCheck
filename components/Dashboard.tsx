@@ -8,12 +8,15 @@ import {
   summarizeAll,
   type Filters,
 } from "@/lib/aggregate";
+import { conditional, deepStats } from "@/lib/stats";
 import FilterBar from "./FilterBar";
 import CalibrationView from "./CalibrationView";
 import ScatterView from "./ScatterView";
 import ExplorerView from "./ExplorerView";
+import CoverageView from "./CoverageView";
+import ConditionalView from "./ConditionalView";
 
-type Tab = "calibration" | "scatter" | "explorer";
+type Tab = "calibration" | "coverage" | "conditional" | "scatter" | "explorer";
 
 export default function Dashboard() {
   const [ds, setDs] = useState<Dataset | null>(null);
@@ -76,6 +79,32 @@ export default function Dashboard() {
     [ds, filters, filteredRows, selectedMetric]
   );
 
+  const deepAll = useMemo(
+    () =>
+      ds && filters
+        ? availableMetrics
+            .map((m) => deepStats(filteredRows, m, filters.minVolume))
+            .filter((s): s is NonNullable<typeof s> => s !== null)
+        : [],
+    [ds, filters, filteredRows, availableMetrics]
+  );
+
+  const selectedDeep = useMemo(
+    () =>
+      ds && filters && selectedMetric
+        ? deepStats(filteredRows, selectedMetric, filters.minVolume)
+        : null,
+    [ds, filters, filteredRows, selectedMetric]
+  );
+
+  const cond = useMemo(
+    () =>
+      ds && filters && selectedMetric
+        ? conditional(filteredRows, selectedMetric, filters.minVolume)
+        : null,
+    [ds, filters, filteredRows, selectedMetric]
+  );
+
   if (err)
     return (
       <main className="p-8 text-red-400">
@@ -115,6 +144,8 @@ export default function Dashboard() {
         {(
           [
             ["calibration", "Calibration"],
+            ["coverage", "Coverage & Intervals"],
+            ["conditional", "Conditional"],
             ["scatter", "Projected vs Actual"],
             ["explorer", "Player-week detail"],
           ] as [Tab, string][]
@@ -153,6 +184,12 @@ export default function Dashboard() {
       )}
 
       {tab === "calibration" && <CalibrationView summaries={summaries} />}
+      {tab === "coverage" && selectedMetric && (
+        <CoverageView all={deepAll} selected={selectedDeep} metric={selectedMetric} />
+      )}
+      {tab === "conditional" && selectedMetric && cond && (
+        <ConditionalView data={cond} metric={selectedMetric} />
+      )}
       {tab === "scatter" && selectedMetric && (
         <ScatterView points={scatterPts} metric={selectedMetric} />
       )}

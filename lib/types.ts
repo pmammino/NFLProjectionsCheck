@@ -31,6 +31,28 @@ export interface Row {
   m: Record<string, MetricCell>;
 }
 
+export interface TDTypeMeta {
+  key: string; // passTD | rushTD | recTD
+  label: string;
+  positions: Position[];
+  volLabel: string; // e.g. "targets"
+  minOpp: number;
+}
+
+export interface TDRecord {
+  type: string;
+  pid: string;
+  team: string;
+  pos: Position;
+  wk: number;
+  inj: boolean;
+  lf: number;
+  lm: number;
+  lc: number;
+  a: number;
+  av: number;
+}
+
 export interface Dataset {
   meta: {
     generatedAt: string;
@@ -40,12 +62,15 @@ export interface Dataset {
     positions: Position[];
     minEffVolume: number;
     metrics: MetricMeta[];
+    tdTypes: TDTypeMeta[];
     counts: {
       actualRows: number;
       matchedPlayerWeeks: number;
       emittedRows: number;
+      tdRows: number;
       injurySuspect: number;
     };
   };
   rows: Row[];
+  td: TDRecord[];
 }

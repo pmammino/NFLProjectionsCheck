@@ -1,0 +1,16 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# generated data (rebuilt by prebuild/predev from the CSVs)
+/public/data/dashboard.json
+
+# misc
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+.env*.local

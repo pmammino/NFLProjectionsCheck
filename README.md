@@ -62,10 +62,18 @@ and never produce a false comparison.
    - **Point accuracy of the median** — RMSE, MAE, WAPE, Spearman rank
      correlation (does it get the *ordering* right?), and the OLS slope of
      `actual ~ median` (target 1.0; <1 ⇒ projections too extreme).
+   - **Brier score (exceedance)** — proper score over the Floor/Median/Ceiling
+     exceedance forecasts (implied probabilities 0.75/0.50/0.25). Lower is
+     better; the best achievable with these fixed probabilities is ≈ 0.208.
+   - **95% Wilson confidence intervals** on every coverage proportion —
+     summary cards flag when a target (e.g. 50%) lies *outside* the interval
+     (a statistically significant miscalibration), and the reliability diagram
+     draws CI whiskers on each point.
 3. **Conditional** — where calibration breaks down: within-band & median
    coverage **by week** (season trend), **by projection-magnitude tier**
    (quartiles — are studs vs. low-projected players handled differently?), and
-   **by position**.
+   **by position**. Magnitude bars and the position table carry 95% Wilson
+   confidence intervals so apparent differences can be read as real or noise.
 4. **Projected vs Actual** — scatter of projected Median vs. actual for any
    metric, with a `y = x` reference line; offset from the line reveals
    systematic input bias.

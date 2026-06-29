@@ -5,6 +5,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ErrorBar,
   Line,
   LineChart,
   ReferenceLine,
@@ -44,6 +45,10 @@ export default function ConditionalView({
   const magData = data.byMagnitude.map((b) => ({
     label: b.label,
     within: b.withinRate * 100,
+    err: [
+      (b.withinRate - b.withinCI.lo) * 100,
+      (b.withinCI.hi - b.withinRate) * 100,
+    ],
     meanErr: b.meanErr,
     n: b.n,
   }));
@@ -95,6 +100,7 @@ export default function ConditionalView({
                 {magData.map((d, i) => (
                   <Cell key={i} fill={withinColor(d.within)} />
                 ))}
+                <ErrorBar dataKey="err" width={6} strokeWidth={1.5} stroke="#cbd5e1" direction="y" />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -119,6 +125,9 @@ export default function ConditionalView({
                 <td className="px-4 py-2 text-right tabular-nums text-slate-400">{b.n}</td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-300">
                   {(b.withinRate * 100).toFixed(1)}%
+                  <span className="ml-1 text-[11px] text-slate-500">
+                    ±{(((b.withinCI.hi - b.withinCI.lo) / 2) * 100).toFixed(1)}
+                  </span>
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-300">
                   {(b.covMedian * 100).toFixed(1)}%

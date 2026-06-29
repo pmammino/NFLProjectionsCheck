@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import type { MetricSummary } from "@/lib/aggregate";
+import { wilson } from "@/lib/stats";
 import { fmtSignedPct } from "@/lib/format";
 
 // Expected within-band rate for a 25th–75th percentile band.
@@ -135,9 +136,14 @@ export default function CalibrationView({
                     {s.n}
                   </td>
                   <td
-                    className={`px-4 py-2 text-right font-semibold tabular-nums ${color}`}
+                    className={`px-4 py-2 text-right tabular-nums ${color}`}
                   >
-                    {(s.withinRate * 100).toFixed(1)}%
+                    <span className="font-semibold">
+                      {(s.withinRate * 100).toFixed(1)}%
+                    </span>
+                    <span className="ml-1 text-[11px] font-normal text-slate-500">
+                      ±{(wilson(Math.round(s.withinRate * s.n), s.n).half * 100).toFixed(1)}
+                    </span>
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex h-3 w-40 overflow-hidden rounded">
@@ -177,7 +183,8 @@ export default function CalibrationView({
         <span className="text-blue-400">Above</span> = actual over the Ceiling
         (projection too low). &ldquo;Median bias&rdquo; is the median percent
         difference between actual and the projected Median (robust to
-        low-volume outliers).
+        low-volume outliers). The ± on Within band is the 95% Wilson
+        confidence interval half-width.
       </p>
     </div>
   );

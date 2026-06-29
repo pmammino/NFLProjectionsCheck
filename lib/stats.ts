@@ -64,6 +64,29 @@ function pearson(x: number[], y: number[]): number {
   return d === 0 ? NaN : cov / d;
 }
 
+// 95% Wilson score interval for a binomial proportion. Robust for small n and
+// proportions near 0/1, where the normal approximation misbehaves.
+export function wilson(
+  successes: number,
+  n: number,
+  z = 1.96
+): { lo: number; hi: number; half: number } {
+  if (n === 0) return { lo: 0, hi: 0, half: 0 };
+  const p = successes / n;
+  const z2 = z * z;
+  const denom = 1 + z2 / n;
+  const center = (p + z2 / (2 * n)) / denom;
+  const margin = (z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))) / denom;
+  const lo = Math.max(0, center - margin);
+  const hi = Math.min(1, center + margin);
+  return { lo, hi, half: (hi - lo) / 2 };
+}
+
+export interface CI {
+  lo: number;
+  hi: number;
+}
+
 export interface DeepStats {
   key: string;
   meta: MetricMeta;
@@ -72,7 +95,18 @@ export interface DeepStats {
   covFloor: number;
   covMedian: number;
   covCeiling: number;
+  within: number; // P(Floor <= actual <= Ceiling); target 50%
   overMedianRate: number; // P(actual > median); target 50%
+  // 95% Wilson confidence intervals for the proportions above.
+  ciFloor: CI;
+  ciMedian: CI;
+  ciCeiling: CI;
+  ciWithin: CI;
+  ciOverMedian: CI;
+  // Brier score for the quantile-exceedance forecasts (Floor/Median/Ceiling,
+  // implied probs 0.75/0.50/0.25), averaged over the three thresholds. Lower
+  // is better; the best achievable with these fixed probs is ~0.2083.
+  brier: number;
   // Interval quality
   sharpness: number; // mean(hi - lo), raw units
   relSharpness: number; // mean((hi - lo) / |median|)
@@ -101,11 +135,13 @@ export function deepStats(
   let leFloor = 0,
     leMedian = 0,
     leCeiling = 0,
-    overMed = 0;
+    overMed = 0,
+    inBand = 0;
   let widthSum = 0,
     relWidthSum = 0,
     winklerSum = 0,
-    pinballSum = 0;
+    pinballSum = 0,
+    brierSum = 0;
   let seSum = 0,
     aeSum = 0,
     absActualSum = 0;
@@ -122,6 +158,15 @@ export function deepStats(
     if (a <= m) leMedian++;
     if (a <= c) leCeiling++;
     if (a > m) overMed++;
+    if (a >= lo && a <= hi) inBand++;
+
+    // Brier score over the three quantile-exceedance events. The projection
+    // implies P(actual > Floor)=.75, P(actual > Median)=.5, P(actual > Ceiling)=.25.
+    const yF = a > f ? 1 : 0;
+    const yM = a > m ? 1 : 0;
+    const yC = a > c ? 1 : 0;
+    brierSum +=
+      ((0.75 - yF) ** 2 + (0.5 - yM) ** 2 + (0.25 - yC) ** 2) / 3;
 
     const width = hi - lo;
     widthSum += width;
@@ -153,7 +198,14 @@ export function deepStats(
     covFloor: leFloor / n,
     covMedian: leMedian / n,
     covCeiling: leCeiling / n,
+    within: inBand / n,
     overMedianRate: overMed / n,
+    ciFloor: wilson(leFloor, n),
+    ciMedian: wilson(leMedian, n),
+    ciCeiling: wilson(leCeiling, n),
+    ciWithin: wilson(inBand, n),
+    ciOverMedian: wilson(overMed, n),
+    brier: brierSum / n,
     sharpness: widthSum / n,
     relSharpness: relWidthSum / n,
     winkler: winklerSum / n,
@@ -197,6 +249,7 @@ export interface Bucket {
   label: string;
   n: number;
   withinRate: number;
+  withinCI: CI; // 95% Wilson CI on withinRate
   covMedian: number; // P(actual <= median)
   meanErr: number; // mean(actual - median)
 }
@@ -215,6 +268,7 @@ function bucketStats(label: string, cells: { a: number; m: number; lo: number; h
     label,
     n,
     withinRate: n ? within / n : 0,
+    withinCI: wilson(within, n),
     covMedian: n ? leMed / n : 0,
     meanErr: n ? errSum / n : 0,
   };

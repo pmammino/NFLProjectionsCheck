@@ -45,16 +45,39 @@ catches benchings/ejections — hence it's a *flag* with a toggle to exclude,
 not a hard filter. Players inactive *before* a game simply have no actual row
 and never produce a false comparison.
 
-## The three views
+## The views
 
 1. **Calibration** — per-metric within-band hit rate vs. the 50% target, plus a
    Below / Within / Above breakdown, median bias vs. projection, and mean error.
    This is the fastest read on whether an input is well-calibrated, too narrow,
    or biased.
-2. **Projected vs Actual** — scatter of projected Median vs. actual for any
+2. **Coverage & Intervals** — deeper calibration:
+   - **Reliability diagram** — empirical P(actual ≤ Floor / Median / Ceiling)
+     vs. the nominal 25 / 50 / 75% targets. Pinpoints *where* a projection is
+     miscalibrated (e.g. unbiased median but a too-low ceiling).
+   - **Sharpness** — mean band width (a band can cover well but be uselessly
+     wide).
+   - **Winkler interval score** and **pinball loss** — proper scoring rules for
+     the central interval and per-quantile forecasts (lower is better).
+   - **Point accuracy of the median** — RMSE, MAE, WAPE, Spearman rank
+     correlation (does it get the *ordering* right?), and the OLS slope of
+     `actual ~ median` (target 1.0; <1 ⇒ projections too extreme).
+   - **Brier score (exceedance)** — proper score over the Floor/Median/Ceiling
+     exceedance forecasts (implied probabilities 0.75/0.50/0.25). Lower is
+     better; the best achievable with these fixed probabilities is ≈ 0.208.
+   - **95% Wilson confidence intervals** on every coverage proportion —
+     summary cards flag when a target (e.g. 50%) lies *outside* the interval
+     (a statistically significant miscalibration), and the reliability diagram
+     draws CI whiskers on each point.
+3. **Conditional** — where calibration breaks down: within-band & median
+   coverage **by week** (season trend), **by projection-magnitude tier**
+   (quartiles — are studs vs. low-projected players handled differently?), and
+   **by position**. Magnitude bars and the position table carry 95% Wilson
+   confidence intervals so apparent differences can be read as real or noise.
+4. **Projected vs Actual** — scatter of projected Median vs. actual for any
    metric, with a `y = x` reference line; offset from the line reveals
    systematic input bias.
-3. **Player-week detail** — sortable table with a visual Floor–Median–Ceiling
+5. **Player-week detail** — sortable table with a visual Floor–Median–Ceiling
    band and where the actual landed, for drill-down.
 
 All views respond to filters: position, week range, team, minimum actual

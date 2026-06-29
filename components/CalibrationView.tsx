@@ -13,6 +13,7 @@ import {
 import type { MetricSummary } from "@/lib/aggregate";
 import { wilson } from "@/lib/stats";
 import { fmtSignedPct } from "@/lib/format";
+import Explainer from "./Explainer";
 
 // Expected within-band rate for a 25th–75th percentile band.
 const TARGET_WITHIN = 0.5;
@@ -33,6 +34,38 @@ export default function CalibrationView({
 
   return (
     <div className="space-y-6">
+      <Explainer title="What this shows & how to read it">
+        <p>
+          Every projection comes as a range: a <b>Floor</b> (25th percentile),{" "}
+          <b>Median</b> (50th), and <b>Ceiling</b> (75th). Because the Floor and
+          Ceiling are meant to be the 25th and 75th percentile outcomes, a
+          well-built projection should see the actual result land{" "}
+          <b>inside that band about half the time</b>.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <b>Within band</b> — how often the actual fell between Floor and
+            Ceiling. Near 50% (green) is healthy; far below means the range is
+            too narrow, far above means it&apos;s too wide.
+          </li>
+          <li>
+            <b>Below / Within / Above</b> — of the misses, were they under the
+            Floor (projection too high) or over the Ceiling (too low)? A
+            lopsided bar reveals directional bias.
+          </li>
+          <li>
+            <b>Median bias</b> — the typical % gap between the actual and the
+            projected Median. Near 0 means the center of the projection is
+            unbiased.
+          </li>
+        </ul>
+        <p className="text-slate-400">
+          <b>What you learn:</b> which inputs are trustworthy as-is, which are
+          systematically too high or too low, and which have ranges that
+          don&apos;t reflect real-world spread.
+        </p>
+      </Explainer>
+
       <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
         <h3 className="mb-1 text-sm font-semibold text-slate-200">
           Within-band hit rate vs. 50% target
@@ -185,6 +218,13 @@ export default function CalibrationView({
         difference between actual and the projected Median (robust to
         low-volume outliers). The ± on Within band is the 95% Wilson
         confidence interval half-width.
+      </p>
+      <p className="text-xs text-amber-300/80">
+        Note: the TD <i>rate</i> rows (Pass/Rush/Rec TD per attempt or target)
+        are unreliable here — touchdowns are essentially a 0/1 outcome per game,
+        so a continuous rate band is the wrong frame. See the{" "}
+        <b>Touchdowns</b> tab for a proper rare-event treatment (expected-vs-actual
+        calibration, scoring probability, Brier &amp; log loss).
       </p>
     </div>
   );

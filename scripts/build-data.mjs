@@ -198,6 +198,47 @@ const PRIMARY_VOL = {
   TE: { proj: "Targets", actual: "Targets", expect: 4 },
 };
 
+// Touchdowns are rare count events (actuals are essentially 0/1/2 per game), so
+// a continuous "rate band" comparison is the wrong frame. Instead we emit the
+// projected EXPECTED TD COUNT (the model's own TD total per split) and the
+// ACTUAL TD COUNT, and evaluate them with rare-event calibration in the app
+// (expected-vs-actual binning + Poisson P(>=1 TD) reliability / Brier / log-loss).
+const TD_TYPES = [
+  {
+    key: "passTD",
+    label: "Passing TDs",
+    positions: ["QB"],
+    proj: "PassTDs",
+    actual: "PassTD",
+    projVol: "PassAttempts",
+    actualVol: "PassAtt",
+    volLabel: "pass attempts",
+    minOpp: 5,
+  },
+  {
+    key: "rushTD",
+    label: "Rushing TDs",
+    positions: ["QB", "RB", "WR", "TE"],
+    proj: "RushTDs",
+    actual: "RushTD",
+    projVol: "RushAttempts",
+    actualVol: "Rushes",
+    volLabel: "rush attempts",
+    minOpp: 2,
+  },
+  {
+    key: "recTD",
+    label: "Receiving TDs",
+    positions: ["RB", "WR", "TE"],
+    proj: "RecTDs",
+    actual: "RecptTD",
+    projVol: "Targets",
+    actualVol: "Targets",
+    volLabel: "targets",
+    minOpp: 2,
+  },
+];
+
 function readSplitValue(spec, row) {
   if (typeof spec === "string") return num(row[spec]);
   const d = num(row[spec.denom]);
@@ -222,6 +263,7 @@ function main() {
   }
 
   const out = [];
+  const td = [];
   let matched = 0;
   let injSuspect = 0;
 
@@ -276,8 +318,6 @@ function main() {
       };
     }
 
-    if (Object.keys(metricsOut).length === 0) continue;
-
     // In-game injury proxy: expected to play a real role but recorded almost
     // nothing. Can't distinguish injury from benching/ejection with this data.
     let inj = false;
@@ -295,6 +335,31 @@ function main() {
         injSuspect++;
       }
     }
+
+    // Touchdown rows (count/rare-event framing) — collected independently of
+    // the rate metrics above so the dedicated TD calibration view has clean data.
+    for (const t of TD_TYPES) {
+      if (!t.positions.includes(pos)) continue;
+      const actualVol = num(a[t.actualVol]);
+      const actualTD = num(a[t.actual]);
+      // Evaluate only games where the player had a real opportunity to score.
+      if (actualVol < t.minOpp && actualTD === 0) continue;
+      td.push({
+        type: t.key,
+        pid,
+        team,
+        pos,
+        wk: Number(week),
+        inj,
+        lf: round(num(p.F[t.proj]), 4), // projected expected TDs — floor
+        lm: round(num(p.M[t.proj]), 4), // projected expected TDs — median
+        lc: round(num(p.C[t.proj]), 4), // projected expected TDs — ceiling
+        a: actualTD, // actual TD count
+        av: round(actualVol, 1),
+      });
+    }
+
+    if (Object.keys(metricsOut).length === 0) continue;
 
     out.push({ pid, team, pos, wk: Number(week), inj, m: metricsOut });
   }
@@ -318,14 +383,23 @@ function main() {
         unit: m.unit || (m.kind === "volume" ? "count" : "rate"),
         positions: m.positions,
       })),
+      tdTypes: TD_TYPES.map((t) => ({
+        key: t.key,
+        label: t.label,
+        positions: t.positions,
+        volLabel: t.volLabel,
+        minOpp: t.minOpp,
+      })),
       counts: {
         actualRows: actualRows.length,
         matchedPlayerWeeks: matched,
         emittedRows: out.length,
+        tdRows: td.length,
         injurySuspect: injSuspect,
       },
     },
     rows: out,
+    td,
   };
 
   const outDir = join(ROOT, "public", "data");
@@ -334,7 +408,7 @@ function main() {
   writeFileSync(outPath, JSON.stringify(payload));
   const kb = (readFileSync(outPath).length / 1024).toFixed(0);
   console.log(
-    `build-data: ${out.length} rows (${matched} matched, ${injSuspect} injury-suspect) -> ${outPath} (${kb} KB)`
+    `build-data: ${out.length} rows, ${td.length} TD rows (${matched} matched, ${injSuspect} injury-suspect) -> ${outPath} (${kb} KB)`
   );
 }
 

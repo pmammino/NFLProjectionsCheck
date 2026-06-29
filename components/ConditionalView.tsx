@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import type { Conditional } from "@/lib/stats";
 import type { MetricMeta } from "@/lib/types";
+import Explainer from "./Explainer";
 
 const tooltipStyle = {
   background: "#0f172a",
@@ -55,10 +56,33 @@ export default function ConditionalView({
 
   return (
     <div className="space-y-6">
-      <p className="text-xs text-slate-400">
-        Where calibration breaks down for <b>{metric.label}</b>. Season-wide
-        averages can hide systematic problems at the extremes or over time.
-      </p>
+      <Explainer title="What this shows & how to read it">
+        <p>
+          A single season-wide average can look fine while hiding real problems.
+          This view slices the same calibration three ways for <b>{metric.label}</b>{" "}
+          to find where it breaks down:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <b>By week</b> — does accuracy drift over the season (e.g. worse
+            early before usage settles, or late as backups play)?
+          </li>
+          <li>
+            <b>By projection magnitude</b> — players are split into four groups
+            from lowest projected to highest. If within-band climbs from left to
+            right, the model handles stars well but is too confident (bands too
+            narrow) for low-volume players, or vice-versa.
+          </li>
+          <li>
+            <b>By position</b> — is one position calibrated better than another
+            for this stat?
+          </li>
+        </ul>
+        <p className="text-slate-400">
+          Error bars / ± are 95% confidence intervals — bars whose intervals
+          don&apos;t overlap are genuinely different, not noise.
+        </p>
+      </Explainer>
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
         <h3 className="mb-3 text-sm font-semibold text-slate-200">

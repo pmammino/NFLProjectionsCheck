@@ -14,6 +14,7 @@ import {
 import type { CI, DeepStats } from "@/lib/stats";
 import type { MetricMeta } from "@/lib/types";
 import { fmtValue } from "@/lib/format";
+import Explainer from "./Explainer";
 
 function devColor(value: number, target: number, warn: number, bad: number) {
   const d = Math.abs(value - target);
@@ -68,6 +69,49 @@ export default function CoverageView({
 
   return (
     <div className="space-y-6">
+      <Explainer title="What this shows & how to read it">
+        <p>
+          This view goes a level deeper than the headline &ldquo;within
+          band&rdquo; number to pinpoint <b>where</b> and <b>how badly</b> a
+          projection is off, and whether the miss is real or just small-sample
+          noise.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <b>Reliability diagram</b> — the actual should fall below the Floor
+            25% of the time, below the Median 50%, below the Ceiling 75%. Points
+            on the dashed line are perfect. A point above the line means actuals
+            come in low too often there (projection set too high); below means
+            too high too often.
+          </li>
+          <li>
+            <b>P≤Floor / Median / Ceiling</b> (table) — those three checks as
+            numbers, color-coded by distance from 25 / 50 / 75%.
+          </li>
+          <li>
+            <b>Sharpness / Winkler / Pinball</b> — is the range the right{" "}
+            <i>width</i>? Sharpness is the average band size; Winkler and Pinball
+            are scoring rules that reward bands that are both narrow and
+            accurate (lower is better).
+          </li>
+          <li>
+            <b>RMSE / MAE / WAPE</b> — typical error of the Median forecast.{" "}
+            <b>Rank ρ</b> — does the projection order players correctly (most
+            important for rankings)? <b>Slope</b> — under 1.0 means the
+            projections are too spread out (studs over-projected, scrubs
+            under-projected); a regression-to-the-mean tell.
+          </li>
+          <li>
+            <b>Confidence intervals</b> — the cards and diagram whiskers show 95%
+            ranges. If the 50% target sits outside a card&apos;s interval (flagged{" "}
+            <span className="rounded bg-red-900/60 px-1 text-[10px] text-red-300">
+              off
+            </span>
+            ), the miscalibration is statistically real, not luck.
+          </li>
+        </ul>
+      </Explainer>
+
       {selected && (
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <SummaryCard

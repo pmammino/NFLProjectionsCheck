@@ -9,20 +9,29 @@ import {
   type Filters,
 } from "@/lib/aggregate";
 import { conditional, deepStats } from "@/lib/stats";
+import { filterTd } from "@/lib/td";
 import FilterBar from "./FilterBar";
 import CalibrationView from "./CalibrationView";
 import ScatterView from "./ScatterView";
 import ExplorerView from "./ExplorerView";
 import CoverageView from "./CoverageView";
 import ConditionalView from "./ConditionalView";
+import TDView from "./TDView";
 
-type Tab = "calibration" | "coverage" | "conditional" | "scatter" | "explorer";
+type Tab =
+  | "calibration"
+  | "coverage"
+  | "conditional"
+  | "touchdowns"
+  | "scatter"
+  | "explorer";
 
 export default function Dashboard() {
   const [ds, setDs] = useState<Dataset | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("calibration");
   const [metricKey, setMetricKey] = useState<string>("targets");
+  const [tdKey, setTdKey] = useState<string>("recTD");
   const [filters, setFilters] = useState<Filters | null>(null);
 
   useEffect(() => {
@@ -105,6 +114,27 @@ export default function Dashboard() {
     [ds, filters, filteredRows, selectedMetric]
   );
 
+  // Touchdown types available for the selected positions.
+  const availableTdTypes = useMemo(() => {
+    if (!ds || !filters) return [];
+    return ds.meta.tdTypes.filter((t) =>
+      t.positions.some((p) => filters.positions.has(p))
+    );
+  }, [ds, filters]);
+
+  const selectedTdType = useMemo(
+    () => availableTdTypes.find((t) => t.key === tdKey) ?? availableTdTypes[0],
+    [availableTdTypes, tdKey]
+  );
+
+  const tdRows = useMemo(
+    () =>
+      ds && filters && selectedTdType
+        ? filterTd(ds.td, selectedTdType.key, filters)
+        : [],
+    [ds, filters, selectedTdType]
+  );
+
   if (err)
     return (
       <main className="p-8 text-red-400">
@@ -146,6 +176,7 @@ export default function Dashboard() {
             ["calibration", "Calibration"],
             ["coverage", "Coverage & Intervals"],
             ["conditional", "Conditional"],
+            ["touchdowns", "Touchdowns"],
             ["scatter", "Projected vs Actual"],
             ["explorer", "Player-week detail"],
           ] as [Tab, string][]
@@ -164,7 +195,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {tab !== "calibration" && selectedMetric && (
+      {tab !== "calibration" && tab !== "touchdowns" && selectedMetric && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400">Metric:</span>
           {availableMetrics.map((m) => (
@@ -183,12 +214,34 @@ export default function Dashboard() {
         </div>
       )}
 
+      {tab === "touchdowns" && selectedTdType && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-slate-400">TD type:</span>
+          {availableTdTypes.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTdKey(t.key)}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+                selectedTdType.key === t.key
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {tab === "calibration" && <CalibrationView summaries={summaries} />}
       {tab === "coverage" && selectedMetric && (
         <CoverageView all={deepAll} selected={selectedDeep} metric={selectedMetric} />
       )}
       {tab === "conditional" && selectedMetric && cond && (
         <ConditionalView data={cond} metric={selectedMetric} />
+      )}
+      {tab === "touchdowns" && selectedTdType && (
+        <TDView rows={tdRows} type={selectedTdType} />
       )}
       {tab === "scatter" && selectedMetric && (
         <ScatterView points={scatterPts} metric={selectedMetric} />

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { MetricMeta, Row } from "@/lib/types";
 import { fmtValue } from "@/lib/format";
+import Explainer from "./Explainer";
 
 type SortKey = "wk" | "pid" | "miss" | "actual";
 
@@ -115,7 +116,24 @@ export default function ExplorerView({
   );
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/60">
+    <div className="space-y-6">
+      <Explainer title="What this shows & how to read it" defaultOpen={false}>
+        <p>
+          The raw detail behind every chart. Each row is one player-week for{" "}
+          <b>{metric.label}</b>, showing the projected Floor / Median / Ceiling
+          and what actually happened. The <b>Band</b> column draws it: the grey
+          bar is the Floor–Ceiling range, the blue tick is the Median, and the
+          dot is the actual — <b>green</b> inside the band, <b>red</b> outside.
+        </p>
+        <p className="text-slate-400">
+          Sort by <b>Result</b> to surface the biggest misses, or by Week /
+          Actual. <span className="text-amber-300">inj?</span> flags a likely
+          in-game injury or benching (played far less than projected). Use it to
+          find specific players or weeks worth investigating.
+        </p>
+      </Explainer>
+
+      <div className="rounded-lg border border-slate-800 bg-slate-900/60">
       <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
         <h3 className="text-sm font-semibold text-slate-200">
           Player-week detail — {metric.label}
@@ -192,6 +210,7 @@ export default function ExplorerView({
             ))}
           </tbody>
         </table>
+      </div>
       </div>
     </div>
   );

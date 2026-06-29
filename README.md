@@ -74,11 +74,23 @@ and never produce a false comparison.
    (quartiles — are studs vs. low-projected players handled differently?), and
    **by position**. Magnitude bars and the position table carry 95% Wilson
    confidence intervals so apparent differences can be read as real or noise.
-4. **Projected vs Actual** — scatter of projected Median vs. actual for any
+4. **Touchdowns** — TDs are rare count events (0/1/2 per game), so a continuous
+   rate band is the wrong frame. This tab treats them as a rare-event forecast:
+   - **Expected vs. actual TDs** — player-weeks binned by projected TD count,
+     comparing mean projected to mean observed (assumption-free; the binary
+     noise averages out).
+   - **Scoring-probability reliability** — each projection converted to
+     P(≥1 TD) via Poisson, plotted against the empirical scoring rate with CIs.
+   - **Brier score, log loss, and Brier skill** vs. a base-rate baseline, plus
+     projected-vs-actual season TD totals.
+5. **Projected vs Actual** — scatter of projected Median vs. actual for any
    metric, with a `y = x` reference line; offset from the line reveals
    systematic input bias.
-5. **Player-week detail** — sortable table with a visual Floor–Median–Ceiling
+6. **Player-week detail** — sortable table with a visual Floor–Median–Ceiling
    band and where the actual landed, for drill-down.
+
+Every tab carries a collapsible **plain-English explainer** describing what the
+view shows, how to read it, and what you can learn.
 
 All views respond to filters: position, week range, team, minimum actual
 volume, and exclude-injury-suspect.

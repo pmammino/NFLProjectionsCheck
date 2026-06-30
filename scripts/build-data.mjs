@@ -246,20 +246,184 @@ function readSplitValue(spec, row) {
   return num(row[spec.numer]) / d;
 }
 
+// ---- Season-long config -------------------------------------------------
+// The season files use the same stats but different column names. We derive
+// the season metric/TD configs from the weekly ones via these field maps so
+// the two stay in lockstep.
+const SEASON_PROJ_FIELD = {
+  PassAttempts: "PassAtt",
+  RushAttempts: "RushAtt",
+  Targets: "Targets",
+  PassCompletions: "PassComp",
+  PassYards: "PassYard",
+  PassTDs: "PassTD",
+  PassInts: "PassInt",
+  RushYards: "RushYard",
+  RushTDs: "RushTD",
+  RecCompletions: "Receptions",
+  RecYards: "RecYard",
+  RecTDs: "RecTD",
+};
+const SEASON_ACTUAL_FIELD = {
+  PassAtt: "pass_att",
+  Rushes: "rush_att",
+  Targets: "Targets",
+  PassComp: "pass_comp",
+  PassYards: "pass_yards",
+  PassTD: "pass_td",
+  RushYards: "rush_yards",
+  RushTD: "rush_td",
+  ReceptYds: "rec_yards",
+  Receptions: "Receptions",
+  RecptTD: "rec_td",
+};
+
+const mapProj = (spec) =>
+  typeof spec === "string"
+    ? SEASON_PROJ_FIELD[spec]
+    : { numer: SEASON_PROJ_FIELD[spec.numer], denom: SEASON_PROJ_FIELD[spec.denom] };
+const mapActual = (spec) =>
+  typeof spec === "string"
+    ? SEASON_ACTUAL_FIELD[spec]
+    : { numer: SEASON_ACTUAL_FIELD[spec.numer], denom: SEASON_ACTUAL_FIELD[spec.denom] };
+
+const SEASON_METRICS = METRICS.map((m) => ({
+  ...m,
+  proj: mapProj(m.proj),
+  actual: mapActual(m.actual),
+  projVol: SEASON_PROJ_FIELD[m.projVol],
+  actualVol: SEASON_ACTUAL_FIELD[m.actualVol],
+}));
+
+// Season TD opportunity thresholds scale up from per-game to full-season.
+const SEASON_TD_MIN_OPP = { passTD: 50, rushTD: 20, recTD: 15 };
+const SEASON_TD_TYPES = TD_TYPES.map((t) => ({
+  ...t,
+  proj: SEASON_PROJ_FIELD[t.proj],
+  actual: SEASON_ACTUAL_FIELD[t.actual],
+  projVol: SEASON_PROJ_FIELD[t.projVol],
+  actualVol: SEASON_ACTUAL_FIELD[t.actualVol],
+  minOpp: SEASON_TD_MIN_OPP[t.key],
+}));
+
+// Season volumes are full-year totals, so the efficiency noise floor is higher.
+const SEASON_MIN_EFF_VOLUME = 25;
+
+function buildSeason(teamByPid) {
+  const projRows = parseCsv(join(ROOT, "season_projections.csv"));
+  const actualRows = parseCsv(join(ROOT, "actual_season_stats.csv"));
+
+  const proj = new Map();
+  for (const r of projRows) {
+    let e = proj.get(r.NFLNewsID);
+    if (!e) {
+      e = { C: null, F: null, M: null };
+      proj.set(r.NFLNewsID, e);
+    }
+    e[r.Split] = r;
+  }
+
+  const out = [];
+  const td = [];
+  let matched = 0;
+
+  for (const a of actualRows) {
+    const pid = a.PlayerID;
+    const pos = a.position;
+    const p = proj.get(pid);
+    if (!p || !p.C || !p.F || !p.M) continue;
+    matched++;
+    const team = teamByPid.get(pid) || "";
+    const metricsOut = {};
+
+    for (const m of SEASON_METRICS) {
+      if (!m.positions.includes(pos)) continue;
+      const actualVol = num(a[m.actualVol]);
+      const projMedVol = num(p.M[m.projVol]);
+
+      if (m.kind === "efficiency") {
+        if (actualVol < SEASON_MIN_EFF_VOLUME || projMedVol < SEASON_MIN_EFF_VOLUME)
+          continue;
+      } else {
+        if (projMedVol <= 0 && actualVol <= 0) continue;
+      }
+
+      const f = readSplitValue(m.proj, p.F);
+      const med = readSplitValue(m.proj, p.M);
+      const c = readSplitValue(m.proj, p.C);
+      const actual = readSplitValue(m.actual, a);
+      if (f === null || med === null || c === null || actual === null) continue;
+
+      const lo = Math.min(f, c);
+      const hi = Math.max(f, c);
+      const err = actual - med;
+      metricsOut[m.key] = {
+        f: round(f),
+        m: round(med),
+        c: round(c),
+        a: round(actual),
+        in: actual >= lo && actual <= hi,
+        err: round(err),
+        pe: med !== 0 ? round(err / Math.abs(med), 4) : null,
+        av: round(actualVol, 1),
+        pv: round(projMedVol, 1),
+      };
+    }
+
+    for (const t of SEASON_TD_TYPES) {
+      if (!t.positions.includes(pos)) continue;
+      const actualVol = num(a[t.actualVol]);
+      const actualTD = num(a[t.actual]);
+      if (actualVol < t.minOpp && actualTD === 0) continue;
+      td.push({
+        type: t.key,
+        pid,
+        team,
+        pos,
+        wk: 0,
+        inj: false,
+        lf: round(num(p.F[t.proj]), 4),
+        lm: round(num(p.M[t.proj]), 4),
+        lc: round(num(p.C[t.proj]), 4),
+        a: actualTD,
+        av: round(actualVol, 1),
+        pv: round(num(p.M[t.projVol]), 1),
+      });
+    }
+
+    if (Object.keys(metricsOut).length === 0) continue;
+    out.push({ pid, team, pos, wk: 0, inj: false, m: metricsOut });
+  }
+
+  return {
+    rows: out,
+    td,
+    counts: {
+      actualPlayers: actualRows.length,
+      matchedPlayers: matched,
+      emittedRows: out.length,
+      tdRows: td.length,
+    },
+  };
+}
+
 function main() {
   const projRows = parseCsv(join(ROOT, "weekly_projections.csv"));
   const actualRows = parseCsv(join(ROOT, "actual_games.csv"));
 
   // Pivot projections: key = `${PlayerID}|${GameWeek}` -> { C, F, M, team }
   const proj = new Map();
+  const teamByPid = new Map(); // pid -> team (for the season dataset, which lacks teams)
   for (const r of projRows) {
     const key = `${r.PlayerID}|${r.GameWeek}`;
+    const upperTeam = (r.Team || "").toUpperCase();
     let e = proj.get(key);
     if (!e) {
-      e = { team: (r.Team || "").toUpperCase(), C: null, F: null, M: null };
+      e = { team: upperTeam, C: null, F: null, M: null };
       proj.set(key, e);
     }
     e[r.Split] = r;
+    if (upperTeam && !teamByPid.has(r.PlayerID)) teamByPid.set(r.PlayerID, upperTeam);
   }
 
   const out = [];
@@ -369,6 +533,24 @@ function main() {
   const weeks = [...new Set(out.map((r) => r.wk))].sort((x, y) => x - y);
   const teams = [...new Set(out.map((r) => r.team))].filter(Boolean).sort();
 
+  const season = buildSeason(teamByPid);
+
+  const metricMeta = METRICS.map((m) => ({
+    key: m.key,
+    label: m.label,
+    group: m.group,
+    kind: m.kind,
+    unit: m.unit || (m.kind === "volume" ? "count" : "rate"),
+    positions: m.positions,
+  }));
+  const tdTypeMeta = TD_TYPES.map((t) => ({
+    key: t.key,
+    label: t.label,
+    positions: t.positions,
+    volLabel: t.volLabel,
+    minOpp: t.minOpp,
+  }));
+
   const payload = {
     meta: {
       generatedAt: new Date().toISOString(),
@@ -377,21 +559,8 @@ function main() {
       teams,
       positions: ["QB", "RB", "WR", "TE"],
       minEffVolume: MIN_EFF_VOLUME,
-      metrics: METRICS.map((m) => ({
-        key: m.key,
-        label: m.label,
-        group: m.group,
-        kind: m.kind,
-        unit: m.unit || (m.kind === "volume" ? "count" : "rate"),
-        positions: m.positions,
-      })),
-      tdTypes: TD_TYPES.map((t) => ({
-        key: t.key,
-        label: t.label,
-        positions: t.positions,
-        volLabel: t.volLabel,
-        minOpp: t.minOpp,
-      })),
+      metrics: metricMeta,
+      tdTypes: tdTypeMeta,
       counts: {
         actualRows: actualRows.length,
         matchedPlayerWeeks: matched,
@@ -402,6 +571,19 @@ function main() {
     },
     rows: out,
     td,
+    season: {
+      // Season metrics/TD types share keys+labels with the weekly set.
+      metrics: metricMeta,
+      tdTypes: tdTypeMeta.map((t) => ({
+        ...t,
+        minOpp: SEASON_TD_MIN_OPP[t.key],
+      })),
+      minEffVolume: SEASON_MIN_EFF_VOLUME,
+      teams: [...new Set(season.rows.map((r) => r.team))].filter(Boolean).sort(),
+      counts: season.counts,
+      rows: season.rows,
+      td: season.td,
+    },
   };
 
   const outDir = join(ROOT, "public", "data");
@@ -410,7 +592,8 @@ function main() {
   writeFileSync(outPath, JSON.stringify(payload));
   const kb = (readFileSync(outPath).length / 1024).toFixed(0);
   console.log(
-    `build-data: ${out.length} rows, ${td.length} TD rows (${matched} matched, ${injSuspect} injury-suspect) -> ${outPath} (${kb} KB)`
+    `build-data: weekly ${out.length} rows / ${td.length} TD (${matched} matched); ` +
+      `season ${season.rows.length} rows / ${season.td.length} TD (${season.counts.matchedPlayers} matched) -> ${outPath} (${kb} KB)`
   );
 }
 

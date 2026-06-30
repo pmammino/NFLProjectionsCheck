@@ -75,4 +75,20 @@ export interface Dataset {
   };
   rows: Row[];
   td: TDRecord[];
+  season: SeasonData;
+}
+
+export interface SeasonData {
+  metrics: MetricMeta[];
+  tdTypes: TDTypeMeta[];
+  minEffVolume: number;
+  teams: string[];
+  counts: {
+    actualPlayers: number;
+    matchedPlayers: number;
+    emittedRows: number;
+    tdRows: number;
+  };
+  rows: Row[];
+  td: TDRecord[];
 }

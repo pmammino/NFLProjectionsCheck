@@ -14,6 +14,7 @@ import {
 import {
   binaryReliability,
   countCalibration,
+  tdCountAccuracy,
   tdSummary,
   type TDRow,
 } from "@/lib/td";
@@ -30,11 +31,14 @@ const tooltipStyle = {
 export default function TDView({
   rows,
   type,
+  byWeek = true,
 }: {
   rows: TDRow[];
   type: TDTypeMeta;
+  byWeek?: boolean;
 }) {
   const summary = tdSummary(rows);
+  const acc = tdCountAccuracy(rows);
 
   const countPts = countCalibration(rows).map((b) => ({
     x: b.meanProjected,
@@ -61,62 +65,92 @@ export default function TDView({
     <div className="space-y-6">
       <Explainer title={`Why touchdowns get their own treatment — ${type.label}`}>
         <p>
-          A single game produces almost always <b>0, 1, or occasionally 2</b>{" "}
-          touchdowns — an essentially <b>binary/count</b> outcome. Asking
-          whether that lands inside a continuous &ldquo;TD-rate&rdquo; band
-          (e.g. 0.05 TD/target) is the wrong question: the actual rate is either
-          0 or a big lumpy fraction, so the band almost never &ldquo;covers&rdquo;
-          cleanly and the numbers mislead.
-        </p>
-        <p>
-          The fix is to judge the projection the way you would any rare-event
-          forecast — <b>pool many similar games and check the frequency</b>:
+          Touchdowns are essentially a <b>count</b> outcome — a player scores{" "}
+          {byWeek ? "0, 1, or occasionally 2 in a game" : "a handful over a season"}.
+          Asking whether that lands inside a continuous &ldquo;TD-rate&rdquo;
+          band (e.g. 0.05 TD/target) is the wrong question, so we judge the
+          projected TD <b>count</b> directly instead.
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <b>Expected vs. actual (below-left):</b> group player-weeks by how
-            many TDs were projected, then compare the average projected count to
-            the average that actually happened. The binary noise averages out.
-            Points on the diagonal = well-calibrated.
+            <b>Expected vs. actual:</b> group players by how many TDs were
+            projected, then compare the average projected count to the average
+            that actually happened. The lumpy noise averages out — points on the
+            diagonal are well-calibrated, above means the projection under-shot,
+            below means it over-shot.
           </li>
-          <li>
-            <b>Scoring probability (below-right):</b> convert each projection to
-            a probability of scoring at least one TD, then check: of the games
-            we said had a ~30% chance, did ~30% actually score?
-          </li>
-          <li>
-            <b>Brier score &amp; log loss</b> grade those probability forecasts
-            (lower is better). <b>Brier skill</b> compares them to a dumb
-            baseline that gives everyone the league-average chance — above 0
-            means the projection adds real information.
-          </li>
+          {byWeek ? (
+            <>
+              <li>
+                <b>Scoring probability:</b> convert each projection to a chance
+                of scoring ≥1 TD that game, then check: of the games we gave a
+                ~30% chance, did ~30% actually score?
+              </li>
+              <li>
+                <b>Brier score &amp; log loss</b> grade those probability
+                forecasts (lower is better); <b>Brier skill</b> above 0 means
+                the projection beats a league-average-rate baseline.
+              </li>
+            </>
+          ) : (
+            <li>
+              <b>MAE &amp; rank correlation</b> grade the season TD count: how
+              far off the projected total typically is, and whether it orders
+              the league&apos;s TD producers correctly. (The per-game
+              &ldquo;scored ≥1 TD&rdquo; probability isn&apos;t shown for
+              seasons — nearly every real player scores at least once, so it
+              carries no information.)
+            </li>
+          )}
         </ul>
       </Explainer>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card
-          title="Predicted vs actual scoring"
-          value={`${(summary.predictedScoreRate * 100).toFixed(1)}% / ${(summary.actualScoreRate * 100).toFixed(1)}%`}
-          sub="share of games with ≥1 TD (model / real)"
-        />
-        <Card
           title="Projected vs actual TDs"
           value={`${summary.projectedTotal.toFixed(0)} / ${summary.actualTotal}`}
           sub={`${totalBias >= 0 ? "+" : ""}${(totalBias * 100).toFixed(1)}% total bias`}
         />
-        <Card
-          title="Brier / skill"
-          value={`${summary.brier.toFixed(3)}`}
-          sub={`skill ${summary.brierSkill >= 0 ? "+" : ""}${(summary.brierSkill * 100).toFixed(1)}% vs base rate`}
-        />
-        <Card
-          title="Log loss"
-          value={summary.logLoss.toFixed(3)}
-          sub={`${summary.n.toLocaleString()} player-weeks`}
-        />
+        {byWeek ? (
+          <>
+            <Card
+              title="Predicted vs actual scoring"
+              value={`${(summary.predictedScoreRate * 100).toFixed(1)}% / ${(summary.actualScoreRate * 100).toFixed(1)}%`}
+              sub="share of games with ≥1 TD (model / real)"
+            />
+            <Card
+              title="Brier / skill"
+              value={`${summary.brier.toFixed(3)}`}
+              sub={`skill ${summary.brierSkill >= 0 ? "+" : ""}${(summary.brierSkill * 100).toFixed(1)}% vs base rate`}
+            />
+            <Card
+              title="Log loss"
+              value={summary.logLoss.toFixed(3)}
+              sub={`${summary.n.toLocaleString()} player-weeks`}
+            />
+          </>
+        ) : (
+          <>
+            <Card
+              title="Mean abs error"
+              value={acc.mae.toFixed(2)}
+              sub="avg |projected − actual| TDs"
+            />
+            <Card
+              title="Rank correlation"
+              value={Number.isFinite(acc.spearman) ? acc.spearman.toFixed(2) : "—"}
+              sub="orders TD producers correctly?"
+            />
+            <Card
+              title="Players"
+              value={acc.n.toLocaleString()}
+              sub="with real opportunity"
+            />
+          </>
+        )}
       </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className={`grid grid-cols-1 gap-6 ${byWeek ? "lg:grid-cols-2" : ""}`}>
         <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
           <h3 className="mb-1 text-sm font-semibold text-slate-200">
             Expected vs. actual TDs (binned)
@@ -160,6 +194,7 @@ export default function TDView({
           </div>
         </section>
 
+        {byWeek && (
         <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
           <h3 className="mb-1 text-sm font-semibold text-slate-200">
             Scoring-probability reliability
@@ -201,6 +236,7 @@ export default function TDView({
             </ResponsiveContainer>
           </div>
         </section>
+        )}
       </div>
     </div>
   );

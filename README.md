@@ -92,6 +92,27 @@ and never produce a false comparison.
 Every tab carries a collapsible **plain-English explainer** describing what the
 view shows, how to read it, and what you can learn.
 
+## Weekly vs. Season-long scope
+
+A top-right **Weekly / Season-long** toggle switches the entire dashboard
+between two datasets:
+
+- **Weekly** — per-game projections vs. weekly actuals (`weekly_projections.csv`
+  + `actual_games.csv`), one row per player-week.
+- **Season-long** — full-season projections vs. season totals
+  (`season_projections.csv` + `actual_season_stats.csv`, joined on
+  `NFLNewsID` ↔ `PlayerID`), one row per player.
+
+All analysis tabs work in both scopes. Scope-specific differences:
+
+- Week-range and injury controls are hidden in season scope; the volume sliders
+  scale up to season totals.
+- The Conditional tab drops its by-week chart in season scope.
+- The Touchdowns tab judges the projected TD **count** (MAE, rank correlation,
+  expected-vs-actual calibration, season totals) instead of the per-game
+  binary "scored ≥1 TD" reliability, which carries no information over a full
+  season (nearly every real player scores at least once).
+
 All views respond to filters: position, week range, team, minimum actual
 volume, and exclude-injury-suspect.
 

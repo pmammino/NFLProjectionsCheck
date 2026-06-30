@@ -1,4 +1,4 @@
-import type { Dataset, MetricCell, MetricMeta, Position, Row } from "./types";
+import type { MetricCell, MetricMeta, Position, Row } from "./types";
 
 export interface Filters {
   weekMin: number;
@@ -19,12 +19,14 @@ export function passesVol(
   return c.av >= minVolume && c.pv >= minProjVolume;
 }
 
-export function filterRows(ds: Dataset, f: Filters): Row[] {
-  return ds.rows.filter((r) => {
-    if (r.wk < f.weekMin || r.wk > f.weekMax) return false;
+// byWeek=false (season scope) skips the week-range and injury gates, which are
+// weekly-only concepts.
+export function filterRows(rows: Row[], f: Filters, byWeek = true): Row[] {
+  return rows.filter((r) => {
+    if (byWeek && (r.wk < f.weekMin || r.wk > f.weekMax)) return false;
     if (!f.positions.has(r.pos)) return false;
     if (f.teams.size > 0 && !f.teams.has(r.team)) return false;
-    if (f.excludeInjury && r.inj) return false;
+    if (byWeek && f.excludeInjury && r.inj) return false;
     return true;
   });
 }

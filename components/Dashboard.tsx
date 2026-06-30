@@ -26,9 +26,12 @@ type Tab =
   | "scatter"
   | "explorer";
 
+type Scope = "weekly" | "season";
+
 export default function Dashboard() {
   const [ds, setDs] = useState<Dataset | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [scope, setScope] = useState<Scope>("weekly");
   const [tab, setTab] = useState<Tab>("calibration");
   const [metricKey, setMetricKey] = useState<string>("targets");
   const [tdKey, setTdKey] = useState<string>("recTD");
@@ -55,18 +58,40 @@ export default function Dashboard() {
       .catch((e) => setErr(String(e)));
   }, []);
 
+  const byWeek = scope === "weekly";
+
+  // The active dataset (rows / TD / metric+type metadata / teams) for the scope.
+  const active = useMemo(() => {
+    if (!ds) return null;
+    return scope === "weekly"
+      ? {
+          rows: ds.rows,
+          td: ds.td,
+          metrics: ds.meta.metrics,
+          tdTypes: ds.meta.tdTypes,
+          teams: ds.meta.teams,
+        }
+      : {
+          rows: ds.season.rows,
+          td: ds.season.td,
+          metrics: ds.season.metrics,
+          tdTypes: ds.season.tdTypes,
+          teams: ds.season.teams,
+        };
+  }, [ds, scope]);
+
   const filteredRows = useMemo(
-    () => (ds && filters ? filterRows(ds, filters) : []),
-    [ds, filters]
+    () => (active && filters ? filterRows(active.rows, filters, byWeek) : []),
+    [active, filters, byWeek]
   );
 
   // Metrics available given the selected positions.
   const availableMetrics = useMemo(() => {
-    if (!ds || !filters) return [];
-    return ds.meta.metrics.filter((m) =>
+    if (!active || !filters) return [];
+    return active.metrics.filter((m) =>
       m.positions.some((p) => filters.positions.has(p))
     );
-  }, [ds, filters]);
+  }, [active, filters]);
 
   const summaries = useMemo(
     () =>
@@ -117,11 +142,11 @@ export default function Dashboard() {
 
   // Touchdown types available for the selected positions.
   const availableTdTypes = useMemo(() => {
-    if (!ds || !filters) return [];
-    return ds.meta.tdTypes.filter((t) =>
+    if (!active || !filters) return [];
+    return active.tdTypes.filter((t) =>
       t.positions.some((p) => filters.positions.has(p))
     );
-  }, [ds, filters]);
+  }, [active, filters]);
 
   const selectedTdType = useMemo(
     () => availableTdTypes.find((t) => t.key === tdKey) ?? availableTdTypes[0],
@@ -130,10 +155,10 @@ export default function Dashboard() {
 
   const tdRows = useMemo(
     () =>
-      ds && filters && selectedTdType
-        ? filterTd(ds.td, selectedTdType.key, filters)
+      active && filters && selectedTdType
+        ? filterTd(active.td, selectedTdType.key, filters, byWeek)
         : [],
-    [ds, filters, selectedTdType]
+    [active, filters, selectedTdType, byWeek]
   );
 
   if (err)
@@ -145,31 +170,66 @@ export default function Dashboard() {
   if (!ds || !filters)
     return <main className="p-8 text-slate-400">Loading projections…</main>;
 
-  const c = ds.meta.counts;
-
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-6">
       <header>
-        <h1 className="text-2xl font-bold text-slate-100">
-          NFL Projection Accuracy Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-slate-400">
-          {ds.meta.season} season · comparing projected Floor/Median/Ceiling
-          ranges to actual results across volume and efficiency. Floor &amp;
-          Ceiling = 25th / 75th percentile.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100">
+              NFL Projection Accuracy Dashboard
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">
+              {ds.meta.season} season · comparing projected Floor/Median/Ceiling
+              ranges to actual results. Floor &amp; Ceiling = 25th / 75th
+              percentile.
+            </p>
+          </div>
+          {/* Scope toggle: weekly per-game projections vs. full-season projections. */}
+          <div className="flex overflow-hidden rounded-lg border border-slate-700">
+            {(
+              [
+                ["weekly", "Weekly"],
+                ["season", "Season-long"],
+              ] as [Scope, string][]
+            ).map(([s, label]) => (
+              <button
+                key={s}
+                onClick={() => setScope(s)}
+                className={`px-4 py-2 text-sm font-semibold transition ${
+                  scope === s
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-900 text-slate-400 hover:bg-slate-800"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
-          <Stat label="Player-weeks" value={c.emittedRows.toLocaleString()} />
-          <Stat
-            label="Matched"
-            value={c.matchedPlayerWeeks.toLocaleString()}
-          />
-          <Stat label="Injury-suspect" value={c.injurySuspect.toString()} />
-          <Stat label="Metrics" value={ds.meta.metrics.length.toString()} />
+          {byWeek ? (
+            <>
+              <Stat label="Player-weeks" value={ds.meta.counts.emittedRows.toLocaleString()} />
+              <Stat label="Matched" value={ds.meta.counts.matchedPlayerWeeks.toLocaleString()} />
+              <Stat label="Injury-suspect" value={ds.meta.counts.injurySuspect.toString()} />
+            </>
+          ) : (
+            <>
+              <Stat label="Players" value={ds.season.counts.emittedRows.toLocaleString()} />
+              <Stat label="Matched" value={ds.season.counts.matchedPlayers.toLocaleString()} />
+            </>
+          )}
+          <Stat label="Metrics" value={availableMetrics.length.toString()} />
         </div>
       </header>
 
-      <FilterBar ds={ds} filters={filters} setFilters={setFilters} />
+      <FilterBar
+        filters={filters}
+        setFilters={setFilters}
+        weeks={ds.meta.weeks}
+        teams={active?.teams ?? []}
+        byWeek={byWeek}
+      />
 
       <div className="flex gap-1 border-b border-slate-800">
         {(
@@ -179,7 +239,7 @@ export default function Dashboard() {
             ["conditional", "Conditional"],
             ["touchdowns", "Touchdowns"],
             ["scatter", "Projected vs Actual"],
-            ["explorer", "Player-week detail"],
+            ["explorer", byWeek ? "Player-week detail" : "Player detail"],
           ] as [Tab, string][]
         ).map(([t, label]) => (
           <button
@@ -239,10 +299,10 @@ export default function Dashboard() {
         <CoverageView all={deepAll} selected={selectedDeep} metric={selectedMetric} />
       )}
       {tab === "conditional" && selectedMetric && cond && (
-        <ConditionalView data={cond} metric={selectedMetric} />
+        <ConditionalView data={cond} metric={selectedMetric} showByWeek={byWeek} />
       )}
       {tab === "touchdowns" && selectedTdType && (
-        <TDView rows={tdRows} type={selectedTdType} />
+        <TDView rows={tdRows} type={selectedTdType} byWeek={byWeek} />
       )}
       {tab === "scatter" && selectedMetric && (
         <ScatterView points={scatterPts} metric={selectedMetric} />

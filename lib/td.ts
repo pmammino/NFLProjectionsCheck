@@ -12,7 +12,8 @@ export interface TDRow {
   lm: number; // projected expected TDs — median (the headline forecast)
   lc: number; // projected expected TDs — ceiling
   a: number; // actual TD count
-  av: number; // opportunity volume (attempts / targets)
+  av: number; // actual opportunity volume (attempts / targets)
+  pv: number; // projected median opportunity volume
 }
 
 export interface TDFilters {
@@ -21,21 +22,24 @@ export interface TDFilters {
   positions: Set<Position>;
   teams: Set<string>;
   minVolume: number;
+  minProjVolume: number;
   excludeInjury: boolean;
 }
 
 export function filterTd(
   td: TDRow[],
   type: string,
-  f: TDFilters
+  f: TDFilters,
+  byWeek = true
 ): TDRow[] {
   return td.filter((r) => {
     if (r.type !== type) return false;
-    if (r.wk < f.weekMin || r.wk > f.weekMax) return false;
+    if (byWeek && (r.wk < f.weekMin || r.wk > f.weekMax)) return false;
     if (!f.positions.has(r.pos)) return false;
     if (f.teams.size > 0 && !f.teams.has(r.team)) return false;
-    if (f.excludeInjury && r.inj) return false;
+    if (byWeek && f.excludeInjury && r.inj) return false;
     if (r.av < f.minVolume) return false;
+    if (r.pv < f.minProjVolume) return false;
     return true;
   });
 }
@@ -125,6 +129,69 @@ export function binaryReliability(rows: TDRow[], k = 8): ProbBin[] {
       n: b.length,
     };
   });
+}
+
+// Count-based accuracy for season scope, where "scored >=1 TD" is near-certain
+// and the binary framing breaks down. Judges the projected TD *count* directly.
+export interface TDCountAccuracy {
+  n: number;
+  mae: number; // mean |projected median TDs - actual TDs|
+  rmse: number;
+  spearman: number; // do projections order TD producers correctly?
+  projectedTotal: number;
+  actualTotal: number;
+}
+
+function rankVector(xs: number[]): number[] {
+  const idx = xs.map((v, i) => [v, i] as [number, number]);
+  idx.sort((a, b) => a[0] - b[0]);
+  const r = new Array(xs.length).fill(0);
+  let i = 0;
+  while (i < idx.length) {
+    let j = i;
+    while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++;
+    const avg = (i + j) / 2 + 1;
+    for (let k = i; k <= j; k++) r[idx[k][1]] = avg;
+    i = j + 1;
+  }
+  return r;
+}
+
+function corr(x: number[], y: number[]): number {
+  const n = x.length;
+  if (n < 2) return NaN;
+  let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+  for (let i = 0; i < n; i++) {
+    sx += x[i]; sy += y[i]; sxx += x[i] * x[i]; syy += y[i] * y[i]; sxy += x[i] * y[i];
+  }
+  const cov = sxy - (sx * sy) / n;
+  const vx = sxx - (sx * sx) / n;
+  const vy = syy - (sy * sy) / n;
+  const d = Math.sqrt(vx * vy);
+  return d === 0 ? NaN : cov / d;
+}
+
+export function tdCountAccuracy(rows: TDRow[]): TDCountAccuracy {
+  const n = rows.length;
+  if (n === 0)
+    return { n: 0, mae: 0, rmse: 0, spearman: NaN, projectedTotal: 0, actualTotal: 0 };
+  let ae = 0, se = 0, pt = 0, at = 0;
+  for (const r of rows) {
+    const d = r.lm - r.a;
+    ae += Math.abs(d);
+    se += d * d;
+    pt += r.lm;
+    at += r.a;
+  }
+  const sp = corr(rankVector(rows.map((r) => r.lm)), rankVector(rows.map((r) => r.a)));
+  return {
+    n,
+    mae: ae / n,
+    rmse: Math.sqrt(se / n),
+    spearman: sp,
+    projectedTotal: pt,
+    actualTotal: at,
+  };
 }
 
 export function tdSummary(rows: TDRow[]): TDSummary {

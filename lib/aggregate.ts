@@ -1,20 +1,32 @@
-import type { Dataset, MetricMeta, Position, Row } from "./types";
+import type { MetricCell, MetricMeta, Position, Row } from "./types";
 
 export interface Filters {
   weekMin: number;
   weekMax: number;
   positions: Set<Position>;
   teams: Set<string>; // empty = all
-  minVolume: number;
+  minVolume: number; // min actual volume
+  minProjVolume: number; // min projected (median) volume
   excludeInjury: boolean;
 }
 
-export function filterRows(ds: Dataset, f: Filters): Row[] {
-  return ds.rows.filter((r) => {
-    if (r.wk < f.weekMin || r.wk > f.weekMax) return false;
+// A cell qualifies when both its actual and projected volume clear the gates.
+export function passesVol(
+  c: MetricCell,
+  minVolume: number,
+  minProjVolume: number
+): boolean {
+  return c.av >= minVolume && c.pv >= minProjVolume;
+}
+
+// byWeek=false (season scope) skips the week-range and injury gates, which are
+// weekly-only concepts.
+export function filterRows(rows: Row[], f: Filters, byWeek = true): Row[] {
+  return rows.filter((r) => {
+    if (byWeek && (r.wk < f.weekMin || r.wk > f.weekMax)) return false;
     if (!f.positions.has(r.pos)) return false;
     if (f.teams.size > 0 && !f.teams.has(r.team)) return false;
-    if (f.excludeInjury && r.inj) return false;
+    if (byWeek && f.excludeInjury && r.inj) return false;
     return true;
   });
 }
@@ -31,11 +43,6 @@ export interface MetricSummary {
   mae: number; // mean abs(actual - median), raw units
 }
 
-// A cell qualifies if its actual volume meets the min-volume threshold.
-function passesVolume(av: number, minVolume: number): boolean {
-  return av >= minVolume;
-}
-
 function median(xs: number[]): number | null {
   if (xs.length === 0) return null;
   const s = [...xs].sort((a, b) => a - b);
@@ -46,7 +53,8 @@ function median(xs: number[]): number | null {
 export function summarize(
   rows: Row[],
   metric: MetricMeta,
-  minVolume: number
+  minVolume: number,
+  minProjVolume = 0
 ): MetricSummary {
   let n = 0;
   let within = 0;
@@ -60,7 +68,7 @@ export function summarize(
     if (!metric.positions.includes(r.pos)) continue;
     const c = r.m[metric.key];
     if (!c) continue;
-    if (!passesVolume(c.av, minVolume)) continue;
+    if (!passesVol(c, minVolume, minProjVolume)) continue;
     n++;
     if (c.in) within++;
     else if (c.a < Math.min(c.f, c.c)) below++;
@@ -86,10 +94,11 @@ export function summarize(
 export function summarizeAll(
   rows: Row[],
   metrics: MetricMeta[],
-  minVolume: number
+  minVolume: number,
+  minProjVolume = 0
 ): MetricSummary[] {
   return metrics
-    .map((m) => summarize(rows, m, minVolume))
+    .map((m) => summarize(rows, m, minVolume, minProjVolume))
     .filter((s) => s.n > 0);
 }
 
@@ -109,13 +118,14 @@ export interface ScatterPoint {
 export function scatterFor(
   rows: Row[],
   metric: MetricMeta,
-  minVolume: number
+  minVolume: number,
+  minProjVolume = 0
 ): ScatterPoint[] {
   const pts: ScatterPoint[] = [];
   for (const r of rows) {
     if (!metric.positions.includes(r.pos)) continue;
     const c = r.m[metric.key];
-    if (!c || c.av < minVolume) continue;
+    if (!c || !passesVol(c, minVolume, minProjVolume)) continue;
     pts.push({
       pid: r.pid,
       wk: r.wk,

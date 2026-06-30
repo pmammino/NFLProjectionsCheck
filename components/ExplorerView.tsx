@@ -55,10 +55,12 @@ export default function ExplorerView({
   rows,
   metric,
   minVolume,
+  minProjVolume,
 }: {
   rows: Row[];
   metric: MetricMeta;
   minVolume: number;
+  minProjVolume: number;
 }) {
   const [sort, setSort] = useState<SortKey>("miss");
   const [asc, setAsc] = useState(false);
@@ -68,7 +70,7 @@ export default function ExplorerView({
     for (const r of rows) {
       if (!metric.positions.includes(r.pos)) continue;
       const c = r.m[metric.key];
-      if (!c || c.av < minVolume) continue;
+      if (!c || c.av < minVolume || c.pv < minProjVolume) continue;
       const lo = Math.min(c.f, c.c);
       const hi = Math.max(c.f, c.c);
       const miss = c.a < lo ? c.a - lo : c.a > hi ? c.a - hi : 0;
@@ -95,7 +97,7 @@ export default function ExplorerView({
       return asc ? d : -d;
     });
     return out.slice(0, 300);
-  }, [rows, metric, minVolume, sort, asc]);
+  }, [rows, metric, minVolume, minProjVolume, sort, asc]);
 
   const setSortKey = (k: SortKey) => {
     if (k === sort) setAsc(!asc);

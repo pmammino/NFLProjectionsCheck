@@ -1,18 +1,22 @@
 "use client";
 
-import type { Dataset, Position } from "@/lib/types";
+import type { Position } from "@/lib/types";
 import type { Filters } from "@/lib/aggregate";
 
 const POSITIONS: Position[] = ["QB", "RB", "WR", "TE"];
 
 export default function FilterBar({
-  ds,
   filters,
   setFilters,
+  weeks,
+  teams,
+  byWeek,
 }: {
-  ds: Dataset;
   filters: Filters;
   setFilters: (f: Filters) => void;
+  weeks: number[];
+  teams: string[];
+  byWeek: boolean;
 }) {
   const update = (patch: Partial<Filters>) =>
     setFilters({ ...filters, ...patch });
@@ -25,8 +29,10 @@ export default function FilterBar({
     update({ positions: next });
   };
 
-  const minWeek = ds.meta.weeks[0];
-  const maxWeek = ds.meta.weeks[ds.meta.weeks.length - 1];
+  const minWeek = weeks[0];
+  const maxWeek = weeks[weeks.length - 1];
+  // Season volumes are full-year totals, so the sliders need a much larger range.
+  const volMax = byWeek ? 20 : 300;
 
   return (
     <div className="flex flex-wrap items-end gap-4 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
@@ -54,37 +60,39 @@ export default function FilterBar({
         </div>
       </div>
 
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-400">
-          Week range: {filters.weekMin}–{filters.weekMax}
-        </label>
-        <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min={minWeek}
-            max={maxWeek}
-            value={filters.weekMin}
-            onChange={(e) =>
-              update({
-                weekMin: Math.min(Number(e.target.value), filters.weekMax),
-              })
-            }
-            className="w-28"
-          />
-          <input
-            type="range"
-            min={minWeek}
-            max={maxWeek}
-            value={filters.weekMax}
-            onChange={(e) =>
-              update({
-                weekMax: Math.max(Number(e.target.value), filters.weekMin),
-              })
-            }
-            className="w-28"
-          />
+      {byWeek && (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-400">
+            Week range: {filters.weekMin}–{filters.weekMax}
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="range"
+              min={minWeek}
+              max={maxWeek}
+              value={filters.weekMin}
+              onChange={(e) =>
+                update({
+                  weekMin: Math.min(Number(e.target.value), filters.weekMax),
+                })
+              }
+              className="w-28"
+            />
+            <input
+              type="range"
+              min={minWeek}
+              max={maxWeek}
+              value={filters.weekMax}
+              onChange={(e) =>
+                update({
+                  weekMax: Math.max(Number(e.target.value), filters.weekMin),
+                })
+              }
+              className="w-28"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <div>
         <label className="mb-1 block text-xs font-medium text-slate-400">
@@ -100,7 +108,7 @@ export default function FilterBar({
           className="rounded bg-slate-800 px-2 py-1 text-sm text-slate-200"
         >
           <option value="">All teams</option>
-          {ds.meta.teams.map((t) => (
+          {teams.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
@@ -115,22 +123,38 @@ export default function FilterBar({
         <input
           type="range"
           min={0}
-          max={20}
+          max={volMax}
           value={filters.minVolume}
           onChange={(e) => update({ minVolume: Number(e.target.value) })}
           className="w-40"
         />
       </div>
 
-      <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-400">
+          Min projected volume: {filters.minProjVolume}
+        </label>
         <input
-          type="checkbox"
-          checked={filters.excludeInjury}
-          onChange={(e) => update({ excludeInjury: e.target.checked })}
-          className="h-4 w-4 accent-blue-600"
+          type="range"
+          min={0}
+          max={volMax}
+          value={filters.minProjVolume}
+          onChange={(e) => update({ minProjVolume: Number(e.target.value) })}
+          className="w-40"
         />
-        Exclude low-usage / injury-suspect games
-      </label>
+      </div>
+
+      {byWeek && (
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={filters.excludeInjury}
+            onChange={(e) => update({ excludeInjury: e.target.checked })}
+            className="h-4 w-4 accent-blue-600"
+          />
+          Exclude low-usage / injury-suspect games
+        </label>
+      )}
     </div>
   );
 }

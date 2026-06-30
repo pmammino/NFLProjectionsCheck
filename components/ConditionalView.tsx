@@ -33,9 +33,11 @@ function withinColor(v: number) {
 export default function ConditionalView({
   data,
   metric,
+  showByWeek = true,
 }: {
   data: Conditional;
   metric: MetricMeta;
+  showByWeek?: boolean;
 }) {
   const weekData = data.byWeek.map((b) => ({
     label: b.label,
@@ -84,28 +86,30 @@ export default function ConditionalView({
         </p>
       </Explainer>
 
-      <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-        <h3 className="mb-3 text-sm font-semibold text-slate-200">
-          By week — within-band &amp; median coverage over the season
-        </h3>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={weekData} margin={{ top: 8, right: 16, bottom: 16, left: 0 }}>
-              <CartesianGrid stroke="#1e293b" />
-              <XAxis dataKey="label" tick={{ fill: "#94a3b8", fontSize: 10 }} interval={0} angle={-40} textAnchor="end" height={50} />
-              <YAxis domain={[0, 100]} unit="%" tick={{ fill: "#94a3b8", fontSize: 11 }} />
-              <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => `${v.toFixed(1)}%`} />
-              <ReferenceLine y={50} stroke="#eab308" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="within" name="Within band" stroke="#22c55e" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="covMedian" name="P≤Median" stroke="#38bdf8" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <p className="mt-2 text-xs text-slate-500">
-          Within-band target 50%. P≤Median target 50% (a flat line near 50%
-          means the median is unbiased week to week).
-        </p>
-      </section>
+      {showByWeek && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-slate-200">
+            By week — within-band &amp; median coverage over the season
+          </h3>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={weekData} margin={{ top: 8, right: 16, bottom: 16, left: 0 }}>
+                <CartesianGrid stroke="#1e293b" />
+                <XAxis dataKey="label" tick={{ fill: "#94a3b8", fontSize: 10 }} interval={0} angle={-40} textAnchor="end" height={50} />
+                <YAxis domain={[0, 100]} unit="%" tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => `${v.toFixed(1)}%`} />
+                <ReferenceLine y={50} stroke="#eab308" strokeDasharray="4 4" />
+                <Line type="monotone" dataKey="within" name="Within band" stroke="#22c55e" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="covMedian" name="P≤Median" stroke="#38bdf8" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Within-band target 50%. P≤Median target 50% (a flat line near 50%
+            means the median is unbiased week to week).
+          </p>
+        </section>
+      )}
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
         <h3 className="mb-3 text-sm font-semibold text-slate-200">

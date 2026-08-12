@@ -140,6 +140,10 @@ projections and actuals join with no crosswalk):
 The three stat views are merged per player (a QB's passing + rushing, a back's
 rushing + receiving) into one actual row.
 
+The projection feed's receiving volume is **receptions** (`offrecatt`), plus
+receiving yards and TDs. It does **not** project a target count, so the Targets
+column is left blank until a separate targets source is supplied (see below).
+
 ### Snapshots & persistence
 
 `scripts/ingest.mjs` fetches a week, normalizes it into the exact
@@ -171,11 +175,18 @@ projections before kickoff, **Tuesday** captures the completed week's actuals
 after Monday night. Each pass commits any new snapshots. If the feeds require a
 session, set a `ROTOWIRE_COOKIE` repo secret.
 
-> **Caveat — projected catch rate:** the projection feed exposes a single
-> receiving-volume field (`offrecatt` → Targets) and no projected reception
-> count, so projected **Catch Rate** can't be derived from these endpoints. The
-> dashboard skips that one metric for ingested weeks; every other volume/
-> efficiency/TD check runs normally.
+> **Caveat — projected targets:** these endpoints project receptions, not
+> targets, so the **target-denominated** metrics (Targets volume, Rec
+> Yds/Target, Catch Rate, Rec TD/Target) are skipped for ingested weeks until a
+> separate targets source is wired in. Projected receptions/yards/TDs and all
+> passing & rushing metrics run normally.
+>
+> **Wiring a targets source:** `normalizeProjections(feeds, { season, week,
+> targetsByPlayer })` accepts an optional `Map` keyed by RotoWire `playerid`
+> whose value is either a single number (applied to every split) or a per-split
+> object `{ M, C, F }`. Supplying it fills the Targets column and re-enables all
+> four receiving metrics — no other changes needed. Fetch that source in
+> `scripts/ingest.mjs` and pass the map through (search for `TARGETS_SOURCE`).
 
 ## Data join
 

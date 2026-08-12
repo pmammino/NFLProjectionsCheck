@@ -152,7 +152,17 @@ async function ingestProjections(a) {
     fetchJson(urls.C),
     fetchJson(urls.F),
   ]);
-  const rows = normalizeProjections({ M, C, F }, { season: a.season, week: a.week });
+
+  // TARGETS_SOURCE: these feeds project receptions, not targets. When a targets
+  // source is located, fetch it here and build a Map keyed by RotoWire playerid
+  // (value: a number, or a per-split { M, C, F }); passing it below fills the
+  // Targets column and re-enables the target-denominated receiving metrics.
+  const targetsByPlayer = undefined;
+
+  const rows = normalizeProjections(
+    { M, C, F },
+    { season: a.season, week: a.week, targetsByPlayer }
+  );
   if (rows.length === 0) throw new Error("projections: feeds returned 0 usable rows");
   writeCsv(path, toCsv(PROJECTION_COLUMNS, rows), a);
 }

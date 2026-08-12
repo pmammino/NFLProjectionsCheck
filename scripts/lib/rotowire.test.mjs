@@ -106,20 +106,38 @@ test("projection record maps every column with the right split", () => {
   assert.equal(row.RushAttempts, "9.38");
   assert.equal(row.RushYards, "59.63");
   assert.equal(row.RushTDs, "0.27");
-  // offrecatt -> Targets; no projected receptions from these endpoints.
-  assert.equal(row.Targets, "0.00");
+  // offrecatt -> RecCompletions (receptions); targets aren't in these feeds.
+  assert.equal(row.RecCompletions, "0.00");
   assert.equal(row.RecYards, "0.00");
   assert.equal(row.RecTDs, "0.00");
-  assert.equal(row.RecCompletions, "");
+  assert.equal(row.Targets, "");
 });
 
-test("offrecatt maps to Targets for a receiver", () => {
+test("offrecatt maps to RecCompletions (receptions) for a receiver", () => {
   const row = normalizeProjectionRecord(MEDIAN_WR, { season: 2025, week: 1, split: "M" });
-  assert.equal(row.Targets, "7.4");
+  assert.equal(row.RecCompletions, "7.4");
   assert.equal(row.RecYards, "78.5");
   assert.equal(row.RecTDs, "0.45");
-  assert.equal(row.RecCompletions, "");
+  assert.equal(row.Targets, ""); // pending a separate targets source
   assert.equal(row.Team, "BAL"); // lowercased source is upcased
+});
+
+test("targetsByPlayer fills Targets (number = all splits, object = per-split)", () => {
+  const flat = new Map([["16919", 8.2]]);
+  assert.equal(
+    normalizeProjectionRecord(MEDIAN_WR, { season: 2025, week: 1, split: "M", targetsByPlayer: flat }).Targets,
+    "8.2"
+  );
+  const perSplit = new Map([["16919", { M: 8, C: 11, F: 5 }]]);
+  assert.equal(
+    normalizeProjectionRecord(MEDIAN_WR, { season: 2025, week: 1, split: "C", targetsByPlayer: perSplit }).Targets,
+    "11"
+  );
+  // Player absent from the lookup stays blank.
+  assert.equal(
+    normalizeProjectionRecord(MEDIAN_QB, { season: 2025, week: 1, split: "M", targetsByPlayer: flat }).Targets,
+    ""
+  );
 });
 
 test("normalizeProjections combines M/C/F feeds into split-tagged rows", () => {
@@ -205,7 +223,7 @@ test("mergeActuals merges a pass-catching RB across rushing+receiving", () => {
 });
 
 // ---- CSV ---------------------------------------------------------------------
-test("toCsv emits the exact legacy header order and blank RecCompletions", () => {
+test("toCsv emits the exact legacy header order with a blank Targets column", () => {
   const rows = normalizeProjections({ M: [MEDIAN_QB], C: [CEIL_QB], F: [FLOOR_QB] }, {
     season: 2025,
     week: 1,
@@ -213,8 +231,10 @@ test("toCsv emits the exact legacy header order and blank RecCompletions", () =>
   const csv = toCsv(PROJECTION_COLUMNS, rows);
   const lines = csv.trim().split("\n");
   assert.equal(lines[0], PROJECTION_COLUMNS.join(","));
-  // 17 columns, trailing RecCompletions blank -> ",," around it in the record.
+  // Full 17-column width preserved even though Targets is blank.
   assert.equal(lines[1].split(",").length, PROJECTION_COLUMNS.length);
+  // Targets is column 8 (index 7) and is blank.
+  assert.equal(lines[1].split(",")[7], "");
 });
 
 test("toCsv actuals header matches actual_games schema", () => {

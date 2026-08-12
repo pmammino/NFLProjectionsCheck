@@ -17,12 +17,14 @@
 //     playerid, player, team, position, opponent,
 //     offpassyard, offpasscomp, offpassatt, offpasstd, offpassint, passpct,
 //     offrushatt, offrushyard, offrushtd,
-//     offrecatt, offrecyard, offrectd,      <- offrecatt == targets
+//     offrecatt, offrecyard, offrectd,      <- offrecatt == receptions
 //     fantasy, ppr, custpts
-//   Note: the projection feed exposes a single receiving-volume field
-//   (offrecatt == targets) and NO projected reception count, so projected
-//   catch-rate cannot be derived from these endpoints. RecCompletions is
-//   therefore emitted blank and the dashboard skips projected catch-rate.
+//   Note: the projection feed's receiving volume is RECEPTIONS (offrecatt) plus
+//   yards and TDs. It does NOT project a target count, so the target-denominated
+//   metrics (Targets volume, Rec Yds/Target, Catch Rate, Rec TD/Target) can't be
+//   derived from these endpoints alone. The Targets column is emitted blank and
+//   the dashboard skips those metrics until a separate targets source is merged
+//   into it (see TARGETS_SOURCE below). Projected receptions/yards/TDs ARE here.
 //
 // Player stats — player-stats.php?view=passing|rushing|receiving, keyed by
 //   `pid` (same RotoWire id space as `playerid`, so projections and actuals
@@ -100,9 +102,26 @@ const numOr0 = (row, key) => {
   return v === "" ? "0" : v;
 };
 
+// TARGETS_SOURCE: the projection endpoints don't project targets, so Targets is
+// blank by default. When a separate targets source is located, pass a lookup to
+// normalizeProjections via `targetsByPlayer` to fill the column and re-enable
+// the target-denominated metrics. The lookup is a Map keyed by playerid whose
+// value is either a single number (used for every split) or a per-split object
+// like { M, C, F }. Anything missing stays blank.
+function resolveTargets(lookup, playerId, code) {
+  if (!lookup) return "";
+  const v = lookup.get(playerId);
+  if (v === undefined || v === null) return "";
+  if (typeof v === "object") {
+    const s = v[code];
+    return s === undefined || s === null ? "" : String(s);
+  }
+  return String(v);
+}
+
 // ---- Projections -------------------------------------------------------------
 // One projection record (from any of the three split feeds) -> one CSV row.
-export function normalizeProjectionRecord(rec, { season, week, split }) {
+export function normalizeProjectionRecord(rec, { season, week, split, targetsByPlayer }) {
   const code = SPLIT_CODES[split];
   if (!code) throw new Error(`Unknown projection split: ${split}`);
   const playerId = pick(rec, "playerid");
@@ -115,14 +134,15 @@ export function normalizeProjectionRecord(rec, { season, week, split }) {
     PlayerID: playerId,
     PassAttempts: numOr0(rec, "offpassatt"),
     RushAttempts: numOr0(rec, "offrushatt"),
-    Targets: numOr0(rec, "offrecatt"),
+    // Targets aren't in these feeds; filled only from an external source.
+    Targets: resolveTargets(targetsByPlayer, playerId, code),
     PassCompletions: numOr0(rec, "offpasscomp"),
     PassYards: numOr0(rec, "offpassyard"),
     PassTDs: numOr0(rec, "offpasstd"),
     PassInts: numOr0(rec, "offpassint"),
     RushYards: numOr0(rec, "offrushyard"),
     RushTDs: numOr0(rec, "offrushtd"),
-    RecCompletions: "", // not projected by these endpoints (see header note)
+    RecCompletions: numOr0(rec, "offrecatt"), // offrecatt == projected receptions
     RecYards: numOr0(rec, "offrecyard"),
     RecTDs: numOr0(rec, "offrectd"),
   };
@@ -130,13 +150,14 @@ export function normalizeProjectionRecord(rec, { season, week, split }) {
 
 // Combine the three split feeds for a single week into weekly_projections rows.
 // `feeds` = { M: [...], C: [...], F: [...] } (each an array of raw records).
-export function normalizeProjections(feeds, { season, week }) {
+// `targetsByPlayer` (optional) fills the Targets column — see TARGETS_SOURCE.
+export function normalizeProjections(feeds, { season, week, targetsByPlayer }) {
   const rows = [];
   for (const split of ["M", "C", "F"]) {
     const list = feeds[split];
     if (!list) throw new Error(`Missing "${split}" projection feed`);
     for (const rec of asRecords(list)) {
-      const row = normalizeProjectionRecord(rec, { season, week, split });
+      const row = normalizeProjectionRecord(rec, { season, week, split, targetsByPlayer });
       if (row) rows.push(row);
     }
   }

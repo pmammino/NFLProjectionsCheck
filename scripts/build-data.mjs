@@ -12,7 +12,14 @@
 //  - Stats are only emitted for a row when relevant to the player's position
 //    (QBs aren't graded on receiving; non-QBs aren't graded on passing).
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -239,8 +246,16 @@ const TD_TYPES = [
   },
 ];
 
+// A cell is "missing" when empty/undefined. Live-ingested projections leave
+// RecCompletions blank (the endpoints don't project receptions), so treat blank
+// as missing and let the caller skip that metric rather than reading it as 0.
+const isBlank = (v) => v === undefined || v === null || v === "";
+
 function readSplitValue(spec, row) {
-  if (typeof spec === "string") return num(row[spec]);
+  if (typeof spec === "string") {
+    return isBlank(row[spec]) ? null : num(row[spec]);
+  }
+  if (isBlank(row[spec.numer]) || isBlank(row[spec.denom])) return null;
   const d = num(row[spec.denom]);
   if (d <= 0) return null;
   return num(row[spec.numer]) / d;
@@ -407,9 +422,57 @@ function buildSeason(teamByPid) {
   };
 }
 
+// Collect per-week snapshot CSVs written by scripts/ingest.mjs.
+// Layout: data/<kind>/<season>/week-NN.csv   (kind = projections | actuals)
+function listSnapshotSeasons(dataDir, kind) {
+  const base = join(ROOT, dataDir, kind);
+  if (!existsSync(base)) return new Map(); // season -> [paths]
+  const bySeason = new Map();
+  for (const season of readdirSync(base)) {
+    const seasonDir = join(base, season);
+    if (!statSync(seasonDir).isDirectory()) continue;
+    const files = readdirSync(seasonDir)
+      .filter((f) => f.endsWith(".csv"))
+      .map((f) => join(seasonDir, f));
+    if (files.length) bySeason.set(season, files);
+  }
+  return bySeason;
+}
+
+// Prefer live-ingested snapshots when present; otherwise fall back to the
+// legacy hand-uploaded CSVs so the dashboard keeps building with no ingest run.
+// When snapshots span multiple seasons the weekly view targets one season
+// (env SEASON, else the latest present) to avoid cross-season week collisions.
+function loadWeeklySources(dataDir = "data") {
+  const projSeasons = listSnapshotSeasons(dataDir, "projections");
+  const actualSeasons = listSnapshotSeasons(dataDir, "actuals");
+
+  if (projSeasons.size > 0) {
+    const available = [...projSeasons.keys()].sort();
+    const target =
+      (process.env.SEASON && projSeasons.has(process.env.SEASON) && process.env.SEASON) ||
+      available[available.length - 1];
+    const projRows = projSeasons.get(target).flatMap((p) => parseCsv(p));
+    const actualRows = (actualSeasons.get(target) || []).flatMap((p) => parseCsv(p));
+    return {
+      projRows,
+      actualRows,
+      source: `snapshots(${target})`,
+      season: Number(target),
+    };
+  }
+
+  return {
+    projRows: parseCsv(join(ROOT, "weekly_projections.csv")),
+    actualRows: parseCsv(join(ROOT, "actual_games.csv")),
+    source: "legacy-csv",
+    season: 2025,
+  };
+}
+
 function main() {
-  const projRows = parseCsv(join(ROOT, "weekly_projections.csv"));
-  const actualRows = parseCsv(join(ROOT, "actual_games.csv"));
+  const weekly = loadWeeklySources();
+  const { projRows, actualRows } = weekly;
 
   // Pivot projections: key = `${PlayerID}|${GameWeek}` -> { C, F, M, team }
   const proj = new Map();
@@ -554,7 +617,8 @@ function main() {
   const payload = {
     meta: {
       generatedAt: new Date().toISOString(),
-      season: 2025,
+      season: weekly.season,
+      dataSource: weekly.source,
       weeks,
       teams,
       positions: ["QB", "RB", "WR", "TE"],
@@ -592,7 +656,7 @@ function main() {
   writeFileSync(outPath, JSON.stringify(payload));
   const kb = (readFileSync(outPath).length / 1024).toFixed(0);
   console.log(
-    `build-data: weekly ${out.length} rows / ${td.length} TD (${matched} matched); ` +
+    `build-data: source=${weekly.source}; weekly ${out.length} rows / ${td.length} TD (${matched} matched); ` +
       `season ${season.rows.length} rows / ${season.td.length} TD (${season.counts.matchedPlayers} matched) -> ${outPath} (${kb} KB)`
   );
 }

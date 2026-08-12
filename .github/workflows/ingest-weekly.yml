@@ -1,0 +1,94 @@
+name: Ingest weekly projections & actuals
+
+# Captures RotoWire feeds into committed per-week snapshot CSVs (data/).
+#
+# Two scheduled passes because projections and results become available at
+# different times, and the projection endpoints only serve the *current* week:
+#   - Thursday: capture that week's Floor/Median/Ceiling BEFORE kickoff. Written
+#     once and never overwritten (locks in the pre-game forecast).
+#   - Tuesday:  capture the just-completed week's actual stats AFTER MNF (and
+#     after stat corrections settle). Rewritten each run to pick up corrections.
+#
+# Auto week/season resolution is a date heuristic; use the manual "Run workflow"
+# button with an explicit week for backfills or anything that must be exact.
+
+on:
+  schedule:
+    # Times are UTC. Thu 12:00 UTC ≈ 08:00 ET (well before TNF kickoff).
+    - cron: "0 12 * * 4" # Thursday — projections for the upcoming week
+    # Tue 15:00 UTC ≈ 11:00 ET (after Monday night + overnight stat corrections).
+    - cron: "0 15 * * 2" # Tuesday — actuals for the completed week
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season (year), e.g. 2025. Blank = auto by date."
+        required: false
+      week:
+        description: "NFL week number. Blank = auto by date."
+        required: false
+      only:
+        description: "What to ingest"
+        required: false
+        default: "both"
+        type: choice
+        options: [both, projections, actuals]
+      force:
+        description: "Overwrite an existing projections snapshot"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ingest-weekly
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Scheduled runs pick the pass from the cron that fired: Thursday →
+      # projections, Tuesday → actuals. Manual runs use the chosen inputs.
+      - name: Resolve ingest mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "${{ github.event.schedule }}" = "0 12 * * 4" ]; then
+              echo "only=projections" >> "$GITHUB_OUTPUT"
+            else
+              echo "only=actuals" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "only=${{ github.event.inputs.only || 'both' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ingest
+        env:
+          ROTOWIRE_COOKIE: ${{ secrets.ROTOWIRE_COOKIE }}
+          SEASON: ${{ github.event.inputs.season }}
+          WEEK: ${{ github.event.inputs.week }}
+        run: |
+          args="--only ${{ steps.mode.outputs.only }}"
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then args="$args --force"; fi
+          echo "Running: node scripts/ingest.mjs $args"
+          node scripts/ingest.mjs $args
+
+      - name: Commit snapshots
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No new snapshots to commit."
+          else
+            git commit -m "Ingest snapshots (${{ steps.mode.outputs.only }}) [skip ci]"
+            git push
+          fi

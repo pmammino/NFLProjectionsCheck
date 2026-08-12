@@ -116,15 +116,78 @@ All analysis tabs work in both scopes. Scope-specific differences:
 All views respond to filters: position, week range, team, minimum actual
 volume, and exclude-injury-suspect.
 
+## Live weekly ingestion
+
+As the season runs, projections and actuals are pulled straight from RotoWire's
+JSON feeds and saved as **committed per-week snapshots** — no more hand-uploaded
+CSVs.
+
+### Feeds
+
+Projections (Floor / Median / Ceiling), keyed by RotoWire `playerid`:
+
+| Split  | Endpoint |
+| ------ | -------- |
+| Median | `weekly-projections.php?pos=QBRBWRTE&week=N` |
+| Ceiling| `projections-ceil-floor-weekly.php?pos=QBRBWRTE&week=N&ceilFloor=C` |
+| Floor  | `projections-ceil-floor-weekly.php?pos=QBRBWRTE&week=N&ceilFloor=F` |
+
+Actual stats, keyed by RotoWire `pid` (the **same** id space as `playerid`, so
+projections and actuals join with no crosswalk):
+
+`player-stats.php?view={passing|rushing|receiving}&type=basic&scoring=standard&season=YYYY&timeperiod=N&pergame=totals&endweek=N&position=ALL`
+
+The three stat views are merged per player (a QB's passing + rushing, a back's
+rushing + receiving) into one actual row.
+
+### Snapshots & persistence
+
+`scripts/ingest.mjs` fetches a week, normalizes it into the exact
+`weekly_projections` / `actual_games` column schemas, and writes:
+
+```
+data/projections/{season}/week-NN.csv    # Floor/Median/Ceiling rows
+data/actuals/{season}/week-NN.csv        # merged passing+rushing+receiving
+```
+
+These snapshots are committed and become the durable record. **Projections are
+captured once and never overwritten** — the projection endpoints take a `week`
+but no `season`, so they only serve the current season and can't be re-fetched
+for a past week. Actuals *can* be re-fetched (the stats endpoint takes
+`season`+`week`) and are rewritten each run to absorb stat corrections.
+
+```bash
+npm run ingest -- --season 2025 --week 1                 # both, one week
+npm run ingest -- --season 2025 --week 1 --only actuals  # just actuals (backfill)
+npm run ingest -- --dry-run                              # fetch+parse, write nothing
+npm test                                                 # verify the feed→CSV mapping
+```
+
+### Automation
+
+`.github/workflows/ingest-weekly.yml` runs two scheduled passes (both
+overridable via **Run workflow**): **Thursday** captures the upcoming week's
+projections before kickoff, **Tuesday** captures the completed week's actuals
+after Monday night. Each pass commits any new snapshots. If the feeds require a
+session, set a `ROTOWIRE_COOKIE` repo secret.
+
+> **Caveat — projected catch rate:** the projection feed exposes a single
+> receiving-volume field (`offrecatt` → Targets) and no projected reception
+> count, so projected **Catch Rate** can't be derived from these endpoints. The
+> dashboard skips that one metric for ingested weeks; every other volume/
+> efficiency/TD check runs normally.
+
 ## Data join
 
-The two CSVs use different player-ID schemes. They are joined on:
+Live snapshots join projections `PlayerID` ↔ actuals `ID` (both the RotoWire
+player id) on `{player, week}`. The legacy 2025 CSVs used two different id
+schemes bridged by a crosswalk column:
 
 ```
 actual_games.csv  .ID   ===  weekly_projections.csv  .PlayerID
 ```
 
-(4,508 player-weeks match across the 2025 season.)
+(4,508 player-weeks match across the legacy 2025 season.)
 
 ## Local development
 
@@ -137,12 +200,18 @@ Open http://localhost:3000.
 
 ## How the data is built
 
-`scripts/build-data.mjs` reads the two CSVs from the repo root, pivots
-projections into C/F/M per player-week, joins to actuals, computes every
-volume/efficiency comparison with the relevance + injury rules above, and writes
-a compact `public/data/dashboard.json`. It runs automatically on `predev` and
-`prebuild`, so the generated JSON is **not committed** — it's always rebuilt
-from the source CSVs.
+`scripts/build-data.mjs` pivots projections into C/F/M per player-week, joins to
+actuals, computes every volume/efficiency comparison with the relevance + injury
+rules above, and writes a compact `public/data/dashboard.json`. It runs
+automatically on `predev` and `prebuild`, so the generated JSON is **not
+committed** — it's always rebuilt from source.
+
+**Source resolution:** if `data/projections/*` snapshots exist, the weekly
+dataset is built from them (targeting the latest season present, or `SEASON=…`);
+otherwise it falls back to the legacy root CSVs (`weekly_projections.csv` +
+`actual_games.csv`), so the dashboard keeps building before any ingest has run.
+`meta.dataSource` in the JSON records which path was used. The Season-long scope
+still reads `season_projections.csv` + `actual_season_stats.csv`.
 
 ## Deploying to Vercel
 

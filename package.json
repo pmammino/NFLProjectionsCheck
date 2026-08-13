@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "build:data": "node scripts/build-data.mjs",
+    "ingest": "node scripts/ingest.mjs",
     "predev": "node scripts/build-data.mjs",
     "prebuild": "node scripts/build-data.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --test \"scripts/lib/*.test.mjs\""
   },
   "dependencies": {
     "next": "14.2.5",

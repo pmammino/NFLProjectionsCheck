@@ -35,6 +35,7 @@ import {
   asRecords,
   toCsv,
 } from "./lib/rotowire.mjs";
+import { seasonForDate, currentNflWeek, projectionWeek } from "./lib/schedule.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -77,30 +78,6 @@ function parseArgs(argv) {
   return a;
 }
 
-// NFL Week-1 kickoff (Thursday) per season. Add new seasons here so the cron can
-// resolve the current week without a manual --week. Explicit --week always wins.
-const SEASON_START = {
-  2024: "2024-09-05",
-  2025: "2025-09-04",
-  2026: "2026-09-10",
-};
-
-// The season a given date belongs to (the season spans Sep–Feb, so Jan/Feb
-// dates belong to the prior calendar year's season).
-function seasonForDate(d) {
-  return d.getUTCMonth() >= 2 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
-}
-
-// Best-effort "current NFL week" for a date, clamped to 1..18. Heuristic only —
-// use --week for anything that must be exact.
-function currentNflWeek(season, d) {
-  const start = SEASON_START[season];
-  if (!start) return 1;
-  const startMs = Date.parse(start + "T00:00:00Z");
-  const week = Math.floor((d.getTime() - startMs) / (7 * 86400_000)) + 1;
-  return Math.min(18, Math.max(1, week));
-}
-
 async function fetchJson(url) {
   const headers = {
     "User-Agent":
@@ -127,26 +104,48 @@ const projPath = (dir, season, week) =>
 const actualPath = (dir, season, week) =>
   join(ROOT, dir, "actuals", String(season), `week-${pad2(week)}.csv`);
 
-function writeCsv(path, csv, { dryRun }) {
-  if (dryRun) {
-    console.log(`  [dry-run] would write ${path} (${csv.split("\n").length - 2} rows)`);
-    return;
+const csvRowCount = (csv) => Math.max(0, csv.trim().split("\n").length - 1);
+
+// Write only when the content actually changed, so a daily re-run that produces
+// identical projections is a no-op (no needless commits). Returns what happened.
+function writeCsvIfChanged(path, csv, a, { guardRollover = false } = {}) {
+  const rows = csvRowCount(csv);
+  const prev = existsSync(path) ? readFileSync(path, "utf8") : null;
+
+  if (prev === csv) {
+    console.log(`  unchanged: ${path} (${rows} rows) — no rewrite.`);
+    return "unchanged";
+  }
+
+  // Guard against a week-rollover / partial feed replacing a good snapshot with
+  // a much smaller one. Requesting a finished week can return an emptied set;
+  // don't let that clobber the frozen forecast. --force overrides.
+  if (guardRollover && prev !== null && !a.force) {
+    const prevRows = csvRowCount(prev);
+    if (rows < prevRows * 0.5) {
+      console.log(
+        `  refusing to shrink ${path} from ${prevRows} to ${rows} rows ` +
+          `(looks like a week rollover / partial feed). Use --force to override.`
+      );
+      return "guarded";
+    }
+  }
+
+  if (a.dryRun) {
+    console.log(`  [dry-run] would ${prev === null ? "write" : "update"} ${path} (${rows} rows)`);
+    return "dry-run";
   }
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, csv);
-  console.log(`  wrote ${path} (${csv.split("\n").length - 2} rows)`);
+  console.log(`  ${prev === null ? "wrote" : "updated"} ${path} (${rows} rows)`);
+  return prev === null ? "created" : "updated";
 }
 
 async function ingestProjections(a) {
-  const path = projPath(a.dataDir, a.season, a.week);
-  if (existsSync(path) && !a.force) {
-    console.log(
-      `projections: ${path} already exists — keeping the captured forecast (use --force to overwrite).`
-    );
-    return;
-  }
-  const urls = projectionUrls(a.week);
-  console.log(`projections: fetching week ${a.week} (M/C/F)…`);
+  const week = a.week ?? projectionWeek(a.season, a.now);
+  const path = projPath(a.dataDir, a.season, week);
+  const urls = projectionUrls(week);
+  console.log(`projections: fetching week ${week} (M/C/F)…`);
   const [M, C, F] = await Promise.all([
     fetchJson(urls.M),
     fetchJson(urls.C),
@@ -159,17 +158,17 @@ async function ingestProjections(a) {
   // Targets column and re-enables the target-denominated receiving metrics.
   const targetsByPlayer = undefined;
 
-  const rows = normalizeProjections(
-    { M, C, F },
-    { season: a.season, week: a.week, targetsByPlayer }
-  );
+  const rows = normalizeProjections({ M, C, F }, { season: a.season, week, targetsByPlayer });
   if (rows.length === 0) throw new Error("projections: feeds returned 0 usable rows");
-  writeCsv(path, toCsv(PROJECTION_COLUMNS, rows), a);
+  // Refresh in place: the daily run keeps this week's projection current as
+  // injuries and other context land, until the week's games roll it over.
+  writeCsvIfChanged(path, toCsv(PROJECTION_COLUMNS, rows), a, { guardRollover: true });
 }
 
 async function ingestActuals(a) {
-  const startweek = a.startweek ?? a.week;
-  const endweek = a.endweek ?? a.week;
+  const week = a.week ?? currentNflWeek(a.season, a.now);
+  const startweek = a.startweek ?? week;
+  const endweek = a.endweek ?? week;
   const urls = statsUrls(a.season, startweek, endweek);
   console.log(
     `actuals: fetching ${a.season} weeks ${startweek}-${endweek} (passing/rushing/receiving)…`
@@ -181,12 +180,9 @@ async function ingestActuals(a) {
   ]);
   // Sanity-check the feeds parsed to arrays before merging.
   asRecords(passing);
-  const rows = mergeActuals({ passing, rushing, receiving }, {
-    season: a.season,
-    week: a.week,
-  });
+  const rows = mergeActuals({ passing, rushing, receiving }, { season: a.season, week });
   if (rows.length === 0) throw new Error("actuals: feeds returned 0 usable rows");
-  writeCsv(actualPath(a.dataDir, a.season, a.week), toCsv(ACTUAL_COLUMNS, rows), a);
+  writeCsvIfChanged(actualPath(a.dataDir, a.season, week), toCsv(ACTUAL_COLUMNS, rows), a);
 }
 
 const HELP = `Ingest RotoWire projections + actuals into per-week snapshot CSVs.
@@ -194,14 +190,19 @@ const HELP = `Ingest RotoWire projections + actuals into per-week snapshot CSVs.
   node scripts/ingest.mjs [options]
 
   --season <year>       Season to ingest (default: current NFL season by date)
-  --week <n>            NFL week number (default: current week by date)
+  --week <n>            NFL week number. Default by date: projections use the
+                        upcoming/in-progress week, actuals the completed week.
   --only <mode>         projections | actuals | both  (default: both)
-  --startweek <n>       Actuals range start (default: --week)
-  --endweek <n>         Actuals range end   (default: --week)
+  --startweek <n>       Actuals range start (default: resolved week)
+  --endweek <n>         Actuals range end   (default: resolved week)
   --data-dir <path>     Output root (default: data)
-  --force               Overwrite an existing projections snapshot
+  --force               Bypass the rollover guard (allow a smaller projection
+                        set to replace a larger one)
   --dry-run             Fetch + normalize but do not write files
   -h, --help            Show this help
+
+Projections refresh in place: a daily run keeps the current week's snapshot up
+to date as injuries/context land, and is a no-op when nothing changed.
 
 Env: ROTOWIRE_COOKIE (optional Cookie header), SEASON, WEEK.`;
 
@@ -212,20 +213,20 @@ async function main() {
     return;
   }
 
-  const now = new Date();
-  if (a.season === undefined) a.season = Number(process.env.SEASON) || seasonForDate(now);
-  if (a.week === undefined)
-    a.week = Number(process.env.WEEK) || currentNflWeek(a.season, now);
+  a.now = new Date();
+  if (a.season === undefined) a.season = Number(process.env.SEASON) || seasonForDate(a.now);
+  if (a.week === undefined && process.env.WEEK) a.week = Number(process.env.WEEK);
 
-  if (!Number.isFinite(a.season) || !Number.isFinite(a.week) || a.week < 1) {
-    throw new Error(`Invalid season/week: season=${a.season} week=${a.week}`);
+  if (!Number.isFinite(a.season)) throw new Error(`Invalid season: ${a.season}`);
+  if (a.week !== undefined && (!Number.isFinite(a.week) || a.week < 1)) {
+    throw new Error(`Invalid week: ${a.week}`);
   }
   if (!["projections", "actuals", "both"].includes(a.only)) {
     throw new Error(`--only must be projections|actuals|both, got "${a.only}"`);
   }
 
   console.log(
-    `Ingesting season=${a.season} week=${a.week} only=${a.only}` +
+    `Ingesting season=${a.season} week=${a.week ?? "auto"} only=${a.only}` +
       (a.dryRun ? " (dry-run)" : "")
   );
 

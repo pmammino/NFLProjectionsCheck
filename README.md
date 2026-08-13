@@ -154,26 +154,46 @@ data/projections/{season}/week-NN.csv    # Floor/Median/Ceiling rows
 data/actuals/{season}/week-NN.csv        # merged passing+rushing+receiving
 ```
 
-These snapshots are committed and become the durable record. **Projections are
-captured once and never overwritten** — the projection endpoints take a `week`
-but no `season`, so they only serve the current season and can't be re-fetched
-for a past week. Actuals *can* be re-fetched (the stats endpoint takes
-`season`+`week`) and are rewritten each run to absorb stat corrections.
+These snapshots are committed and become the durable record.
+
+**Projections refresh daily.** RotoWire keeps revising a week's numbers as
+injuries and other context land right up to kickoff, so the projection snapshot
+is re-pulled every day and **replaced whenever it changes** (identical re-pulls
+are a no-op — no commit churn). This keeps every comparison anchored to the most
+up-to-date pre-game forecast. Because the projection endpoints take a `week` but
+no `season` (they only serve the current season), the daily run targets the
+**upcoming/in-progress** week and rolls forward to the next week once that week's
+games finish — so a completed week's snapshot then stays frozen at its last
+pre-game state. A `--force`-overridable guard refuses to let a week-rollover or
+partial feed shrink an existing snapshot.
+
+**Actuals** take `season`+`week`, so they can be (re)fetched and are rewritten to
+absorb stat corrections.
 
 ```bash
-npm run ingest -- --season 2025 --week 1                 # both, one week
-npm run ingest -- --season 2025 --week 1 --only actuals  # just actuals (backfill)
+npm run ingest                                           # auto: refresh proj + fetch actuals
+npm run ingest -- --season 2025 --week 1                 # both, one explicit week
+npm run ingest -- --only actuals --season 2025 --week 1  # just actuals (backfill)
 npm run ingest -- --dry-run                              # fetch+parse, write nothing
-npm test                                                 # verify the feed→CSV mapping
+npm test                                                 # verify mapping + week math
 ```
 
 ### Automation
 
-`.github/workflows/ingest-weekly.yml` runs two scheduled passes (both
-overridable via **Run workflow**): **Thursday** captures the upcoming week's
-projections before kickoff, **Tuesday** captures the completed week's actuals
-after Monday night. Each pass commits any new snapshots. If the feeds require a
+`.github/workflows/ingest-weekly.yml` (all overridable via **Run workflow**):
+
+- **Daily** — refresh the current week's projections; commits only when they
+  changed.
+- **Tuesday** — capture the completed week's actuals after Monday night.
+
+Schedules are gated to the season months (Sep–Feb). If the feeds require a
 session, set a `ROTOWIRE_COOKIE` repo secret.
+
+> **Note — post-kickoff refreshes:** snapshots are per player-week, so a player
+> whose game kicks off early (e.g. Thursday) can still have that week's row
+> refreshed later the same week. In practice RotoWire's numbers settle before
+> games and the change guard keeps rows stable; strict per-game freezing would
+> require a game-schedule source.
 
 > **Caveat — projected targets:** these endpoints project receptions, not
 > targets, so the **target-denominated** metrics (Targets volume, Rec

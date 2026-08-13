@@ -2,22 +2,27 @@ name: Ingest weekly projections & actuals
 
 # Captures RotoWire feeds into committed per-week snapshot CSVs (data/).
 #
-# Two scheduled passes because projections and results become available at
-# different times, and the projection endpoints only serve the *current* week:
-#   - Thursday: capture that week's Floor/Median/Ceiling BEFORE kickoff. Written
-#     once and never overwritten (locks in the pre-game forecast).
-#   - Tuesday:  capture the just-completed week's actual stats AFTER MNF (and
-#     after stat corrections settle). Rewritten each run to pick up corrections.
+# Projections refresh DAILY: RotoWire keeps updating a week's Floor/Median/
+# Ceiling as injuries and other context land right up to kickoff, so we re-pull
+# every day and replace the current week's snapshot whenever the numbers change
+# (a no-op when they don't). The projection endpoints only serve the current
+# season, so the daily run targets the upcoming/in-progress week and rolls to the
+# next week once games finish — a finished week's snapshot then stays frozen at
+# its last pre-game state.
+#
+# Actuals run weekly (Tuesday) after Monday night + overnight stat corrections.
 #
 # Auto week/season resolution is a date heuristic; use the manual "Run workflow"
 # button with an explicit week for backfills or anything that must be exact.
 
 on:
   schedule:
-    # Times are UTC. Thu 12:00 UTC ≈ 08:00 ET (well before TNF kickoff).
-    - cron: "0 12 * * 4" # Thursday — projections for the upcoming week
-    # Tue 15:00 UTC ≈ 11:00 ET (after Monday night + overnight stat corrections).
-    - cron: "0 15 * * 2" # Tuesday — actuals for the completed week
+    # Times are UTC; months gated to the season (Sep–Feb) to avoid off-season
+    # runs. Daily 13:00 UTC ≈ 09:00 ET — after overnight injury news, before
+    # kickoffs (Sunday's earliest is ~17:00 UTC).
+    - cron: "0 13 * 9-12,1-2 *" # daily — refresh the current week's projections
+    # Tue 15:00 UTC ≈ 11:00 ET, after Monday night + overnight stat corrections.
+    - cron: "0 15 * 9-12,1-2 2" # Tuesday — actuals for the completed week
   workflow_dispatch:
     inputs:
       season:
@@ -33,7 +38,7 @@ on:
         type: choice
         options: [both, projections, actuals]
       force:
-        description: "Overwrite an existing projections snapshot"
+        description: "Bypass the rollover guard (allow a smaller set to replace a larger one)"
         required: false
         default: false
         type: boolean
@@ -55,16 +60,16 @@ jobs:
         with:
           node-version: 22
 
-      # Scheduled runs pick the pass from the cron that fired: Thursday →
-      # projections, Tuesday → actuals. Manual runs use the chosen inputs.
+      # Scheduled runs pick the pass from the cron that fired: the Tuesday cron →
+      # actuals, the daily cron → projections. Manual runs use the chosen inputs.
       - name: Resolve ingest mode
         id: mode
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            if [ "${{ github.event.schedule }}" = "0 12 * * 4" ]; then
-              echo "only=projections" >> "$GITHUB_OUTPUT"
-            else
+            if [ "${{ github.event.schedule }}" = "0 15 * 9-12,1-2 2" ]; then
               echo "only=actuals" >> "$GITHUB_OUTPUT"
+            else
+              echo "only=projections" >> "$GITHUB_OUTPUT"
             fi
           else
             echo "only=${{ github.event.inputs.only || 'both' }}" >> "$GITHUB_OUTPUT"

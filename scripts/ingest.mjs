@@ -42,6 +42,11 @@ const ROOT = join(__dirname, "..");
 const POS = "QBRBWRTE";
 const BASE = "https://www.rotowire.com/football/tables";
 
+// Sanity thresholds. A full projection slate is hundreds of QB/RB/WR/TE; far
+// fewer means RotoWire served its unauthenticated preview (needs a cookie).
+const MIN_EXPECTED_PROJ_PLAYERS = 40;
+const MIN_EXPECTED_ACTUAL_ROWS = 15;
+
 // ---- Feed URLs ---------------------------------------------------------------
 const projectionUrls = (week) => ({
   M: `${BASE}/weekly-projections.php?pos=${POS}&week=${week}`,
@@ -159,7 +164,22 @@ async function ingestProjections(a) {
   const targetsByPlayer = undefined;
 
   const rows = normalizeProjections({ M, C, F }, { season: a.season, week, targetsByPlayer });
-  if (rows.length === 0) throw new Error("projections: feeds returned 0 usable rows");
+  if (rows.length === 0) {
+    console.warn("projections: feeds returned 0 rows — skipping write.");
+    return;
+  }
+  // RotoWire returns a small (~top-10) preview to unauthenticated requests and
+  // the full slate only to a logged-in session. A full week is hundreds of
+  // players across QB/RB/WR/TE; a tiny result almost always means no/expired
+  // ROTOWIRE_COOKIE. Warn loudly — the row count makes the gate obvious in logs.
+  const players = Math.round(rows.length / 3);
+  if (players < MIN_EXPECTED_PROJ_PLAYERS) {
+    console.warn(
+      `projections: only ${players} players (${rows.length} rows) returned — this is ` +
+        `RotoWire's unauthenticated preview. Set the ROTOWIRE_COOKIE secret to a ` +
+        `logged-in session cookie to get the full slate.`
+    );
+  }
   // Refresh in place: the daily run keeps this week's projection current as
   // injuries and other context land, until the week's games roll it over.
   writeCsvIfChanged(path, toCsv(PROJECTION_COLUMNS, rows), a, { guardRollover: true });
@@ -181,7 +201,19 @@ async function ingestActuals(a) {
   // Sanity-check the feeds parsed to arrays before merging.
   asRecords(passing);
   const rows = mergeActuals({ passing, rushing, receiving }, { season: a.season, week });
-  if (rows.length === 0) throw new Error("actuals: feeds returned 0 usable rows");
+  if (rows.length === 0) {
+    // Normal early in a week (no games completed yet) — don't fail the run.
+    console.warn(
+      `actuals: 0 rows for ${a.season} week ${week} — likely no completed games yet. Skipping write.`
+    );
+    return;
+  }
+  if (rows.length < MIN_EXPECTED_ACTUAL_ROWS) {
+    console.warn(
+      `actuals: only ${rows.length} rows — expected if just a game or two has been ` +
+        `played, but if a full slate is done the stats feed may need ROTOWIRE_COOKIE.`
+    );
+  }
   writeCsvIfChanged(actualPath(a.dataDir, a.season, week), toCsv(ACTUAL_COLUMNS, rows), a);
 }
 
@@ -230,10 +262,28 @@ async function main() {
       (a.dryRun ? " (dry-run)" : "")
   );
 
-  if (a.only === "projections" || a.only === "both") await ingestProjections(a);
-  if (a.only === "actuals" || a.only === "both") await ingestActuals(a);
+  // Run each artifact independently so a fetch error in one (or an empty feed)
+  // never blocks the other — the workflow commits whatever was written.
+  let failures = 0;
+  if (a.only === "projections" || a.only === "both") {
+    try {
+      await ingestProjections(a);
+    } catch (err) {
+      console.error("projections failed:", err.message);
+      failures++;
+    }
+  }
+  if (a.only === "actuals" || a.only === "both") {
+    try {
+      await ingestActuals(a);
+    } catch (err) {
+      console.error("actuals failed:", err.message);
+      failures++;
+    }
+  }
 
   console.log("Done.");
+  if (failures > 0) process.exitCode = 1;
 }
 
 main().catch((err) => {

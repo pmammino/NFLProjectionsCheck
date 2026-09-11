@@ -454,6 +454,13 @@ function loadWeeklySources(dataDir = "data") {
       available[available.length - 1];
     const projRows = projSeasons.get(target).flatMap((p) => parseCsv(p));
     const actualRows = (actualSeasons.get(target) || []).flatMap((p) => parseCsv(p));
+    if (actualRows.length === 0) {
+      console.warn(
+        `build-data: ${target} has projection snapshots but NO actuals yet — the ` +
+          `weekly view will be empty until actuals are ingested (they appear as ` +
+          `games complete). Season-long scope is unaffected.`
+      );
+    }
     return {
       projRows,
       actualRows,

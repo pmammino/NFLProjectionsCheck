@@ -24,9 +24,25 @@
 // actual bankroll size, which is never needed since a Kelly fraction is
 // bankroll-size-independent by construction.
 //
+// TD/turnover-count props (Poisson) get two extra guards a plain median
+// count doesn't otherwise have (unlike continuous stats, whose Floor/Ceiling
+// spread already reflects role/volume uncertainty):
+//   --min-td-volume    below this many projected "touches" (see STAT_DEFS'
+//                      volumeCols), the prop isn't priced at all — a backup's
+//                      tiny median TD projection is too volatile to trust.
+//   --stable-td-volume at/above this many touches, the Median TD count is
+//                      used as-is; between the two thresholds, lambda is
+//                      linearly shrunk toward the more conservative Floor
+//                      count (see lib/probability.mjs's blendLambda).
+//   --min-edge-ratio   Poisson picks additionally need
+//                      ourProb >= impliedProb * ratio, since a fixed
+//                      absolute edge is trivial to clear by noise alone at
+//                      the long-odds prices backups get quoted at.
+//
 // Usage:
 //   node scripts/capture-props.mjs [--season 2025] [--week 1]
-//                                  [--min-edge 0.03]
+//                                  [--min-edge 0.03] [--min-edge-ratio 1.3]
+//                                  [--min-td-volume 3] [--stable-td-volume 8]
 //                                  [--kelly-fraction 0.25] [--kelly-cap 0.03]
 //                                  [--data-dir data] [--dry-run]
 //
@@ -36,7 +52,7 @@ import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { STAT_DEFS, normalizePropsFeed } from "./lib/props.mjs";
-import { probOverContinuous, probOverPoisson } from "./lib/probability.mjs";
+import { probOverContinuous, probOverPoisson, blendLambda } from "./lib/probability.mjs";
 import { americanToProb, americanToDecimal, kellyFraction } from "./lib/odds.mjs";
 import { readCsv, toCsv } from "./lib/csv.mjs";
 import { seasonForDate, projectionWeek } from "./lib/schedule.mjs";
@@ -92,7 +108,16 @@ export const BETS_COLUMNS = [
 ];
 
 function parseArgs(argv) {
-  const a = { dataDir: "data", minEdge: 0.03, kellyFraction: 0.25, kellyCap: 0.03, dryRun: false };
+  const a = {
+    dataDir: "data",
+    minEdge: 0.03,
+    minEdgeRatio: 1.3,
+    minTdVolume: 3,
+    stableTdVolume: 8,
+    kellyFraction: 0.25,
+    kellyCap: 0.03,
+    dryRun: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
     const next = () => argv[++i];
@@ -100,6 +125,9 @@ function parseArgs(argv) {
       case "--season": a.season = Number(next()); break;
       case "--week": a.week = Number(next()); break;
       case "--min-edge": a.minEdge = Number(next()); break;
+      case "--min-edge-ratio": a.minEdgeRatio = Number(next()); break;
+      case "--min-td-volume": a.minTdVolume = Number(next()); break;
+      case "--stable-td-volume": a.stableTdVolume = Number(next()); break;
       case "--kelly-fraction": a.kellyFraction = Number(next()); break;
       case "--kelly-cap": a.kellyCap = Number(next()); break;
       case "--data-dir": a.dataDir = next(); break;
@@ -157,10 +185,21 @@ function sumCols(row, cols) {
 }
 
 // Our model's P(actual > line) for one candidate, using that player's F/M/C.
-export function ourProbability(candidate, statDef, splits) {
+// `tdVolume` configures the Poisson volume gate/shrinkage (see the header
+// comment) — defaulted here so ad-hoc callers (tests) don't need to pass it.
+export function ourProbability(
+  candidate,
+  statDef,
+  splits,
+  { minTdVolume = 3, stableTdVolume = 8 } = {}
+) {
   if (!splits || !splits.M) return null;
   if (statDef.kind === "poisson") {
-    const lambda = sumCols(splits.M, statDef.projCols);
+    const touches = sumCols(splits.M, statDef.volumeCols);
+    if (touches < minTdVolume) return null; // too thin a role to trust the count at all
+    const median = sumCols(splits.M, statDef.projCols);
+    const floor = splits.F ? sumCols(splits.F, statDef.projCols) : median;
+    const lambda = blendLambda(median, floor, touches, minTdVolume, stableTdVolume);
     return probOverPoisson(candidate.line, lambda);
   }
   if (!splits.F || !splits.C) return null;
@@ -190,6 +229,7 @@ async function main() {
   if (a.help) {
     console.log(
       "node scripts/capture-props.mjs [--season Y] [--week N] [--min-edge 0.03]\n" +
+        "  [--min-edge-ratio 1.3] [--min-td-volume 3] [--stable-td-volume 8]\n" +
         "  [--kelly-fraction 0.25] [--kelly-cap 0.03] [--data-dir data] [--dry-run]"
     );
     return;
@@ -199,7 +239,8 @@ async function main() {
   if (a.week === undefined) a.week = projectionWeek(a.season, now);
 
   console.log(
-    `Capturing props for season=${a.season} week=${a.week} minEdge=${a.minEdge}` +
+    `Capturing props for season=${a.season} week=${a.week} minEdge=${a.minEdge} ` +
+      `minEdgeRatio=${a.minEdgeRatio} minTdVolume=${a.minTdVolume} stableTdVolume=${a.stableTdVolume}` +
       (a.dryRun ? " (dry-run)" : "")
   );
 
@@ -237,8 +278,11 @@ async function main() {
   for (const cand of allCandidates) {
     const statDef = STAT_DEFS[cand.statKey];
     const splits = projections.get(cand.playerId);
-    const ourProb = ourProbability(cand, statDef, splits);
-    if (ourProb === null) continue; // no matching projection for this player — can't price it
+    const ourProb = ourProbability(cand, statDef, splits, {
+      minTdVolume: a.minTdVolume,
+      stableTdVolume: a.stableTdVolume,
+    });
+    if (ourProb === null) continue; // no matching projection, or too thin a role to price (TD props)
     const impliedProb = americanToProb(cand.odds);
     if (impliedProb === null) continue;
     priced.push({
@@ -286,6 +330,11 @@ async function main() {
   const betRows = [];
   for (const [key, p] of bestByKey) {
     if (p.edge < a.minEdge) continue;
+    // Poisson (TD/turnover) picks additionally need a minimum *relative*
+    // edge: at the long odds backups get quoted, a fixed absolute edge is
+    // trivial to clear from projection noise alone (see capture-props.mjs
+    // header + README's "Paper trading" section for the full rationale).
+    if (STAT_DEFS[p.statKey].kind === "poisson" && p.ourProb < p.impliedProb * a.minEdgeRatio) continue;
     const decimalOdds = americanToDecimal(p.odds);
     const kf = Math.min(a.kellyFraction * kellyFraction(p.ourProb, decimalOdds), a.kellyCap);
     const prior = existingByKey.get(key);

@@ -55,19 +55,52 @@ export const BOOKS = [
 //   kind: "continuous" -> two-piece-normal model off Floor/Median/Ceiling;
 //     "poisson" -> Poisson model off the projected median count.
 //   projCols: weekly_projections column(s) to sum for the projected value.
+//   volumeCols: (poisson only) column(s) summed as the player's "touches" /
+//     opportunity for this stat, used to gate and shrink the TD/turnover
+//     model — see capture-props.mjs's ourProbability. Continuous stats don't
+//     need this: their Floor/Ceiling spread already reflects role/volume
+//     uncertainty (that's what a wide vs. narrow band means), but a Poisson
+//     model built from a single median count has no such built-in guard —
+//     a backup RB's tiny projected TD count is taken completely at face
+//     value otherwise, and a small absolute wobble in that tiny number is a
+//     huge *relative* swing in scoring probability.
 export const STAT_DEFS = {
-  anytimeTD: { queryProp: null, hasLine: false, kind: "poisson", projCols: ["RushTDs", "RecTDs"] },
+  anytimeTD: {
+    queryProp: null,
+    hasLine: false,
+    kind: "poisson",
+    projCols: ["RushTDs", "RecTDs"],
+    volumeCols: ["RushAttempts", "RecCompletions"],
+  },
   passYds: { queryProp: "passYds", hasLine: true, kind: "continuous", projCols: ["PassYards"] },
   passAtt: { queryProp: "passAtt", hasLine: true, kind: "continuous", projCols: ["PassAttempts"] },
   completions: { queryProp: "completions", hasLine: true, kind: "continuous", projCols: ["PassCompletions"] },
-  passTD: { queryProp: "passTD", hasLine: false, kind: "poisson", projCols: ["PassTDs"] },
-  int: { queryProp: "int", hasLine: false, kind: "poisson", projCols: ["PassInts"] },
+  passTD: {
+    queryProp: "passTD",
+    hasLine: false,
+    kind: "poisson",
+    projCols: ["PassTDs"],
+    volumeCols: ["PassAttempts"],
+  },
+  int: { queryProp: "int", hasLine: false, kind: "poisson", projCols: ["PassInts"], volumeCols: ["PassAttempts"] },
   rushYds: { queryProp: "rushYds", hasLine: true, kind: "continuous", projCols: ["RushYards"] },
   rushAtt: { queryProp: "rushAtt", hasLine: true, kind: "continuous", projCols: ["RushAttempts"] },
-  rushTD: { queryProp: "rushTD", hasLine: false, kind: "poisson", projCols: ["RushTDs"] },
+  rushTD: {
+    queryProp: "rushTD",
+    hasLine: false,
+    kind: "poisson",
+    projCols: ["RushTDs"],
+    volumeCols: ["RushAttempts"],
+  },
   receptions: { queryProp: "receptions", hasLine: true, kind: "continuous", projCols: ["RecCompletions"] },
   recYds: { queryProp: "recYds", hasLine: true, kind: "continuous", projCols: ["RecYards"] },
-  recTD: { queryProp: "recTD", hasLine: false, kind: "poisson", projCols: ["RecTDs"] },
+  recTD: {
+    queryProp: "recTD",
+    hasLine: false,
+    kind: "poisson",
+    projCols: ["RecTDs"],
+    volumeCols: ["RecCompletions"],
+  },
 };
 
 const pick = (row, key) => {

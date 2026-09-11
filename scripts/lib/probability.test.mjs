@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { probOverContinuous, probOverPoisson } from "./probability.mjs";
+import { probOverContinuous, probOverPoisson, blendLambda } from "./probability.mjs";
 
 test("probOverContinuous: anchors reproduce the 25/50/75 quantiles", () => {
   const [f, m, c] = [200, 250, 300];
@@ -56,4 +56,25 @@ test("probOverPoisson: higher line is harder to clear", () => {
 
 test("probOverPoisson: zero lambda -> zero probability of scoring", () => {
   assert.equal(probOverPoisson(0.5, 0), 0);
+});
+
+test("blendLambda: at minVolume, fully at Floor", () => {
+  assert.ok(Math.abs(blendLambda(0.3, 0.05, 3, 3, 8) - 0.05) < 1e-9);
+});
+
+test("blendLambda: at/above stableVolume, fully at Median", () => {
+  assert.equal(blendLambda(0.3, 0.05, 8, 3, 8), 0.3);
+  assert.equal(blendLambda(0.3, 0.05, 20, 3, 8), 0.3); // above stableVolume clamps, doesn't extrapolate
+});
+
+test("blendLambda: linear in between", () => {
+  // Halfway between minVolume=3 and stableVolume=8 is volume=5.5.
+  const mid = blendLambda(0.3, 0.05, 5.5, 3, 8);
+  assert.ok(Math.abs(mid - (0.05 + 0.5 * (0.3 - 0.05))) < 1e-9);
+});
+
+test("blendLambda: below minVolume clamps at Floor, doesn't extrapolate past it", () => {
+  // Eligibility (excluding below minVolume entirely) is the caller's job —
+  // this just guarantees the math stays sane if called anyway.
+  assert.equal(blendLambda(0.3, 0.05, 1, 3, 8), 0.05);
 });

@@ -248,13 +248,20 @@ function PaperTradingExplainer() {
         </li>
         <li>
           <b>TD &amp; turnover-count props</b> use a Poisson model off the
-          projected median count (same approach as the Touchdowns tab).
+          projected count (same approach as the Touchdowns tab), but a raw
+          median count has no Floor/Ceiling of its own to guard against a
+          backup&apos;s tiny, volatile role — below 3 projected touches the
+          prop isn&apos;t priced at all, and up to 8 touches the count is
+          shrunk toward the more conservative Floor estimate.
         </li>
         <li>
           <b>Edge</b> = our probability − the best available price&apos;s
           implied probability. Every market here is single-sided (the feed
           only ever surfaces one price, no opposing side), so this is edge
-          against a vig-included market price, not a de-vigged fair line.
+          against a vig-included market price, not a de-vigged fair line. TD
+          picks additionally need our probability at least 1.3x the
+          market&apos;s — a fixed point gap is too easy to clear from noise
+          alone at the long odds backups get quoted.
         </li>
         <li>
           <b>Sizing</b>: bets clearing a 3% edge are staked two ways — a flat 1

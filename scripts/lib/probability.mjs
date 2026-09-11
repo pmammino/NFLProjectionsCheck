@@ -77,3 +77,22 @@ export function probOverPoisson(line, lambda) {
   if (line < 0) return 1;
   return 1 - poissonCdf(k, Math.max(0, lambda));
 }
+
+// Shrink a Poisson lambda toward its Floor estimate as a player's underlying
+// volume ("touches") gets thin. A TD/turnover count has no Floor/Ceiling
+// spread of its own to lean on (unlike the continuous model), so a backup's
+// tiny median TD projection would otherwise be trusted exactly as much as a
+// starter's — even though a small absolute wobble in a tiny count is a huge
+// *relative* swing in scoring probability, and a backup's role is far less
+// stable week to week than a starter's.
+//
+// At/below `minVolume`, the caller should treat the prop as unpriceable
+// entirely (see capture-props.mjs) — this function assumes volume >=
+// minVolume. Between minVolume and `stableVolume` (a "real, trusted role"
+// threshold), lambda is linearly blended from the conservative Floor count
+// up to the full Median count; at/above stableVolume, Median is used as-is.
+export function blendLambda(median, floor, volume, minVolume, stableVolume) {
+  if (stableVolume <= minVolume) return median; // degenerate config — no blending band
+  const t = Math.min(1, Math.max(0, (volume - minVolume) / (stableVolume - minVolume)));
+  return floor + t * (median - floor);
+}

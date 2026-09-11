@@ -140,8 +140,20 @@ betting strategy would have done — split by stat and by edge size.
      at the Median. This preserves whatever skew the Floor/Ceiling spread
      already implies, rather than forcing a symmetric distribution.
    - **TD & turnover-count props** (Anytime TD, Pass/Rush/Rec TD, INT) use a
-     **Poisson** model off the projected median count — the same approach
-     `lib/td.ts` already uses for the Touchdowns tab's scoring probability.
+     **Poisson** model, same idea as `lib/td.ts`'s Touchdowns-tab scoring
+     probability — but a raw median count has no Floor/Ceiling spread of its
+     own to lean on, so a backup's tiny projected count would otherwise be
+     trusted exactly as much as a starter's, even though a small absolute
+     wobble in a tiny number is a huge *relative* swing in scoring
+     probability, and a backup's role is far less stable week to week. Two
+     guards, both keyed off the player's projected "touches" for that stat
+     (rush attempts + receptions for Anytime TD, pass attempts for Pass
+     TD/INT, etc.):
+     - Below `--min-td-volume` (default 3) touches, the prop isn't priced at
+       all.
+     - Between `--min-td-volume` and `--stable-td-volume` (default 8), lambda
+       is linearly shrunk from the conservative Floor count up to the full
+       Median count; at/above `--stable-td-volume`, Median is used as-is.
 2. **Market probability.** RotoWire's `all-bets-props-plus-proj.php` feed is
    scanned across ~9 books for every tracked stat. **Every market it returns
    is single-sided** — one price (presumably "Over"/"Yes"), never an opposing
@@ -151,7 +163,11 @@ betting strategy would have done — split by stat and by edge size.
    player/stat, so every (book, line) combination is scanned and the one with
    the largest edge against our model is used — not just one book's price.
 3. **Edge** = our probability − that market-implied probability. A bet is
-   only placed when edge clears `--min-edge` (default 3%).
+   only placed when edge clears `--min-edge` (default 3%). TD/turnover
+   (Poisson) picks additionally need `ourProb >= impliedProb * --min-edge-ratio`
+   (default 1.3x) — a fixed absolute edge is trivial to clear from noise
+   alone at the long odds backups get quoted, so those picks need a genuine
+   relative disagreement with the market, not just a few probability points.
 4. **Sizing.** Every bet that clears the bar is staked two ways, tracked in
    parallel so the edge-bucket analysis isn't confounded by stake size:
    - **Flat 1 unit** — clean for asking "does a bigger edge actually win

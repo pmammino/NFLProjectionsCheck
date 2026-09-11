@@ -97,11 +97,17 @@ view shows, how to read it, and what you can learn.
 A top-right **Weekly / Season-long** toggle switches the entire dashboard
 between two datasets:
 
-- **Weekly** — per-game projections vs. weekly actuals (`weekly_projections.csv`
-  + `actual_games.csv`), one row per player-week.
-- **Season-long** — full-season projections vs. season totals
-  (`season_projections.csv` + `actual_season_stats.csv`, joined on
-  `NFLNewsID` ↔ `PlayerID`), one row per player.
+- **Weekly** — per-game projections vs. weekly actuals, one row per player-week.
+- **Season-long** — season-to-date projections vs. season totals, one row per
+  player.
+
+> **Season-long is disabled until the season is complete.** A running-total
+> grade mid-season is noise, so the toggle is greyed out until a full slate of
+> weeks (18) has been ingested. When it unlocks it is built by **aggregating the
+> live weekly snapshots** into per-player season totals (summed projections and
+> actuals) and grading those — there is no separate season projection feed. On
+> the legacy fallback path (no live snapshots) it shows the complete 2025 season
+> CSVs. Force it on/off for testing with `SEASON_LONG=on|off` at build time.
 
 All analysis tabs work in both scopes. Scope-specific differences:
 

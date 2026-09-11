@@ -59,6 +59,13 @@ export default function Dashboard() {
   }, []);
 
   const byWeek = scope === "weekly";
+  const seasonAvailable = ds?.season?.available ?? false;
+
+  // Season-long grading is hidden until the season is complete; never sit on a
+  // hidden scope (e.g. if data reloads without it).
+  useEffect(() => {
+    if (!seasonAvailable && scope === "season") setScope("weekly");
+  }, [seasonAvailable, scope]);
 
   // The active dataset (rows / TD / metric+type metadata / teams) for the scope.
   const active = useMemo(() => {
@@ -184,26 +191,38 @@ export default function Dashboard() {
               percentile.
             </p>
           </div>
-          {/* Scope toggle: weekly per-game projections vs. full-season projections. */}
+          {/* Scope toggle: weekly per-game projections vs. full-season totals.
+              Season-long is disabled until the season is complete. */}
           <div className="flex overflow-hidden rounded-lg border border-slate-700">
             {(
               [
                 ["weekly", "Weekly"],
                 ["season", "Season-long"],
               ] as [Scope, string][]
-            ).map(([s, label]) => (
-              <button
-                key={s}
-                onClick={() => setScope(s)}
-                className={`px-4 py-2 text-sm font-semibold transition ${
-                  scope === s
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-900 text-slate-400 hover:bg-slate-800"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+            ).map(([s, label]) => {
+              const disabled = s === "season" && !seasonAvailable;
+              return (
+                <button
+                  key={s}
+                  onClick={() => !disabled && setScope(s)}
+                  disabled={disabled}
+                  title={
+                    disabled
+                      ? "Season-long grading unlocks once the season is complete"
+                      : undefined
+                  }
+                  className={`px-4 py-2 text-sm font-semibold transition ${
+                    scope === s
+                      ? "bg-blue-600 text-white"
+                      : disabled
+                      ? "cursor-not-allowed bg-slate-900 text-slate-600"
+                      : "bg-slate-900 text-slate-400 hover:bg-slate-800"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">

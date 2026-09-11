@@ -324,7 +324,9 @@ const SEASON_TD_TYPES = TD_TYPES.map((t) => ({
 // Season volumes are full-year totals, so the efficiency noise floor is higher.
 const SEASON_MIN_EFF_VOLUME = 25;
 
-function buildSeason(teamByPid) {
+// Legacy season dataset: full-season projection + actual CSVs (2025). Used only
+// on the legacy fallback path (no live snapshots), where it's a complete season.
+function buildSeasonFromLegacyCsv(teamByPid) {
   const projRows = parseCsv(join(ROOT, "season_projections.csv"));
   const actualRows = parseCsv(join(ROOT, "actual_season_stats.csv"));
 
@@ -415,6 +417,159 @@ function buildSeason(teamByPid) {
     td,
     counts: {
       actualPlayers: actualRows.length,
+      matchedPlayers: matched,
+      emittedRows: out.length,
+      tdRows: td.length,
+    },
+  };
+}
+
+// ---- Season-long from live weekly snapshots ------------------------------
+// There is no season-long projection feed, so a season-long view is built by
+// summing the weekly snapshots into per-player season-to-date totals and grading
+// them exactly like the weekly rows (same METRICS/TD_TYPES, season thresholds).
+// This is only surfaced once the season is complete (see SEASON_COMPLETE_WEEKS);
+// mid-season a running-total grade is noise, so the dashboard hides the scope.
+
+// Numeric columns to sum, in each snapshot schema.
+const PROJ_NUM_COLS = [
+  "PassAttempts", "RushAttempts", "Targets", "PassCompletions", "PassYards",
+  "PassTDs", "PassInts", "RushYards", "RushTDs", "RecCompletions", "RecYards", "RecTDs",
+];
+const ACTUAL_NUM_COLS = [
+  "Rushes", "RushYards", "PassComp", "PassAtt", "PassYards", "Receptions",
+  "ReceptYds", "PassTD", "RecptTD", "RushTD", "Targets",
+];
+
+// A full regular season. Season-long grading stays hidden until this many
+// distinct weeks of actuals exist (override with SEASON_LONG=on|off).
+const SEASON_COMPLETE_WEEKS = 18;
+
+// Sum each column across rows; a column with no non-blank value stays blank so
+// unprojected fields (e.g. Targets) remain "missing" and skip, not read as 0.
+function aggregateSum(rows, columns) {
+  const out = {};
+  for (const col of columns) {
+    let sum = 0;
+    let seen = false;
+    for (const r of rows) {
+      const v = r[col];
+      if (v === undefined || v === "") continue;
+      const n = parseFloat(v);
+      if (Number.isFinite(n)) {
+        sum += n;
+        seen = true;
+      }
+    }
+    out[col] = seen ? String(sum) : "";
+  }
+  return out;
+}
+
+function buildSeasonFromWeekly(projRows, actualRows) {
+  // Group weekly projection rows per player, keeping each split's rows.
+  const projByPid = new Map();
+  for (const r of projRows) {
+    let e = projByPid.get(r.PlayerID);
+    if (!e) {
+      e = { team: (r.Team || "").toUpperCase(), C: [], F: [], M: [] };
+      projByPid.set(r.PlayerID, e);
+    }
+    if (e[r.Split]) e[r.Split].push(r);
+  }
+  // Group weekly actual rows per player.
+  const actByPid = new Map();
+  for (const a of actualRows) {
+    let e = actByPid.get(a.ID);
+    if (!e) {
+      e = { pos: a.position, team: (a.NFLTeamID || "").toUpperCase(), rows: [] };
+      actByPid.set(a.ID, e);
+    }
+    e.rows.push(a);
+  }
+  const weeksWithActuals = new Set(actualRows.map((a) => a.Week)).size;
+
+  const out = [];
+  const td = [];
+  let matched = 0;
+
+  for (const [pid, ag] of actByPid) {
+    const p = projByPid.get(pid);
+    if (!p || !p.C.length || !p.F.length || !p.M.length) continue;
+    matched++;
+    const pos = ag.pos;
+    const team = p.team || ag.team;
+
+    // Season-to-date totals, per split for projections and once for actuals.
+    const projS = {
+      C: aggregateSum(p.C, PROJ_NUM_COLS),
+      F: aggregateSum(p.F, PROJ_NUM_COLS),
+      M: aggregateSum(p.M, PROJ_NUM_COLS),
+    };
+    const actS = aggregateSum(ag.rows, ACTUAL_NUM_COLS);
+
+    const metricsOut = {};
+    for (const m of METRICS) {
+      if (!m.positions.includes(pos)) continue;
+      const actualVol = num(actS[m.actualVol]);
+      const projMedVol = num(projS.M[m.projVol]);
+      if (m.kind === "efficiency") {
+        if (actualVol < SEASON_MIN_EFF_VOLUME || projMedVol < SEASON_MIN_EFF_VOLUME) continue;
+      } else {
+        if (projMedVol <= 0 && actualVol <= 0) continue;
+      }
+      const f = readSplitValue(m.proj, projS.F);
+      const med = readSplitValue(m.proj, projS.M);
+      const c = readSplitValue(m.proj, projS.C);
+      const actual = readSplitValue(m.actual, actS);
+      if (f === null || med === null || c === null || actual === null) continue;
+      const lo = Math.min(f, c);
+      const hi = Math.max(f, c);
+      const err = actual - med;
+      metricsOut[m.key] = {
+        f: round(f), m: round(med), c: round(c), a: round(actual),
+        in: actual >= lo && actual <= hi,
+        err: round(err),
+        pe: med !== 0 ? round(err / Math.abs(med), 4) : null,
+        av: round(actualVol, 1),
+        pv: round(projMedVol, 1),
+      };
+    }
+
+    for (const t of TD_TYPES) {
+      if (!t.positions.includes(pos)) continue;
+      const actualVol = num(actS[t.actualVol]);
+      const actualTD = num(actS[t.actual]);
+      if (actualVol < SEASON_TD_MIN_OPP[t.key] && actualTD === 0) continue;
+      td.push({
+        type: t.key, pid, team, pos, wk: 0, inj: false,
+        lf: round(num(projS.F[t.proj]), 4),
+        lm: round(num(projS.M[t.proj]), 4),
+        lc: round(num(projS.C[t.proj]), 4),
+        a: actualTD,
+        av: round(actualVol, 1),
+        pv: round(num(projS.M[t.projVol]), 1),
+      });
+    }
+
+    if (Object.keys(metricsOut).length === 0) continue;
+    out.push({ pid, team, pos, wk: 0, inj: false, m: metricsOut });
+  }
+
+  const available =
+    process.env.SEASON_LONG === "on"
+      ? true
+      : process.env.SEASON_LONG === "off"
+      ? false
+      : weeksWithActuals >= SEASON_COMPLETE_WEEKS && out.length > 0;
+
+  return {
+    rows: out,
+    td,
+    available,
+    weeksWithActuals,
+    counts: {
+      actualPlayers: actByPid.size,
       matchedPlayers: matched,
       emittedRows: out.length,
       tdRows: td.length,
@@ -603,7 +758,22 @@ function main() {
   const weeks = [...new Set(out.map((r) => r.wk))].sort((x, y) => x - y);
   const teams = [...new Set(out.map((r) => r.team))].filter(Boolean).sort();
 
-  const season = buildSeason(teamByPid);
+  // Season-long source follows the weekly source: the legacy fallback uses the
+  // complete 2025 season CSVs; the live path aggregates the weekly snapshots and
+  // stays hidden until the season is complete.
+  let season;
+  let seasonAvailable;
+  if (weekly.source === "legacy-csv") {
+    season = buildSeasonFromLegacyCsv(teamByPid);
+    seasonAvailable = process.env.SEASON_LONG === "off" ? false : season.rows.length > 0;
+  } else {
+    season = buildSeasonFromWeekly(projRows, actualRows);
+    seasonAvailable = season.available;
+  }
+  // Don't ship a half-graded running total; keep the payload lean when hidden.
+  if (!seasonAvailable) {
+    season = { ...season, rows: [], td: [] };
+  }
 
   const metricMeta = METRICS.map((m) => ({
     key: m.key,
@@ -644,6 +814,7 @@ function main() {
     td,
     season: {
       // Season metrics/TD types share keys+labels with the weekly set.
+      available: seasonAvailable,
       metrics: metricMeta,
       tdTypes: tdTypeMeta.map((t) => ({
         ...t,
@@ -664,7 +835,7 @@ function main() {
   const kb = (readFileSync(outPath).length / 1024).toFixed(0);
   console.log(
     `build-data: source=${weekly.source}; weekly ${out.length} rows / ${td.length} TD (${matched} matched); ` +
-      `season ${season.rows.length} rows / ${season.td.length} TD (${season.counts.matchedPlayers} matched) -> ${outPath} (${kb} KB)`
+      `season ${seasonAvailable ? `${season.rows.length} rows / ${season.td.length} TD` : "hidden (season not complete)"} -> ${outPath} (${kb} KB)`
   );
 }
 

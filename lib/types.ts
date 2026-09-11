@@ -79,6 +79,9 @@ export interface Dataset {
 }
 
 export interface SeasonData {
+  // Season-long grading is only meaningful once the season is complete, so this
+  // is false mid-season (the dashboard hides the Season-long scope until true).
+  available: boolean;
   metrics: MetricMeta[];
   tdTypes: TDTypeMeta[];
   minEffVolume: number;

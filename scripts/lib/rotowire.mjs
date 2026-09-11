@@ -79,14 +79,34 @@ export const ACTUAL_COLUMNS = [
 // Valid projection split codes -> normalized Split column value.
 export const SPLIT_CODES = { M: "M", C: "C", F: "F" };
 
-// Unwrap a parsed feed payload into an array of records. RotoWire's table
-// endpoints return a bare array, but tolerate a { data: [...] } wrapper too.
+// Unwrap a parsed feed payload into an array of records. The projection feeds
+// return a bare array; the player-stats feeds wrap the array in an object (e.g.
+// { data: [...] } / { players: [...] }, or a map keyed by player id). Handle the
+// common shapes, and on an unknown one throw with the object's keys so the exact
+// wrapper is visible in the logs.
+const ARRAY_WRAPPER_KEYS = ["data", "rows", "players", "stats", "results", "tabledata", "table"];
+
 export function asRecords(payload) {
   if (Array.isArray(payload)) return payload;
-  if (payload && Array.isArray(payload.data)) return payload.data;
-  if (payload && Array.isArray(payload.rows)) return payload.rows;
+  if (payload && typeof payload === "object") {
+    // 1) A known key holding the array.
+    for (const k of ARRAY_WRAPPER_KEYS) {
+      if (Array.isArray(payload[k])) return payload[k];
+    }
+    // 2) Any array-valued property — take the longest (the records table).
+    const arrays = Object.values(payload).filter(Array.isArray);
+    if (arrays.length) return arrays.reduce((a, b) => (b.length > a.length ? b : a));
+    // 3) A map of record objects keyed by id (values are all objects).
+    const values = Object.values(payload);
+    if (values.length && values.every((v) => v && typeof v === "object")) return values;
+
+    throw new Error(
+      `Unexpected feed shape: object with keys [${Object.keys(payload).slice(0, 15).join(", ")}] ` +
+        `held no records array.`
+    );
+  }
   throw new Error(
-    "Unexpected feed shape: expected an array (or { data: [...] }), got " +
+    "Unexpected feed shape: expected an array or wrapper object, got " +
       (payload === null ? "null" : typeof payload)
   );
 }

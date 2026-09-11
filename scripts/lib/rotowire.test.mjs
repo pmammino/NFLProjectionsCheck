@@ -246,8 +246,40 @@ test("toCsv actuals header matches actual_games schema", () => {
   assert.equal(csv.split("\n")[0], ACTUAL_COLUMNS.join(","));
 });
 
-test("asRecords unwraps arrays and { data: [...] } envelopes", () => {
+test("asRecords unwraps arrays and object envelopes", () => {
+  // Bare array (projection feeds).
   assert.equal(asRecords([1, 2]).length, 2);
+  // Known wrapper keys.
   assert.equal(asRecords({ data: [1] }).length, 1);
-  assert.throws(() => asRecords({ nope: true }));
+  assert.equal(asRecords({ players: [1, 2, 3] }).length, 3);
+  // Unknown key but an array value present -> take the longest array.
+  assert.deepEqual(asRecords({ meta: [1], list: [1, 2, 3] }), [1, 2, 3]);
+  // A map of record objects keyed by id -> its values.
+  const map = { "12483": { pid: "12483" }, "10819": { pid: "10819" } };
+  assert.deepEqual(
+    asRecords(map)
+      .map((r) => r.pid)
+      .sort(),
+    ["10819", "12483"]
+  );
+  // Datatables-style envelope with header + rows.
+  assert.equal(asRecords({ recordsTotal: 2, data: [{ pid: "1" }, { pid: "2" }] }).length, 2);
+});
+
+test("asRecords throws with the object's keys when no records are found", () => {
+  assert.throws(() => asRecords({ error: "login required" }), /error/);
+  assert.throws(() => asRecords(null), /got null/);
+});
+
+test("mergeActuals works when a feed is wrapped in a { data: [...] } object", () => {
+  const rows = mergeActuals(
+    {
+      passing: { data: [PASS_QB] },
+      rushing: { data: [RUSH_RB] },
+      receiving: { data: [REC_WR] },
+    },
+    { season: 2026, week: 1 }
+  );
+  assert.equal(rows.length, 3);
+  assert.equal(rows.find((r) => r.ID === "12483").PassAtt, "46");
 });

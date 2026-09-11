@@ -17,6 +17,7 @@ import ExplorerView from "./ExplorerView";
 import CoverageView from "./CoverageView";
 import ConditionalView from "./ConditionalView";
 import TDView from "./TDView";
+import BettingView from "./BettingView";
 
 type Tab =
   | "calibration"
@@ -24,7 +25,8 @@ type Tab =
   | "conditional"
   | "touchdowns"
   | "scatter"
-  | "explorer";
+  | "explorer"
+  | "betting";
 
 type Scope = "weekly" | "season";
 
@@ -259,6 +261,7 @@ export default function Dashboard() {
             ["touchdowns", "Touchdowns"],
             ["scatter", "Projected vs Actual"],
             ["explorer", byWeek ? "Player-week detail" : "Player detail"],
+            ["betting", "Paper Trading"],
           ] as [Tab, string][]
         ).map(([t, label]) => (
           <button
@@ -275,7 +278,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {tab !== "calibration" && tab !== "touchdowns" && selectedMetric && (
+      {tab !== "calibration" && tab !== "touchdowns" && tab !== "betting" && selectedMetric && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400">Metric:</span>
           {availableMetrics.map((m) => (
@@ -334,6 +337,7 @@ export default function Dashboard() {
           minProjVolume={filters.minProjVolume}
         />
       )}
+      {tab === "betting" && <BettingView />}
     </main>
   );
 }

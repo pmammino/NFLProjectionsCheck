@@ -122,6 +122,74 @@ All analysis tabs work in both scopes. Scope-specific differences:
 All views respond to filters: position, week range, team, minimum actual
 volume, and exclude-injury-suspect.
 
+## Paper trading
+
+A **Paper Trading** tab compares our own Floor/Median/Ceiling projections
+against RotoWire's prop-betting lines, tracking how a simple edge-based
+betting strategy would have done — split by stat and by edge size.
+
+### How the edge is computed
+
+1. **Our probability.** Each player-week's Floor(25th pct)/Median(50th)/
+   Ceiling(75th pct) projection is turned into a full probability
+   distribution, not just three points:
+   - **Yardage/attempt/completion/reception props** use a **two-piece
+     normal**: a normal distribution anchored at the Median whose lower half
+     is scaled so its 25th percentile lands on Floor, spliced with an upper
+     half scaled so its 75th percentile lands on Ceiling, joined continuously
+     at the Median. This preserves whatever skew the Floor/Ceiling spread
+     already implies, rather than forcing a symmetric distribution.
+   - **TD & turnover-count props** (Anytime TD, Pass/Rush/Rec TD, INT) use a
+     **Poisson** model off the projected median count — the same approach
+     `lib/td.ts` already uses for the Touchdowns tab's scoring probability.
+2. **Market probability.** RotoWire's `all-bets-props-plus-proj.php` feed is
+   scanned across ~9 books for every tracked stat. **Every market it returns
+   is single-sided** — one price (presumably "Over"/"Yes"), never an opposing
+   price — so there's no way to de-vig against this feed alone. The "market
+   probability" is therefore the vig-included implied probability of a price,
+   not a fair/no-vig line. Different books post different lines for the same
+   player/stat, so every (book, line) combination is scanned and the one with
+   the largest edge against our model is used — not just one book's price.
+3. **Edge** = our probability − that market-implied probability. A bet is
+   only placed when edge clears `--min-edge` (default 3%).
+4. **Sizing.** Every bet that clears the bar is staked two ways, tracked in
+   parallel so the edge-bucket analysis isn't confounded by stake size:
+   - **Flat 1 unit** — clean for asking "does a bigger edge actually win
+     more/pay more," independent of sizing.
+   - **Quarter-Kelly, capped at 3 units** — a more realistic bankroll-growth
+     view. 1 unit = 1% of bankroll (a Kelly fraction is bankroll-size-
+     independent, so no bankroll amount is ever needed).
+
+### Pipeline
+
+```
+scripts/capture-props.mjs   # Wednesday AM: fetch lines, price vs. our model,
+                             #   write data/props/{season}/week-NN.csv (every
+                             #   price scanned) and data/bets/{season}/week-NN.csv
+                             #   (the ones that clear --min-edge)
+scripts/grade-bets.mjs      # daily, as actuals land: fills in Won/Lost + PnL
+                             #   for bets whose player's game has completed
+scripts/build-betting-data.mjs  # predev/prebuild: aggregates the ledger into
+                             #   public/data/betting.json (bet log + ROI/win-
+                             #   rate rollups by stat and by edge bucket)
+```
+
+```bash
+npm run capture-props                              # this week, auto season/week
+npm run capture-props -- --season 2025 --week 1 --min-edge 0.05
+npm run grade-bets                                 # grade every week with a ledger
+npm run grade-bets -- --season 2025 --week 1
+```
+
+Tracked stats: Anytime TD, Pass Yards, Pass Attempts, Completions, Pass TD,
+Interceptions, Rush Yards, Rush Attempts, Rush TD, Receptions, Rec Yards, Rec
+TD. A stat RotoWire doesn't currently offer as a prop is skipped with a
+warning rather than failing the run (see `scripts/lib/props.mjs`).
+
+`.github/workflows/props-weekly.yml` runs the capture every **Wednesday ~8am
+ET**; `.github/workflows/ingest-weekly.yml`'s existing daily run grades
+pending bets right after it refreshes actuals.
+
 ## Live weekly ingestion
 
 As the season runs, projections and actuals are pulled straight from RotoWire's

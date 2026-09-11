@@ -1,0 +1,78 @@
+name: Capture weekly prop lines
+
+# Captures RotoWire prop lines (data/props/) and prices them against our own
+# Floor/Median/Ceiling projections into a paper-trading bet ledger
+# (data/bets/) — see scripts/capture-props.mjs and README's "Paper trading"
+# section.
+#
+# Runs weekly, Wednesday morning, once that week's projections snapshot
+# exists (scripts/ingest.mjs runs daily and produces it). Grading happens
+# separately, daily, in ingest-weekly.yml as actuals land.
+
+on:
+  schedule:
+    # Wednesday 12:00 UTC ≈ 08:00 ET (drifts to 07:00 ET during EST, same
+    # DST approximation ingest-weekly.yml already accepts). Gated to season
+    # months (Sep–Feb).
+    - cron: "0 12 * 9-12,1-2 3"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season (year), e.g. 2025. Blank = auto by date."
+        required: false
+      week:
+        description: "NFL week number. Blank = auto by date."
+        required: false
+      minEdge:
+        description: "Minimum edge to place a paper bet, e.g. 0.03"
+        required: false
+        default: "0.03"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: props-weekly
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Capture props
+        env:
+          ROTOWIRE_COOKIE: ${{ secrets.ROTOWIRE_COOKIE }}
+          SEASON: ${{ github.event.inputs.season }}
+          WEEK: ${{ github.event.inputs.week }}
+        run: |
+          args=""
+          if [ -n "${{ github.event.inputs.season }}" ]; then args="$args --season ${{ github.event.inputs.season }}"; fi
+          if [ -n "${{ github.event.inputs.week }}" ]; then args="$args --week ${{ github.event.inputs.week }}"; fi
+          if [ -n "${{ github.event.inputs.minEdge }}" ]; then args="$args --min-edge ${{ github.event.inputs.minEdge }}"; fi
+          echo "Running: node scripts/capture-props.mjs $args"
+          node scripts/capture-props.mjs $args
+
+      # Grade what we can immediately (e.g. re-running a past week), though
+      # most grading happens the following days as ingest-weekly.yml runs.
+      - name: Grade pending bets
+        if: always()
+        run: node scripts/grade-bets.mjs
+
+      - name: Commit snapshots
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No new props/bets to commit."
+          else
+            git commit -m "Capture prop lines [skip ci]"
+            git push
+          fi

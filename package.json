@@ -4,14 +4,17 @@
   "private": true,
   "scripts": {
     "build:data": "node scripts/build-data.mjs",
+    "build:betting": "node scripts/build-betting-data.mjs",
     "ingest": "node scripts/ingest.mjs",
-    "predev": "node scripts/build-data.mjs",
-    "prebuild": "node scripts/build-data.mjs",
+    "capture-props": "node scripts/capture-props.mjs",
+    "grade-bets": "node scripts/grade-bets.mjs",
+    "predev": "node scripts/build-data.mjs && node scripts/build-betting-data.mjs",
+    "prebuild": "node scripts/build-data.mjs && node scripts/build-betting-data.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test \"scripts/lib/*.test.mjs\""
+    "test": "node --test \"scripts/lib/*.test.mjs\" \"scripts/*.test.mjs\""
   },
   "dependencies": {
     "next": "14.2.5",

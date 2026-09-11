@@ -79,6 +79,12 @@ jobs:
           echo "Running: node scripts/ingest.mjs $args"
           node scripts/ingest.mjs $args
 
+      # Grade any paper bets whose actuals just landed above. Safe to run even
+      # when --only projections was chosen (it just finds nothing new to grade).
+      - name: Grade pending bets
+        if: always()
+        run: node scripts/grade-bets.mjs
+
       # Always commit whatever was written, even if one artifact failed (e.g. a
       # feed error or an empty in-week actuals pull).
       - name: Commit snapshots

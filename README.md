@@ -180,14 +180,32 @@ npm test                                                 # verify mapping + week
 
 ### Automation
 
-`.github/workflows/ingest-weekly.yml` (all overridable via **Run workflow**):
+`.github/workflows/ingest-weekly.yml` runs **daily** during the season (Sep–Feb)
+and ingests **both** projections and actuals (all overridable via **Run
+workflow**):
 
-- **Daily** — refresh the current week's projections; commits only when they
-  changed.
-- **Tuesday** — capture the completed week's actuals after Monday night.
+- **Projections** refresh in place — the current week's snapshot is replaced
+  whenever the numbers change (a no-op otherwise), targeting the
+  upcoming/in-progress week and freezing once its games finish.
+- **Actuals** re-pull daily too, so results appear as games complete through the
+  week; each run targets the just-completed / in-progress week.
 
-Schedules are gated to the season months (Sep–Feb). If the feeds require a
-session, set a `ROTOWIRE_COOKIE` repo secret.
+### Authentication — `ROTOWIRE_COOKIE` (required for full projections)
+
+RotoWire returns only a **~top-10 preview** to unauthenticated requests and the
+full slate (hundreds of players) only to a logged-in session. So the ingest
+needs a session cookie, provided via the `ROTOWIRE_COOKIE` repo secret:
+
+1. Log in to rotowire.com in your browser.
+2. Open DevTools → **Network**, load a projections page, click the
+   `weekly-projections.php` request, and copy the **`Cookie`** request header
+   (the whole string).
+3. In GitHub: **Settings → Secrets and variables → Actions → New repository
+   secret**, name `ROTOWIRE_COOKIE`, paste the value.
+
+The workflow already passes it to the ingest. If projections come back tiny, the
+ingest logs a loud warning — that means the cookie is missing or expired (RotoWire
+sessions expire periodically, so this may need refreshing).
 
 > **Note — post-kickoff refreshes:** snapshots are per player-week, so a player
 > whose game kicks off early (e.g. Thursday) can still have that week's row

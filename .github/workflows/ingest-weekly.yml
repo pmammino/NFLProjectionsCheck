@@ -2,27 +2,25 @@ name: Ingest weekly projections & actuals
 
 # Captures RotoWire feeds into committed per-week snapshot CSVs (data/).
 #
-# Projections refresh DAILY: RotoWire keeps updating a week's Floor/Median/
-# Ceiling as injuries and other context land right up to kickoff, so we re-pull
-# every day and replace the current week's snapshot whenever the numbers change
-# (a no-op when they don't). The projection endpoints only serve the current
-# season, so the daily run targets the upcoming/in-progress week and rolls to the
-# next week once games finish — a finished week's snapshot then stays frozen at
-# its last pre-game state.
-#
-# Actuals run weekly (Tuesday) after Monday night + overnight stat corrections.
+# Runs DAILY during the season and ingests BOTH projections and actuals:
+#  - Projections: RotoWire revises a week's Floor/Median/Ceiling as injuries and
+#    other context land up to kickoff, so we re-pull daily and replace the
+#    current week's snapshot whenever it changes (a no-op when it doesn't). It
+#    targets the upcoming/in-progress week and rolls forward once games finish,
+#    freezing the completed week's snapshot at its last pre-game state.
+#  - Actuals: re-pulled daily too, so results appear as games complete through
+#    the week (the stats feed returns whatever games have finished). Each run
+#    targets the just-completed / in-progress week.
 #
 # Auto week/season resolution is a date heuristic; use the manual "Run workflow"
 # button with an explicit week for backfills or anything that must be exact.
 
 on:
   schedule:
-    # Times are UTC; months gated to the season (Sep–Feb) to avoid off-season
-    # runs. Daily 13:00 UTC ≈ 09:00 ET — after overnight injury news, before
-    # kickoffs (Sunday's earliest is ~17:00 UTC).
-    - cron: "0 13 * 9-12,1-2 *" # daily — refresh the current week's projections
-    # Tue 15:00 UTC ≈ 11:00 ET, after Monday night + overnight stat corrections.
-    - cron: "0 15 * 9-12,1-2 2" # Tuesday — actuals for the completed week
+    # Daily 13:00 UTC ≈ 09:00 ET — after overnight injury news / stat
+    # corrections, before kickoffs (Sunday's earliest is ~17:00 UTC). Months
+    # gated to the season (Sep–Feb) to avoid off-season runs.
+    - cron: "0 13 * 9-12,1-2 *" # daily — refresh projections + capture actuals
   workflow_dispatch:
     inputs:
       season:
@@ -60,17 +58,12 @@ jobs:
         with:
           node-version: 22
 
-      # Scheduled runs pick the pass from the cron that fired: the Tuesday cron →
-      # actuals, the daily cron → projections. Manual runs use the chosen inputs.
+      # Scheduled runs ingest both; manual runs honor the chosen mode.
       - name: Resolve ingest mode
         id: mode
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            if [ "${{ github.event.schedule }}" = "0 15 * 9-12,1-2 2" ]; then
-              echo "only=actuals" >> "$GITHUB_OUTPUT"
-            else
-              echo "only=projections" >> "$GITHUB_OUTPUT"
-            fi
+            echo "only=both" >> "$GITHUB_OUTPUT"
           else
             echo "only=${{ github.event.inputs.only || 'both' }}" >> "$GITHUB_OUTPUT"
           fi
@@ -86,7 +79,10 @@ jobs:
           echo "Running: node scripts/ingest.mjs $args"
           node scripts/ingest.mjs $args
 
+      # Always commit whatever was written, even if one artifact failed (e.g. a
+      # feed error or an empty in-week actuals pull).
       - name: Commit snapshots
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

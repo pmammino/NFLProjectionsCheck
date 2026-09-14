@@ -193,7 +193,16 @@ export default function Dashboard() {
     return <main className="p-8 text-slate-400">Loading projections…</main>;
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 p-6">
+    <>
+      <div className="border-b border-white/10 bg-brand-navy">
+        <div className="mx-auto flex max-w-7xl items-center gap-2.5 px-6 py-3">
+          <img src="/rotowire-logo.svg" alt="" className="h-6 w-6" />
+          <span className="text-sm font-bold uppercase tracking-wider text-white">
+            RotoWire
+          </span>
+        </div>
+      </div>
+      <main className="mx-auto max-w-7xl space-y-6 p-6">
       <header>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -228,7 +237,7 @@ export default function Dashboard() {
                   }
                   className={`px-4 py-2 text-sm font-semibold transition ${
                     scope === s
-                      ? "bg-blue-600 text-white"
+                      ? "bg-brand-red text-white"
                       : disabled
                       ? "cursor-not-allowed bg-slate-900 text-slate-600"
                       : "bg-slate-900 text-slate-400 hover:bg-slate-800"
@@ -283,7 +292,7 @@ export default function Dashboard() {
             onClick={() => setTab(t)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
               tab === t
-                ? "border-blue-500 text-blue-400"
+                ? "border-brand-red text-brand-red"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -301,7 +310,7 @@ export default function Dashboard() {
               onClick={() => setMetricKey(m.key)}
               className={`rounded px-2.5 py-1 text-xs font-medium transition ${
                 selectedMetric.key === m.key
-                  ? "bg-blue-600 text-white"
+                  ? "bg-brand-red text-white"
                   : "bg-slate-800 text-slate-400 hover:bg-slate-700"
               }`}
             >
@@ -320,7 +329,7 @@ export default function Dashboard() {
               onClick={() => setTdKey(t.key)}
               className={`rounded px-2.5 py-1 text-xs font-medium transition ${
                 selectedTdType.key === t.key
-                  ? "bg-blue-600 text-white"
+                  ? "bg-brand-red text-white"
                   : "bg-slate-800 text-slate-400 hover:bg-slate-700"
               }`}
             >
@@ -365,7 +374,8 @@ export default function Dashboard() {
         />
       )}
       {tab === "betting" && <BettingView />}
-    </main>
+      </main>
+    </>
   );
 }
 

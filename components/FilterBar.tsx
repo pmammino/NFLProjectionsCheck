@@ -49,7 +49,7 @@ export default function FilterBar({
                 onClick={() => togglePos(p)}
                 className={`rounded px-3 py-1 text-sm font-medium transition ${
                   on
-                    ? "bg-blue-600 text-white"
+                    ? "bg-brand-red text-white"
                     : "bg-slate-800 text-slate-400 hover:bg-slate-700"
                 }`}
               >
@@ -76,7 +76,7 @@ export default function FilterBar({
                   weekMin: Math.min(Number(e.target.value), filters.weekMax),
                 })
               }
-              className="w-28"
+              className="w-28 accent-brand-red"
             />
             <input
               type="range"
@@ -88,7 +88,7 @@ export default function FilterBar({
                   weekMax: Math.max(Number(e.target.value), filters.weekMin),
                 })
               }
-              className="w-28"
+              className="w-28 accent-brand-red"
             />
           </div>
         </div>
@@ -126,7 +126,7 @@ export default function FilterBar({
           max={volMax}
           value={filters.minVolume}
           onChange={(e) => update({ minVolume: Number(e.target.value) })}
-          className="w-40"
+          className="w-40 accent-brand-red"
         />
       </div>
 
@@ -140,7 +140,7 @@ export default function FilterBar({
           max={volMax}
           value={filters.minProjVolume}
           onChange={(e) => update({ minProjVolume: Number(e.target.value) })}
-          className="w-40"
+          className="w-40 accent-brand-red"
         />
       </div>
 
@@ -150,7 +150,7 @@ export default function FilterBar({
             type="checkbox"
             checked={filters.excludeInjury}
             onChange={(e) => update({ excludeInjury: e.target.checked })}
-            className="h-4 w-4 accent-blue-600"
+            className="h-4 w-4 accent-brand-red"
           />
           Exclude low-usage / injury-suspect games
         </label>

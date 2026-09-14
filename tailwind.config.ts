@@ -11,6 +11,11 @@ const config: Config = {
         ceiling: "#16a34a",
         floor: "#dc2626",
         median: "#2563eb",
+        brand: {
+          navy: "#002248",
+          red: "#F22E45",
+          dark: "#000D1A",
+        },
       },
     },
   },

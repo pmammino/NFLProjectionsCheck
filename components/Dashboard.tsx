@@ -11,6 +11,7 @@ import {
 import { conditional, deepStats } from "@/lib/stats";
 import { filterTd } from "@/lib/td";
 import FilterBar from "./FilterBar";
+import SimpleView from "./SimpleView";
 import CalibrationView from "./CalibrationView";
 import ScatterView from "./ScatterView";
 import ExplorerView from "./ExplorerView";
@@ -20,6 +21,7 @@ import TDView from "./TDView";
 import BettingView from "./BettingView";
 
 type Tab =
+  | "simple"
   | "calibration"
   | "coverage"
   | "conditional"
@@ -34,7 +36,7 @@ export default function Dashboard() {
   const [ds, setDs] = useState<Dataset | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [scope, setScope] = useState<Scope>("weekly");
-  const [tab, setTab] = useState<Tab>("calibration");
+  const [tab, setTab] = useState<Tab>("simple");
   const [metricKey, setMetricKey] = useState<string>("targets");
   const [tdKey, setTdKey] = useState<string>("recTD");
   const [filters, setFilters] = useState<Filters | null>(null);
@@ -170,6 +172,17 @@ export default function Dashboard() {
     [active, filters, selectedTdType, byWeek]
   );
 
+  // All TD types combined (not just the selected one) for the Simple Summary tab.
+  const allTdRows = useMemo(
+    () =>
+      active && filters
+        ? availableTdTypes.flatMap((t) =>
+            filterTd(active.td, t.key, filters, byWeek)
+          )
+        : [],
+    [active, filters, availableTdTypes, byWeek]
+  );
+
   if (err)
     return (
       <main className="p-8 text-red-400">
@@ -180,7 +193,16 @@ export default function Dashboard() {
     return <main className="p-8 text-slate-400">Loading projections…</main>;
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 p-6">
+    <>
+      <div className="border-b border-white/10 bg-brand-navy">
+        <div className="mx-auto flex max-w-7xl items-center gap-2.5 px-6 py-3">
+          <img src="/rotowire-logo.svg" alt="" className="h-6 w-6" />
+          <span className="text-sm font-bold uppercase tracking-wider text-white">
+            RotoWire
+          </span>
+        </div>
+      </div>
+      <main className="mx-auto max-w-7xl space-y-6 p-6">
       <header>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -215,7 +237,7 @@ export default function Dashboard() {
                   }
                   className={`px-4 py-2 text-sm font-semibold transition ${
                     scope === s
-                      ? "bg-blue-600 text-white"
+                      ? "bg-brand-red text-white"
                       : disabled
                       ? "cursor-not-allowed bg-slate-900 text-slate-600"
                       : "bg-slate-900 text-slate-400 hover:bg-slate-800"
@@ -255,6 +277,7 @@ export default function Dashboard() {
       <div className="flex gap-1 border-b border-slate-800">
         {(
           [
+            ["simple", "Simple Summary"],
             ["calibration", "Calibration"],
             ["coverage", "Coverage & Intervals"],
             ["conditional", "Conditional"],
@@ -269,7 +292,7 @@ export default function Dashboard() {
             onClick={() => setTab(t)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
               tab === t
-                ? "border-blue-500 text-blue-400"
+                ? "border-brand-red text-brand-red"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -278,7 +301,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {tab !== "calibration" && tab !== "touchdowns" && tab !== "betting" && selectedMetric && (
+      {tab !== "simple" && tab !== "calibration" && tab !== "touchdowns" && tab !== "betting" && selectedMetric && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400">Metric:</span>
           {availableMetrics.map((m) => (
@@ -287,7 +310,7 @@ export default function Dashboard() {
               onClick={() => setMetricKey(m.key)}
               className={`rounded px-2.5 py-1 text-xs font-medium transition ${
                 selectedMetric.key === m.key
-                  ? "bg-blue-600 text-white"
+                  ? "bg-brand-red text-white"
                   : "bg-slate-800 text-slate-400 hover:bg-slate-700"
               }`}
             >
@@ -306,7 +329,7 @@ export default function Dashboard() {
               onClick={() => setTdKey(t.key)}
               className={`rounded px-2.5 py-1 text-xs font-medium transition ${
                 selectedTdType.key === t.key
-                  ? "bg-blue-600 text-white"
+                  ? "bg-brand-red text-white"
                   : "bg-slate-800 text-slate-400 hover:bg-slate-700"
               }`}
             >
@@ -316,6 +339,19 @@ export default function Dashboard() {
         </div>
       )}
 
+      {tab === "simple" && filters && (
+        <SimpleView
+          summaries={summaries}
+          deep={deepAll}
+          rows={filteredRows}
+          metrics={availableMetrics}
+          minVolume={filters.minVolume}
+          minProjVolume={filters.minProjVolume}
+          positions={[...filters.positions]}
+          tdRows={allTdRows}
+          byWeek={byWeek}
+        />
+      )}
       {tab === "calibration" && <CalibrationView summaries={summaries} />}
       {tab === "coverage" && selectedMetric && (
         <CoverageView all={deepAll} selected={selectedDeep} metric={selectedMetric} />
@@ -338,7 +374,8 @@ export default function Dashboard() {
         />
       )}
       {tab === "betting" && <BettingView />}
-    </main>
+      </main>
+    </>
   );
 }
 

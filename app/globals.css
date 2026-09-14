@@ -7,7 +7,7 @@
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+  @apply bg-brand-dark text-slate-100 antialiased;
 }
 
 ::-webkit-scrollbar {
@@ -15,7 +15,7 @@ body {
   width: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-700 rounded;
+  @apply bg-brand-navy rounded;
 }
 ::-webkit-scrollbar-track {
   @apply bg-slate-900;

@@ -11,6 +11,7 @@ import {
 import { conditional, deepStats } from "@/lib/stats";
 import { filterTd } from "@/lib/td";
 import FilterBar from "./FilterBar";
+import SimpleView from "./SimpleView";
 import CalibrationView from "./CalibrationView";
 import ScatterView from "./ScatterView";
 import ExplorerView from "./ExplorerView";
@@ -20,6 +21,7 @@ import TDView from "./TDView";
 import BettingView from "./BettingView";
 
 type Tab =
+  | "simple"
   | "calibration"
   | "coverage"
   | "conditional"
@@ -34,7 +36,7 @@ export default function Dashboard() {
   const [ds, setDs] = useState<Dataset | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [scope, setScope] = useState<Scope>("weekly");
-  const [tab, setTab] = useState<Tab>("calibration");
+  const [tab, setTab] = useState<Tab>("simple");
   const [metricKey, setMetricKey] = useState<string>("targets");
   const [tdKey, setTdKey] = useState<string>("recTD");
   const [filters, setFilters] = useState<Filters | null>(null);
@@ -170,6 +172,17 @@ export default function Dashboard() {
     [active, filters, selectedTdType, byWeek]
   );
 
+  // All TD types combined (not just the selected one) for the Simple Summary tab.
+  const allTdRows = useMemo(
+    () =>
+      active && filters
+        ? availableTdTypes.flatMap((t) =>
+            filterTd(active.td, t.key, filters, byWeek)
+          )
+        : [],
+    [active, filters, availableTdTypes, byWeek]
+  );
+
   if (err)
     return (
       <main className="p-8 text-red-400">
@@ -255,6 +268,7 @@ export default function Dashboard() {
       <div className="flex gap-1 border-b border-slate-800">
         {(
           [
+            ["simple", "Simple Summary"],
             ["calibration", "Calibration"],
             ["coverage", "Coverage & Intervals"],
             ["conditional", "Conditional"],
@@ -278,7 +292,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {tab !== "calibration" && tab !== "touchdowns" && tab !== "betting" && selectedMetric && (
+      {tab !== "simple" && tab !== "calibration" && tab !== "touchdowns" && tab !== "betting" && selectedMetric && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400">Metric:</span>
           {availableMetrics.map((m) => (
@@ -316,6 +330,19 @@ export default function Dashboard() {
         </div>
       )}
 
+      {tab === "simple" && filters && (
+        <SimpleView
+          summaries={summaries}
+          deep={deepAll}
+          rows={filteredRows}
+          metrics={availableMetrics}
+          minVolume={filters.minVolume}
+          minProjVolume={filters.minProjVolume}
+          positions={[...filters.positions]}
+          tdRows={allTdRows}
+          byWeek={byWeek}
+        />
+      )}
       {tab === "calibration" && <CalibrationView summaries={summaries} />}
       {tab === "coverage" && selectedMetric && (
         <CoverageView all={deepAll} selected={selectedDeep} metric={selectedMetric} />

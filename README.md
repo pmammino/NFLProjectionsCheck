@@ -266,12 +266,25 @@ npm run simulate                                   # replay all personas
 npm run simulate -- --persona kelly --dry-run      # one persona, no writes
 ```
 
-| Workflow | When | What |
+| Workflow | When (UTC) | What |
 |---|---|---|
-| `ingest-weekly.yml` | daily | RotoWire projections + actuals, the player roster, then replays personas |
-| `props-weekly.yml` | **Tuesday** | The drop: publish edges, replay personas |
-| `closing-lines.yml` | daily | Record closing lines for games kicking off soon |
+| `ingest-weekly.yml` | daily **13:00** | RotoWire projections + actuals, the player roster, then replays personas |
+| `props-weekly.yml` | **Tue 14:00** | The drop: publish edges, replay personas |
+| `closing-lines.yml` | daily **15:00** | Record closing lines for games kicking off soon |
 | `optic-discover.yml` | manual | Inspect what the OpticOdds API returns |
+
+The hour between ingest and the drop is load-bearing, not cosmetic. The NFL
+week rolls forward on Tuesday (`projectionWeek()` looks two days ahead), so the
+drop needs week N+1 projections — and Monday's ingest only wrote week N. They
+are created by the run immediately before it. Starting both together races, and
+the capture fails with *"No projections snapshot"*.
+
+All three data-writing workflows also share one `concurrency` group. They each
+`git add data/` and push to the same branch, so two at once means the second
+push is rejected; and because scheduled runs can be delayed by GitHub for many
+minutes, clock separation alone is not a guarantee. Each commit step
+additionally rebases and retries, since every one of them only ever *adds* data
+files — rebasing onto whatever landed first is always the right resolution.
 
 `data/legacy-bets/` holds the pre-rework ledger; see the README there.
 

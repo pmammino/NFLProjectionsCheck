@@ -82,7 +82,7 @@ import { OpticOddsClient } from "./lib/opticodds.mjs";
 import {
   normalizeOddsPayloads,
   flattenHistoricalPayloads,
-  closingPriceFromHistory,
+  historicalLineValue,
   pairOdds,
 } from "./lib/optic-normalize.mjs";
 import { buildPlayerIndex, matchPlayer, canonicalTeam } from "./lib/crosswalk.mjs";
@@ -180,6 +180,7 @@ function parseArgs(argv) {
       case "--sides": a.sides = next(); break;
       case "--books": a.books = next().split(",").map((s) => s.trim()).filter(Boolean); break;
       case "--historical": a.historical = true; break;
+      case "--use-opening": a.useOpening = true; break;
       case "--data-dir": a.dataDir = next(); break;
       case "--dry-run": a.dryRun = true; break;
       case "-h": case "--help": a.help = true; break;
@@ -362,9 +363,12 @@ async function fetchWeekOdds(client, a, fixtures) {
   };
 
   if (a.historical) {
-    console.log(`  fetching CLOSING lines (historical) for ${fixtureIds.length} fixtures…`);
+    console.log(
+      `  fetching ${a.useOpening ? "OPENING" : "CLOSING"} lines (historical) for ` +
+        `${fixtureIds.length} fixtures — one request per fixture per 5 books, so this is slow…`
+    );
     const payloads = await client.getHistoricalOdds({ fixtureIds, sportsbooks, markets, onProgress });
-    return historicalToMarkets(payloads, fixtures);
+    return historicalToMarkets(payloads, a);
   }
 
   console.log(`  fetching current odds for ${fixtureIds.length} fixtures…`);
@@ -372,34 +376,30 @@ async function fetchWeekOdds(client, a, fixtures) {
   return normalizeOddsPayloads(payloads, { statDefs: STAT_DEFS });
 }
 
-// Historical payloads carry a price HISTORY per odd rather than a single
-// price. Collapse each series to its closing price (the last one before
-// kickoff — see closingPriceFromHistory) and then pair the sides exactly as a
-// live pull would.
-function historicalToMarkets(payloads, fixtures) {
-  const kickoffByFixture = new Map(fixtures.map((f) => [f.id, f.startDate]));
-  const series = flattenHistoricalPayloads(payloads);
+// Historical payloads carry `olv` (opening) and `clv` (closing) per odd rather
+// than a single live price. Collapse each to the chosen line value, then pair
+// the sides exactly as a live pull would.
+//
+// Closing is the default: it is the most informed price the market produced and
+// the one we could realistically have taken. The endpoint only ever covers up
+// to kickoff, so there is no look-ahead to filter out on our side.
+function historicalToMarkets(payloads, a) {
+  const records = flattenHistoricalPayloads(payloads);
 
   const collapsed = [];
-  let noClose = 0;
-  for (const s of series) {
-    if (!s.history) {
-      // Already a point-in-time price rather than a series.
-      if (s.price !== null) collapsed.push(s);
-      else noClose++;
+  let noPrice = 0;
+  for (const rec of records) {
+    const lv = historicalLineValue(rec, { prefer: a.useOpening ? "opening" : "closing" });
+    if (!lv) {
+      noPrice++;
       continue;
     }
-    const close = closingPriceFromHistory(s.history, kickoffByFixture.get(s.fixtureId));
-    if (!close) {
-      noClose++;
-      continue;
-    }
-    collapsed.push({ ...s, price: close.price, points: close.points ?? s.points, timestamp: close.timestamp });
+    collapsed.push({ ...rec, price: lv.price, points: lv.points ?? rec.points });
   }
 
   // Re-pair using the same grouping logic the live path uses.
   const { rows, diagnostics } = pairOdds(collapsed, { statDefs: STAT_DEFS });
-  return { rows, diagnostics: { ...diagnostics, noClosingPrice: noClose } };
+  return { rows, diagnostics: { ...diagnostics, noHistoricalPrice: noPrice } };
 }
 
 async function main() {
@@ -432,9 +432,15 @@ async function main() {
     a.resolvedBooks = a.books;
   } else {
     const books = await client.getSportsbooks({ sport: "football", league: "nfl" });
-    a.resolvedBooks = books
-      .map((b) => (typeof b === "string" ? b : b?.name ?? b?.id))
+    // Skip books flagged inactive: they return no odds, and each one still
+    // costs a request per fixture batch against a tight rate limit.
+    const active = books.filter((b) => typeof b === "string" || b?.is_active !== false);
+    a.resolvedBooks = active
+      .map((b) => (typeof b === "string" ? b : b?.id ?? b?.name))
       .filter(Boolean);
+    if (books.length !== active.length) {
+      console.log(`  skipping ${books.length - active.length} inactive sportsbook(s).`);
+    }
     if (a.resolvedBooks.length === 0) {
       throw new Error("OpticOdds returned no sportsbooks — cannot price anything.");
     }
@@ -449,10 +455,13 @@ async function main() {
   });
   const fixtures = fixtureRows
     .map((f) => ({
-      id: String(f?.id ?? f?.fixture_id ?? ""),
-      homeTeam: f?.home_team_display ?? f?.home_team ?? f?.home_competitors?.[0]?.abbreviation,
-      awayTeam: f?.away_team_display ?? f?.away_team ?? f?.away_competitors?.[0]?.abbreviation,
-      startDate: f?.start_date ?? f?.startDate ?? null,
+      id: String(f?.id ?? ""),
+      // Prefer the competitor abbreviation ("CIN") over the display name
+      // ("Cincinnati Bengals") — both resolve, but one is already the code the
+      // rest of this project is keyed on.
+      homeTeam: f?.home_competitors?.[0]?.abbreviation ?? f?.home_team_display ?? f?.home_team,
+      awayTeam: f?.away_competitors?.[0]?.abbreviation ?? f?.away_team_display ?? f?.away_team,
+      startDate: f?.start_date ?? null,
     }))
     .filter((f) => f.id);
   console.log(`  fixtures: ${fixtures.length} games for week ${a.week}.`);
@@ -607,7 +616,7 @@ function reportDiagnostics(d) {
   if (d.noSide) console.warn(`  ${d.noSide} records had no identifiable side — skipped.`);
   if (d.missingPrice) console.warn(`  ${d.missingPrice} records had no usable price/line — skipped.`);
   if (d.missingPlayer) console.warn(`  ${d.missingPlayer} records had no player — skipped.`);
-  if (d.noClosingPrice) console.warn(`  ${d.noClosingPrice} historical series had no price before kickoff — skipped.`);
+  if (d.noHistoricalPrice) console.warn(`  ${d.noHistoricalPrice} historical odds carried neither a closing nor an opening price — skipped.`);
   if (d.unmatchedMarkets?.size) {
     // Not necessarily a problem — most are markets we deliberately don't model
     // (moneyline, spreads, kicker props). But a market we DO want showing up
@@ -652,7 +661,12 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
   --sides <s>              both | over | under (default: both)
   --books <a,b,c>          Sportsbooks to pull (default: every one offered)
   --historical             Pull closing lines for a week already played,
-                           instead of current odds
+                           instead of current odds. OpticOdds retains history
+                           on a rolling 2-month window, so older weeks cannot
+                           be backfilled at all.
+  --use-opening            With --historical, grade against the OPENING line
+                           rather than the closing one. The gap between the two
+                           measures how far the market moved after posting.
   --data-dir <path>        Data root (default: data)
   --dry-run                Fetch and price but do not write files
   -h, --help               Show this help

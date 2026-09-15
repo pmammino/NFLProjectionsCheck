@@ -19,14 +19,43 @@
 // capture script reports how many there were.
 //
 // ---------------------------------------------------------------------------
-// CONTRACT STATUS
+// The OpticOdds response shape (from the v3 OpenAPI definition)
 // ---------------------------------------------------------------------------
-// Field names here have NOT been verified against a live OpticOdds response.
-// Every read goes through `firstOf`, which tries the plausible spellings and
-// returns undefined rather than throwing, and anything unreadable is counted
-// in the returned diagnostics instead of silently becoming null. Run
-// `node scripts/optic-discover.mjs --dump-odds` with a live key to print real
-// records, then prune the alias lists below to what the API actually sends.
+// `{ data: [ FixtureWithOdds ] }`, where each fixture carries its odds nested:
+//
+//   { id, game_id, start_date, status, is_live,
+//     home_competitors: [{ id, name, abbreviation, logo }],
+//     away_competitors: [...], home_team_display, away_team_display,
+//     season_year, season_week, season_type, sport, league,
+//     odds: [ FixtureOdd ] }
+//
+// and each FixtureOdd is:
+//
+//   { id, sportsbook, market, market_id, name, is_main,
+//     selection, normalized_selection, selection_line,
+//     player_id, team_id, price, points, timestamp,
+//     grouping_key, deep_link, limits: { max } }
+//
+// Three of these bite, and each one broke an assumption worth recording:
+//
+// 1. THERE IS NO PLAYER NAME FIELD. An odd carries `player_id` (an OpticOdds
+//    hex id, useless to us) and `selection`. On a team market `selection` is
+//    the team name ("Houston Astros"); on a game total it is "". On a player
+//    prop it is the player — that is the only place a name appears, since
+//    `name` is the full label ("Joe Burrow Over 249.5"), not a name.
+//
+// 2. `team_id` IS A HEX ID, NOT AN ABBREVIATION. "4F11A5896C24", not "CIN".
+//    The abbreviation lives on the parent fixture's competitors, so this
+//    module builds an id -> abbreviation map per fixture and resolves through
+//    it. Without that the player crosswalk loses its team tier entirely.
+//
+// 3. `timestamp` IS A UNIX EPOCH FLOAT (1724865905.59815), not an ISO string.
+//
+// The remaining uncertainty is narrow: the docs contain no player-prop example
+// (every sample is moneyline / run line / total runs), so that `selection`
+// holds the player's name on a prop is inferred from the pattern rather than
+// documented. The tolerant read order below covers it either way, and
+// `scripts/optic-discover.mjs --dump-odds` confirms it against a live key.
 
 import { matchStatKey } from "./markets.mjs";
 
@@ -73,11 +102,15 @@ export function flattenOddsPayloads(payloads) {
       const nested = row?.odds;
       if (Array.isArray(nested)) {
         // Fixture-shaped: carry the fixture's own identifiers down to each odd.
+        // `teamById` is the important one — an odd's `team_id` is a hex id, and
+        // the only place it maps to an abbreviation ("CIN") is right here on
+        // the parent fixture's competitors.
         const context = {
           fixtureId: scalarOf(firstOf(row, ["id", "fixture_id", "fixtureId", "game_id"])),
-          homeTeam: scalarOf(firstOf(row, ["home_team_display", "home_team", "homeTeam"])),
-          awayTeam: scalarOf(firstOf(row, ["away_team_display", "away_team", "awayTeam"])),
+          homeTeam: teamAbbr(row?.home_competitors) ?? scalarOf(firstOf(row, ["home_team_display", "home_team"])),
+          awayTeam: teamAbbr(row?.away_competitors) ?? scalarOf(firstOf(row, ["away_team_display", "away_team"])),
           startDate: scalarOf(firstOf(row, ["start_date", "startDate", "game_time", "start_time"])),
+          teamById: competitorMap(row),
         };
         for (const odd of nested) out.push({ raw: odd, context });
       } else if (row && typeof row === "object") {
@@ -88,6 +121,28 @@ export function flattenOddsPayloads(payloads) {
 
   for (const payload of payloads || []) visitContainer(payload);
   return out;
+}
+
+// First competitor's abbreviation, falling back to its name. NFL fixtures have
+// exactly one competitor per side; the array shape exists for team sports that
+// don't (doubles tennis, relays).
+function teamAbbr(competitors) {
+  const c = Array.isArray(competitors) ? competitors[0] : null;
+  if (!c) return undefined;
+  return firstOf(c, ["abbreviation", "name"]);
+}
+
+// team_id (hex) -> abbreviation, for every competitor on this fixture.
+function competitorMap(fixture) {
+  const map = new Map();
+  for (const side of ["home_competitors", "away_competitors"]) {
+    for (const c of Array.isArray(fixture?.[side]) ? fixture[side] : []) {
+      const id = firstOf(c, ["id"]);
+      const abbr = firstOf(c, ["abbreviation", "name"]);
+      if (id && abbr) map.set(String(id), String(abbr));
+    }
+  }
+  return map;
 }
 
 // ---- Side detection ----------------------------------------------------------
@@ -128,35 +183,72 @@ export function readOdd(entry) {
   const playerId = scalarOf(
     firstOf(raw, ["player_id", "playerId"]) ?? (playerObj ? firstOf(playerObj, ["id"]) : undefined)
   );
-  const playerName =
-    scalarOf(firstOf(raw, ["player_name", "playerName"])) ??
-    (playerObj ? scalarOf(playerObj) : undefined) ??
-    scalarOf(firstOf(raw, ["player"]));
 
-  const team = scalarOf(
-    firstOf(raw, ["team", "team_abbreviation", "team_display", "player_team"]) ??
-      (playerObj ? firstOf(playerObj, ["team", "team_abbreviation"]) : undefined)
-  );
+  // The player's NAME. `selection` is the documented home for the entity a bet
+  // is on (the team on a moneyline, "" on a game total), so on a player prop it
+  // is the player. `normalized_selection` ("joe_burrow") is the same thing
+  // underscored, which normalizeName handles. Deliberately NOT falling back to
+  // `name`: that is the full label ("Joe Burrow Over 249.5"), and treating it
+  // as a name would produce a garbage crosswalk key rather than an honest miss.
+  const playerName =
+    scalarOf(firstOf(raw, ["selection"])) ??
+    scalarOf(firstOf(raw, ["normalized_selection"])) ??
+    (playerObj ? scalarOf(playerObj) : undefined) ??
+    scalarOf(firstOf(raw, ["player_name", "playerName"]));
+
+  // `team_id` is an OpticOdds hex id; the abbreviation lives on the parent
+  // fixture's competitors. Resolve through that map, and only fall back to a
+  // literal team field if some other response shape supplies one.
+  const teamId = scalarOf(firstOf(raw, ["team_id", "teamId"]));
+  const team =
+    (teamId && context.teamById?.get(String(teamId))) ??
+    scalarOf(firstOf(raw, ["team", "team_abbreviation", "team_display", "player_team"])) ??
+    (playerObj ? scalarOf(firstOf(playerObj, ["team", "team_abbreviation"])) : undefined);
 
   return {
     fixtureId: String(
-      scalarOf(firstOf(raw, ["fixture_id", "fixtureId", "game_id"])) ?? context.fixtureId ?? ""
+      scalarOf(firstOf(raw, ["fixture_id", "fixtureId"])) ?? context.fixtureId ?? ""
     ),
     sportsbook: String(scalarOf(firstOf(raw, ["sportsbook", "sportsbook_name", "book"])) ?? ""),
     marketName: marketName === undefined ? "" : String(marketName),
+    marketId: String(scalarOf(firstOf(raw, ["market_id"])) ?? ""),
     statKey,
     playerId: playerId === undefined ? "" : String(playerId),
     playerName: playerName === undefined ? "" : String(playerName),
+    teamId: teamId === undefined ? "" : String(teamId),
     team: team === undefined ? "" : String(team),
-    // `points` is the line. Absent on a yes/no market (anytime TD), where the
+    // `points` is the line. Null on a yes/no market (anytime TD), where the
     // implicit line is 0.5 — the caller supplies that from the stat def.
     points: numOrNull(firstOf(raw, ["points", "line", "handicap", "total"])),
     price: numOrNull(firstOf(raw, ["price", "odds", "american_odds", "american", "money"])),
     side: detectSide(raw),
     isMain: firstOf(raw, ["is_main", "isMain", "main"]) === true,
-    timestamp: scalarOf(firstOf(raw, ["timestamp", "updated_at", "last_updated", "time"])) ?? null,
+    // Groups the sides of one market together ("default:8.0"). Kept for
+    // diagnostics; pairing keys on the line itself so the logic stays
+    // independent of how the API happens to spell a group.
+    groupingKey: String(scalarOf(firstOf(raw, ["grouping_key"])) ?? ""),
+    // Unix epoch SECONDS as a float, not an ISO string.
+    timestamp: firstOf(raw, ["timestamp", "updated_at", "last_updated", "time"]) ?? null,
+    // The book's max stake, when it publishes one. Not used in sizing yet, but
+    // it is the ceiling on what any of this is actually worth.
+    maxStake: numOrNull(raw?.limits?.max),
     startDate: context.startDate ?? scalarOf(firstOf(raw, ["start_date", "game_time"])) ?? null,
   };
+}
+
+// The API sends timestamps as Unix epoch seconds (a float). Accept that, an
+// epoch in milliseconds, or an ISO string, and return epoch milliseconds.
+export function toEpochMs(value) {
+  if (value === undefined || value === null || value === "") return NaN;
+  if (typeof value === "number" || /^\d+(\.\d+)?$/.test(String(value))) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return NaN;
+    // Seconds vs milliseconds: anything below ~1e11 is seconds (1e11 ms is
+    // year 1973, while 1e11 seconds is year 5138 — no real timestamp is
+    // ambiguous between the two).
+    return n < 1e11 ? n * 1000 : n;
+  }
+  return Date.parse(String(value));
 }
 
 // ---- Pairing -----------------------------------------------------------------
@@ -264,54 +356,79 @@ export function normalizeOddsPayloads(payloads, { statDefs }) {
 }
 
 // ---- Historical ---------------------------------------------------------------
-// The historical endpoint returns a price HISTORY per odd: an array of
-// timestamped price changes. Backfilling a played week means choosing one
-// moment from that series, and the only defensible choice is the last price
-// before kickoff — the closing line.
+// /fixtures/odds/historical returns the SAME fixture-with-odds envelope, but
+// each odd replaces `price`/`points` with:
 //
-// Grading a backfilled bet against anything later would be look-ahead bias
-// (prices move on injury and inactive news we would not have had), and
-// anything much earlier isn't a price we could reliably have taken.
-export function closingPriceFromHistory(history, kickoffIso) {
-  if (!Array.isArray(history) || history.length === 0) return null;
-  const cutoff = kickoffIso ? Date.parse(kickoffIso) : NaN;
+//   olv: { price, points }   opening line value — the first price posted
+//   clv: { price, points }   closing line value — the last before kickoff
+//   entries: [ { price, timestamp, points, locked } ]
+//                            the full movement series, but only if the key
+//                            carries the separate `include_timeseries`
+//                            permission; otherwise an empty array
+//
+// This is better than it sounds: the closing line is handed over directly, so
+// backfilling a played week needs no scan of a series and no kickoff cutoff of
+// our own. The endpoint is documented as covering "from the time odds are
+// posted up until just before the fixture start time", so look-ahead bias is
+// excluded at the source rather than by us filtering it out.
+
+// Pick the price to grade a backfilled bet at. Closing by default: it is the
+// most informed price the market produced, and the one we could actually have
+// taken. `--use-opening` exists because comparing the two measures how much a
+// line moved, which is the classic test of whether a model is early to news or
+// merely agreeing with it after the fact.
+export function historicalLineValue(rec, { prefer = "closing" } = {}) {
+  const primary = prefer === "opening" ? rec?.olv : rec?.clv;
+  const fallback = prefer === "opening" ? rec?.clv : rec?.olv;
+
+  for (const source of [primary, fallback]) {
+    const price = numOrNull(firstOf(source, ["price"]));
+    if (price !== null) {
+      return { price, points: numOrNull(firstOf(source, ["points"])), source: source === primary ? prefer : "fallback" };
+    }
+  }
+
+  // No olv/clv (an odd posted and pulled without ever settling, say). Fall back
+  // to the timeseries if the key has it.
+  return lastEntryBefore(rec?.entries, rec?.startDate);
+}
+
+// Last non-locked price in a timeseries, at or before `cutoff`. Only reachable
+// when the key carries the include_timeseries permission.
+export function lastEntryBefore(entries, cutoffIso) {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+  const cutoff = cutoffIso ? toEpochMs(cutoffIso) : NaN;
 
   let best = null;
   let bestTime = -Infinity;
-  for (const point of history) {
-    const price = numOrNull(firstOf(point, ["price", "odds", "american_odds", "american"]));
+  for (const e of entries) {
+    if (e?.locked === true) continue; // price wasn't takeable at that moment
+    const price = numOrNull(firstOf(e, ["price"]));
     if (price === null) continue;
-    const tRaw = scalarOf(firstOf(point, ["timestamp", "time", "updated_at", "created_at"]));
-    const t = tRaw === undefined ? NaN : Date.parse(tRaw);
-
-    // An undated point can't be ordered; keep it only as a last resort.
-    if (!Number.isFinite(t)) {
-      if (best === null) best = { price, timestamp: tRaw ?? null, points: pointsOf(point) };
-      continue;
-    }
-    if (Number.isFinite(cutoff) && t > cutoff) continue; // after kickoff — look-ahead
+    const t = toEpochMs(firstOf(e, ["timestamp"]));
+    if (!Number.isFinite(t)) continue;
+    if (Number.isFinite(cutoff) && t > cutoff) continue;
     if (t > bestTime) {
       bestTime = t;
-      best = { price, timestamp: tRaw, points: pointsOf(point) };
+      best = { price, points: numOrNull(firstOf(e, ["points"])), source: "timeseries", timestamp: t };
     }
   }
   return best;
 }
 
-function pointsOf(point) {
-  return numOrNull(firstOf(point, ["points", "line", "handicap", "total"]));
-}
-
-// Flatten a historical payload into per-odd history series, each carrying the
-// identifying fields plus its price points.
+// Flatten a historical payload into per-odd records carrying olv/clv/entries
+// alongside the usual identifying fields.
 export function flattenHistoricalPayloads(payloads) {
   const out = [];
   for (const entry of flattenOddsPayloads(payloads)) {
     const rec = readOdd(entry);
     if (!rec) continue;
-    const history =
-      firstOf(entry.raw, ["history", "prices", "odds_history", "price_history", "changes"]) ?? null;
-    out.push({ ...rec, history: Array.isArray(history) ? history : null });
+    out.push({
+      ...rec,
+      olv: entry.raw?.olv ?? null,
+      clv: entry.raw?.clv ?? null,
+      entries: Array.isArray(entry.raw?.entries) ? entry.raw.entries : [],
+    });
   }
   return out;
 }

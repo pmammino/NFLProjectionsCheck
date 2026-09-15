@@ -8,10 +8,17 @@
 //
 // Field reference:
 //   optic     OpticOdds market-name aliases. Matched case- and
-//             punctuation-insensitively (see matchStatKey). Listed generously
-//             because market naming varies and the exact strings have not been
-//             confirmed against a live call — run scripts/optic-discover.mjs
-//             to print what the API actually offers and prune to the real set.
+//             punctuation-insensitively (see matchStatKey), and either the
+//             market `name` ("Player Passing Yards") or its `id`
+//             ("player_passing_yards") resolves, since normalization collapses
+//             both to the same key.
+//
+//             THESE ARE STILL UNCONFIRMED. The published /markets example
+//             covers Aussie Rules, not the NFL, so the exact strings are
+//             educated guesses listed generously. A wrong alias means that
+//             stat silently captures nothing, so run
+//             `npm run optic-discover -- --markets` against a live key before
+//             trusting a capture, and prune this list to what it reports.
 //   hasLine   true  = over/under market with a real line (e.g. 249.5 yards)
 //             false = yes/no market treated as an implicit "over 0.5", which
 //                     matches how lib/td.ts already scores anytime TDs.

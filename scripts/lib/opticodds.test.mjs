@@ -255,14 +255,43 @@ test("an odds pull with no fixtures is a no-op, and one with no books throws", a
   );
 });
 
-test("historical odds use the historical endpoint and the same batching", async () => {
+test("historical odds send exactly one fixture per request", async () => {
+  // Not a batching choice — /fixtures/odds/historical accepts a single
+  // fixture_id, unlike /fixtures/odds which takes five. Six fixtures against
+  // one book is therefore six requests, not two.
   const impl = stubFetch([{ status: 200, body: { data: [] } }]);
   await client(impl).getHistoricalOdds({
     fixtureIds: ["A", "B", "C", "D", "E", "F"],
     sportsbooks: ["X"],
   });
+  assert.equal(impl.calls.length, 6);
+  for (const url of impl.calls) {
+    assert.ok(url.includes("/fixtures/odds/historical"));
+    assert.equal(new URL(url).searchParams.getAll("fixture_id").length, 1);
+  }
+});
+
+test("historical odds still batch sportsbooks five at a time", async () => {
+  const impl = stubFetch([{ status: 200, body: { data: [] } }]);
+  await client(impl).getHistoricalOdds({
+    fixtureIds: ["A"],
+    sportsbooks: ["B0", "B1", "B2", "B3", "B4", "B5"],
+  });
+  assert.equal(impl.calls.length, 2); // 5 + 1
+  for (const url of impl.calls) {
+    assert.ok(new URL(url).searchParams.getAll("sportsbook").length <= MAX_SPORTSBOOKS_PER_REQUEST);
+  }
+});
+
+test("has_more drives pagination when present", async () => {
+  // The documented list envelope is { data, page, total_pages, has_more }.
+  const impl = stubFetch([
+    { status: 200, body: { data: [{ id: 1 }], page: 1, total_pages: 2, has_more: true } },
+    { status: 200, body: { data: [{ id: 2 }], page: 2, total_pages: 2, has_more: false } },
+  ]);
+  const rows = await client(impl).getAll("/fixtures");
+  assert.deepEqual(rows.map((r) => r.id), [1, 2]);
   assert.equal(impl.calls.length, 2);
-  for (const url of impl.calls) assert.ok(url.includes("/fixtures/odds/historical"));
 });
 
 // ---- Rate limiting -----------------------------------------------------------

@@ -1,15 +1,19 @@
 // Discovery/diagnostic CLI for the OpticOdds integration.
 //
-// The capture pipeline reads OpticOdds responses through tolerant accessors
-// that try several plausible field spellings, because the exact response
-// schema was not available when the integration was written. This script is
-// how you replace that tolerance with certainty: point it at a live key, see
-// what the API actually returns, then tighten lib/optic-normalize.mjs and the
-// market aliases in lib/markets.mjs to the real shapes.
+// The response SHAPES are now pinned to the v3 OpenAPI definition, but two
+// things still can only be learned from a live key:
 //
-// It is also the fastest way to answer "why did this week capture nothing?" —
-// --markets shows which of our stat aliases actually resolve, and --dump-odds
-// shows a real record next to how we parsed it.
+//   1. THE NFL MARKET NAMES. The published /markets example is for Aussie
+//      Rules, so the exact strings for NFL player props are unconfirmed and
+//      the aliases in lib/markets.mjs are educated guesses. If one is wrong,
+//      that stat silently captures zero rows — `--markets` is what catches it.
+//   2. WHETHER A PLAYER PROP PUTS THE PLAYER IN `selection`. Every documented
+//      example is a team or game market, so this is inferred from the pattern.
+//      `--dump-odds` confirms it against a real record.
+//
+// This script is also the fastest way to answer "why did this week capture
+// nothing?" — it prints real records beside how we parsed them, and counts
+// what failed to parse.
 //
 // Usage:
 //   node scripts/optic-discover.mjs --sportsbooks

@@ -15,28 +15,28 @@
 //    ~16 fixtures against 20+ books, so pulling a week is inherently dozens of
 //    requests — hence the batching and rate limiting here rather than at the
 //    call sites.
+//  - /fixtures/odds/historical is stricter still: exactly ONE fixture_id per
+//    request (up to 5 sportsbooks). A 16-game week across 20 books is
+//    therefore 16 x 4 = 64 requests minimum.
+//  - Historical data is retained on a ROLLING 2-MONTH BASIS. A week older than
+//    that cannot be backfilled at any price, which makes backfilling a
+//    deadline rather than a task that waits indefinitely.
 //  - Documented rate limits are per-tier, and the historical endpoints are
 //    tighter than the standard ones (10 requests / 15 seconds). The limiter
 //    below defaults to the tighter figure because exceeding it costs far more
 //    (a 429 storm mid-capture) than running a weekly job slightly slower.
 //
-// ---------------------------------------------------------------------------
-// CONTRACT STATUS — READ BEFORE DEBUGGING A PARSE FAILURE
-// ---------------------------------------------------------------------------
-// The endpoint paths, auth header, and the 5-sportsbook/5-fixture and
-// 10-req/15s limits above are confirmed. The exact FIELD NAMES inside each
-// response body have not been verified against a live call. Everything that
-// reads a field does so through the tolerant accessors in optic-normalize.mjs,
-// which try several plausible spellings and report what they could not read,
-// so a schema surprise surfaces as a clear diagnostic rather than silent
-// nulls. Run `node scripts/optic-discover.mjs --dump-odds` against a live key
-// to print the real shapes, then tighten the accessors.
+// Response envelopes (from the v3 OpenAPI definition): odds endpoints return
+// `{ data: [ FixtureWithOdds ] }` with no paging; list endpoints such as
+// /fixtures return `{ data, page, total_pages, has_more }`.
 
 const DEFAULT_BASE_URL = "https://api.opticodds.com/api/v3";
 
 // Hard API caps — not tuning knobs.
 export const MAX_SPORTSBOOKS_PER_REQUEST = 5;
 export const MAX_FIXTURES_PER_REQUEST = 5;
+// The historical endpoint takes exactly one fixture per request.
+export const MAX_FIXTURES_PER_HISTORICAL_REQUEST = 1;
 
 // Conservative default: the documented historical-endpoint limit, applied to
 // everything. Override per-instance if your licence tier allows more.
@@ -221,6 +221,12 @@ export class OpticOddsClient {
       const batch = unwrapData(payload);
       rows.push(...batch);
 
+      // The documented envelope carries both; has_more is the more direct
+      // signal, so prefer it and fall back to comparing against total_pages.
+      if (typeof payload?.has_more === "boolean") {
+        if (!payload.has_more) return rows;
+        continue;
+      }
       const totalPages = Number(payload?.total_pages ?? payload?.totalPages);
       if (Number.isFinite(totalPages)) {
         if (page >= totalPages) return rows;
@@ -329,7 +335,8 @@ export class OpticOddsClient {
     if (!fixtureIds?.length) return [];
     if (!sportsbooks?.length) throw new OpticOddsError("At least one sportsbook is required.");
 
-    const fixtureBatches = chunk(fixtureIds, MAX_FIXTURES_PER_REQUEST);
+    // One fixture per request here — not a batching choice, an API limit.
+    const fixtureBatches = chunk(fixtureIds, MAX_FIXTURES_PER_HISTORICAL_REQUEST);
     const bookBatches = chunk(sportsbooks, MAX_SPORTSBOOKS_PER_REQUEST);
     const total = fixtureBatches.length * bookBatches.length;
 

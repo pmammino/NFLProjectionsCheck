@@ -8,39 +8,69 @@ import {
   detectSide,
   pairOdds,
   normalizeOddsPayloads,
-  closingPriceFromHistory,
+  historicalLineValue,
+  lastEntryBefore,
   flattenHistoricalPayloads,
+  toEpochMs,
 } from "./optic-normalize.mjs";
 import { STAT_DEFS, matchStatKey, normalizeMarketName } from "./markets.mjs";
 
 const opts = { statDefs: STAT_DEFS };
 
-// A representative pair of records for one over/under market.
+// ---------------------------------------------------------------------------
+// Fixtures shaped like the real v3 response (see the OpenAPI definition):
+// odds nest under a fixture, the player's name arrives in `selection`, and
+// `team_id` is a hex id resolved through the fixture's competitors.
+// ---------------------------------------------------------------------------
+const CIN_ID = "4F11A5896C24";
+const PHI_ID = "E970E2EDDCAE";
+
+// One side of a player-prop market, in the API's own shape.
+const propOdd = (over = {}) => ({
+  id: "60486:DraftKings:player_passing_yards:joe_burrow_over_249_5",
+  sportsbook: "DraftKings",
+  market: "Player Passing Yards",
+  market_id: "player_passing_yards",
+  name: "Joe Burrow Over 249.5", // the LABEL, not a player name
+  is_main: true,
+  selection: "Joe Burrow", // this is where the player's name lives
+  normalized_selection: "joe_burrow",
+  selection_line: "over",
+  player_id: "OO-500",
+  team_id: CIN_ID, // a hex id, NOT "CIN"
+  price: -110,
+  points: 249.5,
+  timestamp: 1724865905.59815, // Unix epoch SECONDS, not ISO
+  grouping_key: "default:249.5",
+  deep_link: null,
+  limits: { max: 500 },
+  ...over,
+});
+
+// Wrap odds in the fixture envelope the API actually returns.
+const fixturePayload = (odds) => ({
+  data: [
+    {
+      id: "F1",
+      game_id: "60486-35183-2026-09-10-17",
+      start_date: "2026-09-10T20:20:00Z",
+      home_competitors: [{ id: CIN_ID, name: "Cincinnati Bengals", abbreviation: "CIN" }],
+      away_competitors: [{ id: PHI_ID, name: "Philadelphia Eagles", abbreviation: "PHI" }],
+      home_team_display: "Cincinnati Bengals",
+      away_team_display: "Philadelphia Eagles",
+      status: "unplayed",
+      is_live: false,
+      sport: { id: "football", name: "Football" },
+      league: { id: "nfl", name: "NFL" },
+      odds,
+    },
+  ],
+});
+
+// A complete two-sided market.
 const overUnder = (over = {}, under = {}) => [
-  {
-    fixture_id: "F1",
-    sportsbook: "DraftKings",
-    market: "Player Passing Yards",
-    player_id: "OO-500",
-    player_name: "Joe Burrow",
-    team: "CIN",
-    points: 249.5,
-    price: -110,
-    selection_line: "over",
-    ...over,
-  },
-  {
-    fixture_id: "F1",
-    sportsbook: "DraftKings",
-    market: "Player Passing Yards",
-    player_id: "OO-500",
-    player_name: "Joe Burrow",
-    team: "CIN",
-    points: 249.5,
-    price: -110,
-    selection_line: "under",
-    ...under,
-  },
+  propOdd(over),
+  propOdd({ selection_line: "under", name: "Joe Burrow Under 249.5", ...under }),
 ];
 
 // ---- Market matching ---------------------------------------------------------
@@ -81,21 +111,65 @@ test("a data-enveloped payload flattens", () => {
 });
 
 test("fixture-nested odds inherit the fixture's context", () => {
-  const payload = {
-    data: [
-      {
-        id: "F9",
-        start_date: "2026-09-14T17:00:00Z",
-        home_team_display: "Cincinnati Bengals",
-        odds: [{ sportsbook: "FanDuel", market: "Player Receptions", player_name: "Ja'Marr Chase", points: 5.5, price: -115, selection_line: "over" }],
-      },
-    ],
-  };
-  const [rec] = flattenOddsPayloads([payload]).map(readOdd);
-  // fixture_id was only on the parent, and must be carried down.
-  assert.equal(rec.fixtureId, "F9");
-  assert.equal(rec.startDate, "2026-09-14T17:00:00Z");
-  assert.equal(rec.statKey, "receptions");
+  const [rec] = flattenOddsPayloads([fixturePayload([propOdd()])]).map(readOdd);
+  // None of these live on the odd itself — they come from the parent fixture.
+  assert.equal(rec.fixtureId, "F1");
+  assert.equal(rec.startDate, "2026-09-10T20:20:00Z");
+  assert.equal(rec.statKey, "passYds");
+});
+
+test("the player's name is read from `selection`, never from `name`", () => {
+  // There is no player_name field. `name` is the full label
+  // ("Joe Burrow Over 249.5") — using it would produce a junk crosswalk key
+  // that silently matches nothing.
+  const [rec] = flattenOddsPayloads([fixturePayload([propOdd()])]).map(readOdd);
+  assert.equal(rec.playerName, "Joe Burrow");
+  assert.notEqual(rec.playerName, "Joe Burrow Over 249.5");
+});
+
+test("a normalized_selection is usable when selection is absent", () => {
+  const odd = propOdd();
+  delete odd.selection;
+  const [rec] = flattenOddsPayloads([fixturePayload([odd])]).map(readOdd);
+  assert.equal(rec.playerName, "joe_burrow");
+});
+
+test("team_id resolves to an abbreviation via the fixture's competitors", () => {
+  // The odd carries only a hex id; "CIN" exists solely on the parent fixture.
+  // Without this the crosswalk loses its team-disambiguation tier.
+  const [rec] = flattenOddsPayloads([fixturePayload([propOdd()])]).map(readOdd);
+  assert.equal(rec.teamId, CIN_ID);
+  assert.equal(rec.team, "CIN");
+});
+
+test("an unknown team_id leaves team blank rather than leaking a hex id", () => {
+  const [rec] = flattenOddsPayloads([
+    fixturePayload([propOdd({ team_id: "DEADBEEF" })]),
+  ]).map(readOdd);
+  assert.equal(rec.team, "");
+});
+
+test("the API's numeric epoch timestamp is preserved and convertible", () => {
+  const [rec] = flattenOddsPayloads([fixturePayload([propOdd()])]).map(readOdd);
+  assert.equal(rec.timestamp, 1724865905.59815);
+  assert.equal(toEpochMs(rec.timestamp), 1724865905598.15);
+});
+
+test("toEpochMs handles seconds, milliseconds and ISO strings", () => {
+  assert.equal(toEpochMs(1724865905.59815), 1724865905598.15);
+  assert.equal(toEpochMs(1724865905598), 1724865905598);
+  assert.equal(toEpochMs("2026-09-10T20:20:00Z"), Date.parse("2026-09-10T20:20:00Z"));
+  assert.ok(Number.isNaN(toEpochMs(null)));
+  assert.ok(Number.isNaN(toEpochMs("")));
+});
+
+test("the book's max stake is captured when published", () => {
+  const [rec] = flattenOddsPayloads([fixturePayload([propOdd()])]).map(readOdd);
+  assert.equal(rec.maxStake, 500);
+  const [noLimit] = flattenOddsPayloads([
+    fixturePayload([propOdd({ limits: null })]),
+  ]).map(readOdd);
+  assert.equal(noLimit.maxStake, null);
 });
 
 test("flattening tolerates junk without throwing", () => {
@@ -144,6 +218,21 @@ test("object-valued fields are unwrapped to their name", () => {
   assert.equal(rec.playerId, "OO-7");
   assert.equal(rec.playerName, "Saquon Barkley");
   assert.equal(rec.team, "PHI");
+});
+
+test("a team market (no player) is still read without inventing a player", () => {
+  // Moneyline: `selection` is the TEAM name. It reaches playerName, but the
+  // market doesn't map to a stat, so pairing discards it before it can be
+  // mistaken for a player.
+  const { rows, diagnostics } = normalizeOddsPayloads(
+    [fixturePayload([{ sportsbook: "BetMGM", market: "Moneyline", market_id: "moneyline",
+       name: "Cincinnati Bengals", selection: "Cincinnati Bengals",
+       normalized_selection: "cincinnati_bengals", selection_line: null,
+       player_id: null, team_id: CIN_ID, price: -156, points: null, is_main: true }])],
+    opts
+  );
+  assert.equal(rows.length, 0);
+  assert.equal(diagnostics.unmatchedMarkets.get("Moneyline"), 1);
 });
 
 // ---- Side detection ----------------------------------------------------------
@@ -271,73 +360,126 @@ test("an over/under record with no side is dropped, not assumed to be the over",
 });
 
 test("pairing prefers whichever side carries the player detail", () => {
-  const [over, under] = overUnder({ player_name: "", team: "" }, {});
-  const { rows } = pairOdds([readOdd({ raw: over }), readOdd({ raw: under })], opts);
+  const [over, under] = overUnder({ selection: "", normalized_selection: "" }, {});
+  const { rows } = normalizeOddsPayloads([fixturePayload([over, under])], opts);
   assert.equal(rows[0].playerName, "Joe Burrow");
   assert.equal(rows[0].team, "CIN");
 });
 
 // ---- Historical --------------------------------------------------------------
-const KICKOFF = "2026-09-14T17:00:00Z";
+// /fixtures/odds/historical returns the same fixture envelope, but each odd
+// carries `olv` (opening line value) and `clv` (closing line value) instead of
+// a live price — plus an `entries` timeseries that is empty unless the key has
+// the include_timeseries permission.
 
-test("the closing price is the last one before kickoff", () => {
-  const history = [
-    { timestamp: "2026-09-12T12:00:00Z", price: -105, points: 249.5 },
-    { timestamp: "2026-09-14T16:45:00Z", price: -118, points: 251.5 },
-    { timestamp: "2026-09-13T09:00:00Z", price: -112, points: 250.5 },
-  ];
-  const close = closingPriceFromHistory(history, KICKOFF);
-  assert.equal(close.price, -118);
-  assert.equal(close.points, 251.5);
-});
+const KICKOFF = "2026-09-10T20:20:00Z";
 
-test("prices after kickoff are excluded as look-ahead", () => {
-  // An in-game price reflects information we could not have had, so grading
-  // against it would flatter the backtest.
-  const history = [
-    { timestamp: "2026-09-14T16:45:00Z", price: -118 },
-    { timestamp: "2026-09-14T18:30:00Z", price: 350 }, // in-game
-  ];
-  assert.equal(closingPriceFromHistory(history, KICKOFF).price, -118);
-});
-
-test("with no kickoff given, the latest price wins", () => {
-  const history = [
-    { timestamp: "2026-09-12T12:00:00Z", price: -105 },
-    { timestamp: "2026-09-14T18:30:00Z", price: 350 },
-  ];
-  assert.equal(closingPriceFromHistory(history, null).price, 350);
-});
-
-test("an empty or unusable history returns null", () => {
-  assert.equal(closingPriceFromHistory([], KICKOFF), null);
-  assert.equal(closingPriceFromHistory(null, KICKOFF), null);
-  assert.equal(closingPriceFromHistory([{ timestamp: KICKOFF }], KICKOFF), null); // no price
-});
-
-test("a history entirely after kickoff yields no closing price", () => {
-  const history = [{ timestamp: "2026-09-14T18:30:00Z", price: 350 }];
-  assert.equal(closingPriceFromHistory(history, KICKOFF), null);
-});
-
-test("historical payloads flatten with their price series attached", () => {
-  const payload = {
-    data: [
-      {
-        fixture_id: "F1",
-        sportsbook: "DraftKings",
-        market: "Player Passing Yards",
-        player_name: "Joe Burrow",
-        selection_line: "over",
-        points: 249.5,
-        price: -110,
-        history: [{ timestamp: "2026-09-14T16:45:00Z", price: -118, points: 251.5 }],
-      },
-    ],
+const historicalOdd = (extra = {}) => {
+  const o = propOdd(extra);
+  delete o.price;
+  delete o.points;
+  return {
+    ...o,
+    deep_link_info: null,
+    entries: [],
+    olv: { price: -185, points: 251.5 },
+    clv: { price: -140, points: 249.5 },
+    ...extra,
   };
-  const [series] = flattenHistoricalPayloads([payload]);
-  assert.equal(series.statKey, "passYds");
-  assert.equal(series.side, "over");
-  assert.equal(series.history.length, 1);
-  assert.equal(closingPriceFromHistory(series.history, KICKOFF).price, -118);
+};
+
+test("the closing line value is used by default", () => {
+  const lv = historicalLineValue(historicalOdd());
+  assert.equal(lv.price, -140);
+  assert.equal(lv.points, 249.5);
+  assert.equal(lv.source, "closing");
+});
+
+test("--use-opening selects the opening line value instead", () => {
+  // The gap between the two is how far the market moved after posting.
+  const lv = historicalLineValue(historicalOdd(), { prefer: "opening" });
+  assert.equal(lv.price, -185);
+  assert.equal(lv.points, 251.5);
+  assert.equal(lv.source, "opening");
+});
+
+test("a missing closing value falls back to the opening one", () => {
+  const lv = historicalLineValue(historicalOdd({ clv: null }));
+  assert.equal(lv.price, -185);
+  assert.equal(lv.source, "fallback");
+});
+
+test("with neither olv nor clv, the timeseries is used if present", () => {
+  const rec = historicalOdd({
+    olv: null,
+    clv: null,
+    startDate: KICKOFF,
+    entries: [
+      { price: -105, points: 249.5, timestamp: 1757000000 },
+      { price: -118, points: 251.5, timestamp: 1757100000 },
+    ],
+  });
+  const lv = historicalLineValue(rec);
+  assert.equal(lv.price, -118);
+  assert.equal(lv.source, "timeseries");
+});
+
+test("an odd with no price information at all yields null", () => {
+  assert.equal(historicalLineValue(historicalOdd({ olv: null, clv: null })), null);
+  assert.equal(historicalLineValue(historicalOdd({ olv: {}, clv: {} })), null);
+  assert.equal(historicalLineValue(null), null);
+});
+
+test("locked timeseries entries are skipped — that price wasn't takeable", () => {
+  const entries = [
+    { price: -105, timestamp: 1757000000 },
+    { price: -999, timestamp: 1757100000, locked: true },
+  ];
+  assert.equal(lastEntryBefore(entries, null).price, -105);
+});
+
+test("timeseries entries after kickoff are excluded", () => {
+  const entries = [
+    { price: -118, timestamp: Math.floor(Date.parse(KICKOFF) / 1000) - 600 },
+    { price: 350, timestamp: Math.floor(Date.parse(KICKOFF) / 1000) + 3600 },
+  ];
+  assert.equal(lastEntryBefore(entries, KICKOFF).price, -118);
+  // With no cutoff the later price wins.
+  assert.equal(lastEntryBefore(entries, null).price, 350);
+});
+
+test("an empty or unusable timeseries returns null", () => {
+  assert.equal(lastEntryBefore([], KICKOFF), null);
+  assert.equal(lastEntryBefore(null, KICKOFF), null);
+  assert.equal(lastEntryBefore([{ timestamp: 1757000000 }], KICKOFF), null); // no price
+});
+
+test("historical payloads flatten with olv/clv/entries attached", () => {
+  const [rec] = flattenHistoricalPayloads([fixturePayload([historicalOdd()])]);
+  assert.equal(rec.statKey, "passYds");
+  assert.equal(rec.side, "over");
+  assert.equal(rec.playerName, "Joe Burrow");
+  assert.equal(rec.team, "CIN");
+  assert.deepEqual(rec.clv, { price: -140, points: 249.5 });
+  assert.deepEqual(rec.entries, []);
+});
+
+test("a full historical pull pairs into two-sided markets at closing prices", () => {
+  // End to end: the shape the backfill actually consumes.
+  const over = historicalOdd();
+  const under = historicalOdd({
+    selection_line: "under",
+    olv: { price: 155, points: 251.5 },
+    clv: { price: 115, points: 249.5 },
+  });
+  const collapsed = flattenHistoricalPayloads([fixturePayload([over, under])]).map((rec) => {
+    const lv = historicalLineValue(rec);
+    return { ...rec, price: lv.price, points: lv.points };
+  });
+  const { rows } = pairOdds(collapsed, opts);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].line, 249.5);
+  assert.equal(rows[0].overOdds, -140);
+  assert.equal(rows[0].underOdds, 115);
+  assert.equal(rows[0].oneSided, false);
 });

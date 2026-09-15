@@ -217,6 +217,7 @@ export OPTICODDS_API_KEY=...                       # required
 npm run capture-props                              # this week, auto season/week
 npm run capture-props -- --season 2026 --week 1 --min-edge 0.05
 npm run capture-props -- --season 2026 --week 1 --historical   # closing lines
+npm run optic-discover -- --all                    # what the API actually returns
 npm run capture-props -- --devig-method power --edge-basis novig  # research
 npm run grade-bets                                 # grade every week with a ledger
 npm run grade-bets -- --season 2026 --week 1
@@ -231,10 +232,22 @@ reported at the end of a run rather than failing it.
 
 ### Backfilling a played week
 
-`--historical` pulls each odd's full price history and takes **the last price
-before kickoff** — the closing line. Prices after kickoff are excluded: they
-move on injury and inactive news we would not have had, so grading against
-them would be look-ahead bias.
+`--historical` uses `/fixtures/odds/historical`, which returns each odd's
+**opening** (`olv`) and **closing** (`clv`) line value directly — no scan of a
+price series needed. Closing is used by default: it's the most informed price
+the market produced and the one we could realistically have taken. The endpoint
+only covers up to kickoff, so look-ahead bias is excluded at the source.
+`--use-opening` grades against the opening line instead; the gap between the two
+measures how far a line moved after posting.
+
+Two constraints make this slow and time-limited:
+
+- **One fixture per request.** Unlike `/fixtures/odds` (5 fixtures, 5 books),
+  the historical endpoint takes a single `fixture_id`. A 16-game week across 20
+  books is 64+ requests at 10 per 15 seconds — budget a couple of minutes.
+- **History is retained on a rolling 2-month window.** A week older than that
+  can't be backfilled at any price, so backfilling is a deadline, not a task
+  that waits.
 
 ### The player crosswalk
 
@@ -242,6 +255,12 @@ OpticOdds identifies players by name; the rest of this project is keyed on
 RotoWire's `playerid`. `scripts/ingest.mjs` therefore writes
 `data/players/{season}.csv` (PlayerID, Name, Team, Pos) — the projection feed
 carries player names even though the projection *snapshot* schema drops them.
+
+This matters more than it sounds: an OpticOdds odd has **no player-name field
+at all**. It carries `player_id` (an OpticOdds hex id) and `selection`, which
+holds the player on a prop — `name` is the full label ("Joe Burrow Over 249.5"),
+not a name. Likewise `team_id` is a hex id, resolved to an abbreviation via the
+parent fixture's `competitors`.
 
 `scripts/lib/crosswalk.mjs` joins the two, matching in strict-to-loose tiers
 (name+team → name league-wide → first-initial+surname+team), normalizing

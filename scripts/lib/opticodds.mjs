@@ -258,8 +258,13 @@ export class OpticOddsClient {
     return this.getAll("/sportsbooks");
   }
 
-  async getMarkets({ sport = "football", league = "nfl" } = {}) {
-    return this.getAll("/markets", { sport, league });
+  // Market definitions for a league.
+  //
+  // `markets_only` defaults to TRUE on the API, which returns a flat list with
+  // `sports: null`. Set it false to get the sports -> leagues -> sportsbooks
+  // expansion, which is the only place the per-league book list comes from.
+  async getMarkets({ sport = "football", league = "nfl", marketsOnly = true } = {}) {
+    return this.getAll("/markets", { sport, league, markets_only: String(marketsOnly) });
   }
 
   // The books that actually price a given league, derived from /markets.
@@ -269,7 +274,11 @@ export class OpticOddsClient {
   // the only set worth spending requests on. Restricting to `marketNames`
   // narrows it further to books quoting the markets we actually model.
   async sportsbooksForLeague({ sport = "football", league = "nfl", marketNames } = {}) {
-    const markets = await this.getMarkets({ sport, league });
+    // markets_only=false is required here: the default response sets
+    // `sports` to null, and without that nesting there is no book list to
+    // derive. Confirmed against a live call that returned 317 markets, every
+    // one with `sports: null`.
+    const markets = await this.getMarkets({ sport, league, marketsOnly: false });
     const wanted = marketNames
       ? new Set(marketNames.map((m) => String(m).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()))
       : null;

@@ -7,29 +7,31 @@
 // stat defined in two places drifts, so both now live here.
 //
 // Field reference:
-//   optic     OpticOdds market-name aliases. Matched case- and
+//   opticName The EXACT live market name, confirmed against /markets on a real
+//             key (317 NFL markets returned; all 12 of ours resolved). This is
+//             what gets sent as the `market=` query param, so a capture asks
+//             for precisely the markets it models and nothing else.
+//   optic     Matching aliases. Matched case- and
 //             punctuation-insensitively (see matchStatKey), and either the
 //             market `name` ("Player Passing Yards") or its `id`
 //             ("player_passing_yards") resolves, since normalization collapses
 //             both to the same key.
 //
-//             CONFIRMED against live BetMGM NFL pulls:
-//               "Anytime Touchdown Scorer" -> anytime_touchdown_scorer  (exact)
+//             These exist because a live market list can be renamed, and a
+//             tolerant matcher is cheap. All 12 now resolve, so they are a
+//             safety net rather than guesswork.
 //
-//             The naming CONVENTION is also confirmed, and our remaining
-//             aliases follow it exactly:
-//               - title case with a "Player " prefix
-//               - gerunds, not abbreviations: "Passing"/"Rushing"/"Receiving",
-//                 evidenced by "Player Longest Passing Completion" and
-//                 "Player Rushing + Receiving Yards"
-//               - market_id is the name lowercased with spaces -> underscores
-//             So "Player Passing Yards", "Player Receptions" and the rest are
-//             very likely right — but "likely" is not "seen", and a wrong alias
-//             means that stat silently captures nothing. The samples available
-//             so far were pulled without a market filter and returned only main
-//             markets, so none of the yardage/reception props have been
-//             observed. Run `npm run optic-discover -- --markets` against a
-//             live key and prune this list to what it reports.
+//             EXACT MATCHING IS LOAD-BEARING HERE. The live NFL list runs to
+//             317 markets and includes "1st Half Player Passing Yards",
+//             "Player Passing Yards (Combo)", "Player Passing Yards (Either)"
+//             and "Player Passing Yards Each Half" alongside the one we want.
+//             Substring matching would have mapped several of those onto
+//             passYds and priced full-game projections against half- and
+//             quarter-length markets.
+//
+//             Note "Player Interceptions" is interceptions THROWN: the list
+//             carries a separate "Player Defensive Interceptions" for the
+//             defensive side, which is not something we project.
 //
 //             Player markets seen live that we deliberately do NOT model:
 //               "Player Touchdowns" — over/under on TD count. Its 0.5 line is
@@ -57,6 +59,7 @@
 
 export const STAT_DEFS = {
   anytimeTD: {
+    opticName: "Anytime Touchdown Scorer",
     optic: ["anytime touchdown scorer", "anytime touchdown", "player anytime td", "to score a touchdown", "anytime td scorer"],
     hasLine: false,
     kind: "poisson",
@@ -64,6 +67,7 @@ export const STAT_DEFS = {
     actualCols: ["RushTD", "RecptTD"],
   },
   passYds: {
+    opticName: "Player Passing Yards",
     optic: ["player passing yards", "passing yards", "pass yards"],
     hasLine: true,
     kind: "continuous",
@@ -71,6 +75,7 @@ export const STAT_DEFS = {
     actualCols: ["PassYards"],
   },
   passAtt: {
+    opticName: "Player Passing Attempts",
     optic: ["player passing attempts", "passing attempts", "pass attempts"],
     hasLine: true,
     kind: "continuous",
@@ -78,6 +83,7 @@ export const STAT_DEFS = {
     actualCols: ["PassAtt"],
   },
   completions: {
+    opticName: "Player Passing Completions",
     optic: ["player passing completions", "passing completions", "pass completions"],
     hasLine: true,
     kind: "continuous",
@@ -85,6 +91,7 @@ export const STAT_DEFS = {
     actualCols: ["PassComp"],
   },
   passTD: {
+    opticName: "Player Passing Touchdowns",
     optic: ["player passing touchdowns", "passing touchdowns", "pass tds"],
     hasLine: true,
     kind: "poisson",
@@ -92,6 +99,7 @@ export const STAT_DEFS = {
     actualCols: ["PassTD"],
   },
   int: {
+    opticName: "Player Interceptions",
     optic: ["player passing interceptions", "interceptions thrown", "player interceptions", "passing interceptions"],
     hasLine: true,
     kind: "poisson",
@@ -102,6 +110,7 @@ export const STAT_DEFS = {
     actualCols: [],
   },
   rushYds: {
+    opticName: "Player Rushing Yards",
     optic: ["player rushing yards", "rushing yards", "rush yards"],
     hasLine: true,
     kind: "continuous",
@@ -109,6 +118,7 @@ export const STAT_DEFS = {
     actualCols: ["RushYards"],
   },
   rushAtt: {
+    opticName: "Player Rushing Attempts",
     optic: ["player rushing attempts", "rushing attempts", "player carries", "rush attempts"],
     hasLine: true,
     kind: "continuous",
@@ -116,6 +126,7 @@ export const STAT_DEFS = {
     actualCols: ["Rushes"],
   },
   rushTD: {
+    opticName: "Player Rushing Touchdowns",
     optic: ["player rushing touchdowns", "rushing touchdowns", "rush tds"],
     hasLine: true,
     kind: "poisson",
@@ -123,6 +134,7 @@ export const STAT_DEFS = {
     actualCols: ["RushTD"],
   },
   receptions: {
+    opticName: "Player Receptions",
     optic: ["player receptions", "receptions", "total receptions"],
     hasLine: true,
     kind: "continuous",
@@ -130,6 +142,7 @@ export const STAT_DEFS = {
     actualCols: ["Receptions"],
   },
   recYds: {
+    opticName: "Player Receiving Yards",
     optic: ["player receiving yards", "receiving yards", "rec yards"],
     hasLine: true,
     kind: "continuous",
@@ -137,6 +150,7 @@ export const STAT_DEFS = {
     actualCols: ["ReceptYds"],
   },
   recTD: {
+    opticName: "Player Receiving Touchdowns",
     optic: ["player receiving touchdowns", "receiving touchdowns", "rec tds"],
     hasLine: true,
     kind: "poisson",
@@ -161,7 +175,7 @@ export function normalizeMarketName(name) {
 // Prebuilt alias -> stat key lookup.
 const ALIAS_TO_STAT = new Map();
 for (const [statKey, def] of Object.entries(STAT_DEFS)) {
-  for (const alias of def.optic) {
+  for (const alias of [def.opticName, ...def.optic]) {
     const norm = normalizeMarketName(alias);
     if (ALIAS_TO_STAT.has(norm) && ALIAS_TO_STAT.get(norm) !== statKey) {
       throw new Error(
@@ -185,8 +199,17 @@ export function matchStatKey(marketName) {
   return ALIAS_TO_STAT.get(normalizeMarketName(marketName)) ?? null;
 }
 
-// Every OpticOdds market name we know about — used to narrow the `market`
-// query param so we don't pull (and pay for) markets we don't model.
+// The exact market names to request, one per stat. Used for the `market=`
+// query param so a capture asks for precisely what it models.
+//
+// Deliberately NOT every alias: the aliases are spelling variants kept for
+// matching, and sending them would pad each request with names the API does
+// not recognise. Every one of these is confirmed present in the live NFL list.
 export function allOpticMarketNames() {
-  return Object.values(STAT_DEFS).flatMap((d) => d.optic);
+  return Object.values(STAT_DEFS).map((d) => d.opticName);
+}
+
+// Every alias, for tests and diagnostics that want the full matching surface.
+export function allOpticMarketAliases() {
+  return Object.values(STAT_DEFS).flatMap((d) => [d.opticName, ...d.optic]);
 }

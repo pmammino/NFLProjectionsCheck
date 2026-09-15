@@ -371,3 +371,28 @@ test("getSportsbooks sends no league filter — the endpoint has none", async ()
   assert.equal(params.get("league"), null);
   assert.equal(params.get("sport"), null);
 });
+
+test("getMarkets defaults to markets_only=true", async () => {
+  const impl = stubFetch([{ status: 200, body: { data: [], has_more: false } }]);
+  await client(impl).getMarkets({ league: "nfl" });
+  assert.equal(new URL(impl.calls[0]).searchParams.get("markets_only"), "true");
+});
+
+test("sportsbooksForLeague asks for markets_only=false", async () => {
+  // Without it the response sets `sports` to null and there is no nesting to
+  // derive a book list from — confirmed against a live call that returned 317
+  // markets, every one with sports: null.
+  const impl = stubFetch([{ status: 200, body: marketsPayload }]);
+  await client(impl).sportsbooksForLeague({ league: "nfl" });
+  assert.equal(new URL(impl.calls[0]).searchParams.get("markets_only"), "false");
+});
+
+test("a null `sports` yields no books rather than throwing", async () => {
+  // The shape the API actually returns under the default markets_only=true.
+  const impl = stubFetch([
+    { status: 200, body: { data: [{ id: "player_passing_yards", name: "Player Passing Yards", sports: null }], has_more: false } },
+  ]);
+  const books = await client(impl).sportsbooksForLeague({ league: "nfl" });
+  // Empty is the signal the caller falls back on, and it must not crash.
+  assert.deepEqual(books, []);
+});

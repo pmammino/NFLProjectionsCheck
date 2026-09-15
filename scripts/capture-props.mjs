@@ -563,7 +563,10 @@ async function main() {
       throw new Error("OpticOdds returned no sportsbooks — cannot price anything.");
     }
   }
-  console.log(`  using: ${a.resolvedBooks.slice(0, 8).join(", ")}${a.resolvedBooks.length > 8 ? ", …" : ""}`);
+  // Printed in full, not truncated: this list decides which prices the ledger
+  // is allowed to claim, and a book you cannot actually bet at makes a paper
+  // return you could never have earned. Seeing all of them is the point.
+  console.log(`  using (${a.resolvedBooks.length}): ${a.resolvedBooks.join(", ")}`);
 
   // Fixtures for the week.
   const fixtureRows = await client.getFixtures({
@@ -634,7 +637,8 @@ async function main() {
       fixtureTeams: fixture ? [fixture.homeTeam, fixture.awayTeam] : undefined,
     });
     if (!match.playerId) {
-      const key = `${market.playerName} (${market.team || "?"}) — ${match.reason}`;
+      const where = market.team || [fixture?.awayTeam, fixture?.homeTeam].filter(Boolean).join("/") || "?";
+      const key = `${market.playerName} (${where}) — ${match.reason}`;
       unmatched.set(key, (unmatched.get(key) ?? 0) + 1);
       continue;
     }
@@ -754,6 +758,7 @@ async function main() {
     `  ${betRows.length} bets clear the ${(a.minEdge * 100).toFixed(1)}% edge bar ` +
       `(${overs} over, ${betRows.length - overs} under).`
   );
+  reportBetComposition(betRows);
   writeCsvIfChanged(existingPath, toCsv(BETS_COLUMNS, betRows), a);
 
   console.log(`Done. ${client.requestCount} OpticOdds requests.`);
@@ -800,6 +805,36 @@ function reportDiagnostics(d, a_useOpening = false) {
     const top = [...d.unmatchedMarkets.entries()].sort((x, y) => y[1] - x[1]).slice(0, 8);
     console.log(`  ${d.unmatchedMarkets.size} unmodelled market names seen, most common:`);
     for (const [name, n] of top) console.log(`    ${n}× ${name}`);
+  }
+}
+
+// Where the selected bets actually came from.
+//
+// The ledger takes the best price across every book pulled, so if that best
+// price keeps landing at books you have no account with, the paper return is
+// one you could never have earned. This is the line that makes that visible —
+// a long tail of unfamiliar books is the signal to narrow --books.
+function reportBetComposition(betRows) {
+  if (betRows.length === 0) return;
+
+  const oneSided = betRows.filter((b) => b.OneSided === 1).length;
+  if (oneSided > 0) {
+    console.log(
+      `  ${oneSided}/${betRows.length} selected bets are one-sided (no opposing price), ` +
+        `so their FairProb falls back to the raw price and ModelEdge equals Edge.`
+    );
+  }
+
+  const byBook = new Map();
+  for (const b of betRows) byBook.set(b.Book, (byBook.get(b.Book) ?? 0) + 1);
+  const ranked = [...byBook.entries()].sort((x, y) => y[1] - x[1]);
+  console.log(`  best price came from ${byBook.size} distinct book(s):`);
+  for (const [book, n] of ranked.slice(0, 12)) {
+    console.log(`    ${String(n).padStart(4)}  ${book}`);
+  }
+  if (ranked.length > 12) {
+    const rest = ranked.slice(12).reduce((s, [, n]) => s + n, 0);
+    console.log(`    ${String(rest).padStart(4)}  across ${ranked.length - 12} other book(s)`);
   }
 }
 

@@ -34,7 +34,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PERSONAS, PERSONA_BY_ID, STARTING_BANKROLL_UNITS, simulateWeek, advanceBankroll } from "./lib/personas.mjs";
 import { indexClosing, computeClv, summarizeClv } from "./lib/clv.mjs";
-import { STAT_DEFS } from "./lib/markets.mjs";
+import { STAT_DEFS, isBettableStat } from "./lib/markets.mjs";
 import { americanToDecimal } from "./lib/odds.mjs";
 import { gradeOutcome } from "./lib/grading.mjs";
 import { readCsv, toCsv } from "./lib/csv.mjs";
@@ -126,8 +126,14 @@ function toEdge(row) {
 function loadEdges(a, season, week) {
   // Prefer the published edge set; fall back to the full props scan for weeks
   // captured before data/edges/ existed.
+  //
+  // Retired markets are dropped HERE rather than only at capture, because this
+  // replay reads archived snapshots that were priced while the market was
+  // still live. Filtering at capture alone would leave every already-captured
+  // week betting a stat we have retired, and the whole point of a deterministic
+  // replay is that today's rules apply to the whole season.
   for (const p of [edgesPath(a.dataDir, season, week), propsPath(a.dataDir, season, week)]) {
-    if (existsSync(p)) return readCsv(p).map(toEdge);
+    if (existsSync(p)) return readCsv(p).map(toEdge).filter((e) => isBettableStat(e.stat));
   }
   return null;
 }

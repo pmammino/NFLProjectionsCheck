@@ -232,9 +232,14 @@ function sumCols(row, cols) {
 }
 
 // Our model's P(actual > line) for one market, using that player's F/M/C.
+//
+// Returns null for a retired market (bet: false) as well as an unknown one. A
+// price we will never stake is not worth computing, and refusing here means a
+// retired stat cannot reach an edge set even if a row for it arrives from an
+// archived snapshot or a market alias we did not expect.
 export function ourProbability({ line, statKey }, splits) {
   const statDef = STAT_DEFS[statKey];
-  if (!statDef || !splits || !splits.M) return null;
+  if (!statDef || statDef.bet === false || !splits || !splits.M) return null;
   if (statDef.kind === "poisson") {
     const lambda = sumCols(splits.M, statDef.projCols);
     return probOverPoisson(line, lambda);

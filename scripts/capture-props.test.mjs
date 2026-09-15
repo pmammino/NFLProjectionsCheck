@@ -2,6 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ourProbability, PROPS_COLUMNS } from "./capture-props.mjs";
 import { LEDGER_COLUMNS } from "./simulate-personas.mjs";
+import {
+  matchStatKey,
+  isBettableStat,
+  allOpticMarketNames,
+  BETTABLE_STAT_KEYS,
+} from "./lib/markets.mjs";
 
 // Joe Burrow, week-1-shaped projection split (F/M/C rows keyed like the real
 // weekly_projections snapshot).
@@ -27,10 +33,31 @@ test("ourProbability: missing Floor/Ceiling for a continuous stat -> null (can't
 });
 
 test("ourProbability: poisson stat sums the configured projection columns", () => {
-  // Colbie Young: small rush + rec TD expectation, no Floor/Ceiling needed.
-  const splits = { M: { RushTDs: "0.02", RecTDs: "0.08" } };
-  const p = ourProbability({ line: 0.5, statKey: "anytimeTD" }, splits);
+  const splits = { M: { RecTDs: "0.1" } };
+  const p = ourProbability({ line: 0.5, statKey: "recTD" }, splits);
   assert.ok(Math.abs(p - (1 - Math.exp(-0.1))) < 1e-9);
+});
+
+// Anytime TD is defined but retired (bet: false). It must still MATCH — old
+// ledgers carry the stat key and need to label it — while never producing a
+// price, because a price is what lets a bet be selected.
+test("ourProbability: a retired market never prices, even with a full projection", () => {
+  const splits = { M: { RushTDs: "0.4", RecTDs: "0.3" } };
+  assert.equal(ourProbability({ line: 0.5, statKey: "anytimeTD" }, splits), null);
+});
+
+test("a retired market is still recognised, just not bet", () => {
+  assert.equal(matchStatKey("Anytime Touchdown Scorer"), "anytimeTD");
+  assert.equal(isBettableStat("anytimeTD"), false);
+  assert.equal(isBettableStat("rushYds"), true);
+  assert.equal(isBettableStat("notAStat"), false);
+});
+
+test("retired markets are never requested from the API", () => {
+  const names = allOpticMarketNames();
+  assert.ok(!names.includes("Anytime Touchdown Scorer"));
+  assert.ok(names.includes("Player Rushing Yards"));
+  assert.equal(names.length, BETTABLE_STAT_KEYS.length);
 });
 
 test("ourProbability: no projection at all for this player -> null", () => {

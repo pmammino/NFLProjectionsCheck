@@ -35,9 +35,10 @@
 //
 //             Player markets seen live that we deliberately do NOT model:
 //               "Player Touchdowns" — over/under on TD count. Its 0.5 line is
-//                 the same bet as Anytime TD, so modelling both would put two
-//                 perfectly correlated wagers in the ledger and double-count
-//                 one exposure. Adding it means deduping against anytimeTD.
+//                 the same bet as Anytime TD, which is now retired (bet:
+//                 false) for the reasons documented on that entry. Adding
+//                 this market would reintroduce exactly that exposure under a
+//                 different name, so it stays out.
 //               "Player Rushing + Receiving Yards" — a combo market. We project
 //                 rushing and receiving separately, but their SUM needs a joint
 //                 distribution we don't have; adding two two-piece normals
@@ -50,6 +51,10 @@
 //   hasLine   true  = over/under market with a real line (e.g. 249.5 yards)
 //             false = yes/no market treated as an implicit "over 0.5", which
 //                     matches how lib/td.ts already scores anytime TDs.
+//   bet       Omitted (the default) means we capture, price and stake it.
+//             `false` means we still RECOGNISE the market — matchStatKey
+//             resolves it, so archived rows and old ledgers keep their labels
+//             — but never request, price or bet it. See bettableStatKeys().
 //   kind      "continuous" -> two-piece-normal model off Floor/Median/Ceiling
 //             "poisson"    -> Poisson model off the projected median count
 //   projCols  weekly projection column(s) to sum for the projected value
@@ -58,9 +63,31 @@
 //             never be graded and stay pending forever.
 
 export const STAT_DEFS = {
+  // RETIRED FROM BETTING (bet: false). Kept defined so matchStatKey still
+  // resolves the market name and the 45 anytime-TD rows already in the week-1
+  // ledgers stay labelled rather than becoming an unknown stat.
+  //
+  // The Poisson model itself is NOT the problem — measured against week-1
+  // actuals it is well calibrated across the whole player population
+  // (predicted 21.2% vs actual 23.8% scored, n=294, monotonic across every
+  // probability bucket). What fails is the selection on top of it. The bets
+  // the edge filter picked hit 20.0% against an average model probability of
+  // 30.3% (n=45, -24.9% ROI). That gap is the winner's curse: the filter
+  // selects precisely the players where our number is most optimistic
+  // relative to the market, which is where our error concentrates rather
+  // than where our insight does.
+  //
+  // It concentrates there because scoring a touchdown is decided by goal-line
+  // and red-zone usage — depth-chart information books price from team
+  // reporting and we do not model at all. A season-long TD projection cannot
+  // see who gets the one-yard carry. Combined with the market being 43% of
+  // the captured prop surface and the highest-vig board in football (quoted
+  // one-sided, so the hold is not even measurable from our data), it spends
+  // most of the API budget on the bets we are least equipped to win.
   anytimeTD: {
     opticName: "Anytime Touchdown Scorer",
     optic: ["anytime touchdown scorer", "anytime touchdown", "player anytime td", "to score a touchdown", "anytime td scorer"],
+    bet: false,
     hasLine: false,
     kind: "poisson",
     projCols: ["RushTDs", "RecTDs"],
@@ -159,7 +186,19 @@ export const STAT_DEFS = {
   },
 };
 
+// Every stat we can RECOGNISE, retired ones included. Use this for labelling
+// and for reading archived data.
 export const STAT_KEYS = Object.keys(STAT_DEFS);
+
+// Every stat we actually capture, price and stake. Use this for anything that
+// decides what to request from the API or what to put money on.
+export const BETTABLE_STAT_KEYS = STAT_KEYS.filter((k) => STAT_DEFS[k].bet !== false);
+
+// Is this a stat we still bet? Retired markets return false. Unknown keys also
+// return false, so a stat we have never heard of can't leak into a ledger.
+export function isBettableStat(statKey) {
+  return STAT_DEFS[statKey]?.bet !== false && statKey in STAT_DEFS;
+}
 
 // Normalize a market name for comparison: lowercase, drop punctuation, collapse
 // whitespace. "Player Passing Yards" and "player_passing_yards" both become
@@ -205,8 +244,12 @@ export function matchStatKey(marketName) {
 // Deliberately NOT every alias: the aliases are spelling variants kept for
 // matching, and sending them would pad each request with names the API does
 // not recognise. Every one of these is confirmed present in the live NFL list.
+//
+// Retired markets (bet: false) are excluded, so a capture never spends quota
+// fetching odds that nothing will price. Dropping anytime TD alone removes 43%
+// of the rows a week-1-shaped capture used to pull.
 export function allOpticMarketNames() {
-  return Object.values(STAT_DEFS).map((d) => d.opticName);
+  return BETTABLE_STAT_KEYS.map((k) => STAT_DEFS[k].opticName);
 }
 
 // Every alias, for tests and diagnostics that want the full matching surface.

@@ -262,7 +262,25 @@ only covers up to kickoff, so look-ahead bias is excluded at the source.
 `--use-opening` grades against the opening line instead; the gap between the two
 measures how far a line moved after posting.
 
-Two constraints make this slow and time-limited:
+**Verify access before spending a week's requests.** A historical response can
+come back as a valid fixture with an empty `odds` array — an unauthorized key,
+a week past the retention window, and a book with nothing archived all look
+identical. Check one fixture first:
+
+```bash
+curl -H "X-Api-Key: $OPTICODDS_API_KEY" \
+  'https://api.opticodds.com/api/v3/fixtures/odds/historical?fixture_id=<ID>&sportsbook=BetMGM'
+```
+
+If `odds` is empty there, the backfill cannot work and the most likely cause is
+that the key lacks historical-odds permission.
+
+Because of that, **a run producing zero rows will not overwrite a populated
+snapshot** — it refuses and says so. The files under `data/` are the durable
+record of what we actually saw and can't be reconstructed once lost.
+`--allow-empty` overrides it when clearing a week is genuinely intended.
+
+Two further constraints make this slow and time-limited:
 
 - **One fixture per request.** Unlike `/fixtures/odds` (5 fixtures, 5 books),
   the historical endpoint takes a single `fixture_id`. A 16-game week across 20

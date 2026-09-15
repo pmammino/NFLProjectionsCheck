@@ -187,6 +187,7 @@ function parseArgs(argv) {
       case "--books": a.books = next().split(",").map((s) => s.trim()).filter(Boolean); break;
       case "--historical": a.historical = true; break;
       case "--use-opening": a.useOpening = true; break;
+      case "--allow-empty": a.allowEmpty = true; break;
       case "--include-offshore": a.includeOffshore = true; break;
       case "--data-dir": a.dataDir = next(); break;
       case "--dry-run": a.dryRun = true; break;
@@ -266,19 +267,47 @@ export function ourProbability({ line, statKey }, splits) {
   return probOverContinuous(line, f, m, c);
 }
 
+const csvRowCount = (csv) => Math.max(0, csv.trim().split("\n").length - 1);
+
+// Write only when the content changed, and NEVER let an empty result destroy a
+// populated snapshot.
+//
+// That guard is not hypothetical. A historical pull can legitimately return a
+// fixture with `"odds": []` — an unauthorized key, a book with no archived
+// data, or a week past the 2-month retention window all look identical to "no
+// odds". Without this, re-running `--historical` over an already-captured week
+// would replace a full ledger with a header row and call it an update. The
+// snapshots under data/ are the durable record of what we actually saw; they
+// are not reconstructible once overwritten.
+//
+// --allow-empty is the deliberate override, for genuinely wiping a week.
 function writeCsvIfChanged(path, csv, a) {
   const prev = existsSync(path) ? readFileSync(path, "utf8") : null;
   if (prev === csv) {
     console.log(`  unchanged: ${path} — no rewrite.`);
     return;
   }
+
+  const rows = csvRowCount(csv);
+  const prevRows = prev === null ? 0 : csvRowCount(prev);
+  if (rows === 0 && prevRows > 0 && !a.allowEmpty) {
+    console.error(
+      `  REFUSING to overwrite ${path}: this run produced 0 rows but the file ` +
+        `holds ${prevRows}. Nothing was written.\n` +
+        `    This usually means the pull came back empty (no odds returned), not ` +
+        `that the week has no bets.\n` +
+        `    Re-run with --allow-empty if you really mean to clear it.`
+    );
+    return;
+  }
+
   if (a.dryRun) {
-    console.log(`  [dry-run] would ${prev === null ? "write" : "update"} ${path}`);
+    console.log(`  [dry-run] would ${prev === null ? "write" : "update"} ${path} (${rows} rows)`);
     return;
   }
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, csv);
-  console.log(`  ${prev === null ? "wrote" : "updated"} ${path}`);
+  console.log(`  ${prev === null ? "wrote" : "updated"} ${path} (${rows} rows)`);
 }
 
 // Turn a paired market row into zero, one or two priced candidates — one per
@@ -547,6 +576,27 @@ async function main() {
   const fixtureById = new Map(fixtures.map((f) => [f.id, f]));
 
   const { rows: markets, diagnostics } = await fetchWeekOdds(client, a, fixtures);
+
+  // Fixtures came back but carried no odds at all. This is a distinct failure
+  // from "no bets cleared the edge bar", and it has specific causes worth
+  // naming rather than leaving the caller to guess from an empty file.
+  if (diagnostics && diagnostics.total === 0) {
+    console.error(
+      `  ${fixtures.length} fixture(s) returned, but ZERO odds records.\n` +
+        (a.historical
+          ? "    For a historical pull this usually means one of:\n" +
+            "      - the API key lacks historical-odds permission (the most common cause);\n" +
+            "      - the fixture is outside the rolling 2-month retention window;\n" +
+            "      - the requested sportsbooks archived nothing for this game.\n" +
+            "    Check with a single known fixture before spending a full week's requests:\n" +
+            "      curl -H \"X-Api-Key: $OPTICODDS_API_KEY\" \\\n" +
+            "        'https://api.opticodds.com/api/v3/fixtures/odds/historical?fixture_id=<ID>&sportsbook=BetMGM'\n"
+          : "    For a live pull this usually means the game has no odds posted yet,\n" +
+            "    or the requested markets are not offered by these books.\n" +
+            "    Run `npm run optic-discover -- --markets` to check the market names.\n")
+    );
+  }
+
   console.log(
     `  ${markets.length} distinct markets after pairing ` +
       `(${markets.filter((m) => m.oneSided).length} one-sided).`
@@ -757,6 +807,11 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                            rather than the closing one. The gap between the two
                            measures how far the market moved after posting.
   --data-dir <path>        Data root (default: data)
+  --allow-empty            Permit a run that produced 0 rows to overwrite an
+                           existing snapshot. Without this, an empty result is
+                           refused — an empty pull and a week with no bets look
+                           identical on disk, and the snapshots are the durable
+                           record.
   --dry-run                Fetch and price but do not write files
   -h, --help               Show this help
 

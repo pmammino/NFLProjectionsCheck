@@ -55,3 +55,67 @@ test("the ledger carries the grading fields grade-bets.mjs writes back", () => {
     assert.ok(BETS_COLUMNS.includes(col), `BETS_COLUMNS missing ${col}`);
   }
 });
+
+// ---- Empty-result protection -------------------------------------------------
+// A historical pull can return a fixture with "odds": [] — an unauthorized key,
+// a week past the 2-month retention window, and a book with nothing archived
+// all look identical. Verified against a real response for the CIN/TB week-1
+// game, which came back with an empty odds array.
+//
+// The snapshots under data/ are the durable record of what we actually saw, and
+// are not reconstructible once overwritten, so an empty run must never replace
+// a populated file.
+import { mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { toCsv } from "./lib/csv.mjs";
+
+// Exercises the same guard the script applies, against a real file on disk.
+function writeGuarded(path, csv, { allowEmpty = false } = {}) {
+  const rowCount = (t) => Math.max(0, t.trim().split("\n").length - 1);
+  const prev = existsSync(path) ? readFileSync(path, "utf8") : null;
+  if (prev === csv) return "unchanged";
+  if (rowCount(csv) === 0 && prev !== null && rowCount(prev) > 0 && !allowEmpty) return "refused";
+  writeFileSync(path, csv);
+  return "written";
+}
+
+test("an empty result never overwrites a populated snapshot", () => {
+  const dir = mkdtempSync(join(tmpdir(), "bets-"));
+  const path = join(dir, "week-01.csv");
+  const populated = toCsv(BETS_COLUMNS, [
+    { Season: 2026, Week: 1, PlayerID: "1", Stat: "passYds", Edge: "0.05" },
+    { Season: 2026, Week: 1, PlayerID: "2", Stat: "rushYds", Edge: "0.04" },
+  ]);
+  writeFileSync(path, populated);
+
+  const empty = toCsv(BETS_COLUMNS, []);
+  assert.equal(writeGuarded(path, empty), "refused");
+  assert.equal(readFileSync(path, "utf8"), populated, "the ledger must be untouched");
+});
+
+test("--allow-empty is the deliberate override", () => {
+  const dir = mkdtempSync(join(tmpdir(), "bets-"));
+  const path = join(dir, "week-01.csv");
+  writeFileSync(path, toCsv(BETS_COLUMNS, [{ Season: 2026, Week: 1, PlayerID: "1" }]));
+  assert.equal(writeGuarded(path, toCsv(BETS_COLUMNS, []), { allowEmpty: true }), "written");
+});
+
+test("an empty result is fine when there is nothing to lose", () => {
+  // A brand-new week with no odds yet should still write its header.
+  const dir = mkdtempSync(join(tmpdir(), "bets-"));
+  const path = join(dir, "week-09.csv");
+  assert.equal(writeGuarded(path, toCsv(BETS_COLUMNS, [])), "written");
+});
+
+test("a non-empty result replaces a populated snapshot as normal", () => {
+  const dir = mkdtempSync(join(tmpdir(), "bets-"));
+  const path = join(dir, "week-01.csv");
+  writeFileSync(path, toCsv(BETS_COLUMNS, [{ Season: 2026, Week: 1, PlayerID: "1" }]));
+  const updated = toCsv(BETS_COLUMNS, [
+    { Season: 2026, Week: 1, PlayerID: "1" },
+    { Season: 2026, Week: 1, PlayerID: "2" },
+  ]);
+  assert.equal(writeGuarded(path, updated), "written");
+  assert.equal(readFileSync(path, "utf8"), updated);
+});

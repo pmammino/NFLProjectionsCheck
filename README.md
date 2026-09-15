@@ -262,6 +262,19 @@ only covers up to kickoff, so look-ahead bias is excluded at the source.
 `--use-opening` grades against the opening line instead; the gap between the two
 measures how far a line moved after posting.
 
+**Backfilled props are OPENING lines, not closing lines.** OpticOdds returns
+`olv` (opening) and `clv` (closing) per odd, but `clv` is populated only on
+*game* markets. On a real week-1 pull it was present on 93-100% of moneyline
+and half/quarter totals and on **0 of 122 player-prop odds**. So a backfilled
+prop falls back to its opening price.
+
+This matters for interpretation, not correctness. An opening line is softer —
+the book has not yet absorbed sharp action — so a model backtested against it
+looks better than it would have performed betting at close. Every row therefore
+records a `LineSource` (`live` / `closing` / `opening`), the dashboard rolls up
+`byLineSource`, and a run that falls back says so loudly. Treat backfilled
+weeks as a separate cohort rather than pooling them with live-captured ones.
+
 **Verify access before spending a week's requests.** A historical response can
 come back as a valid fixture with an empty `odds` array — an unauthorized key,
 a week past the retention window, and a book with nothing archived all look

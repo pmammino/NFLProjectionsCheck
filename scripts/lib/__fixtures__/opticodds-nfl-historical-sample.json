@@ -1,0 +1,305 @@
+{
+  "data": [
+    {
+      "id": "20260913459E30BF",
+      "numerical_id": 871032,
+      "sport": {
+        "id": "football",
+        "name": "Football",
+        "numerical_id": 9
+      },
+      "league": {
+        "id": "nfl",
+        "name": "NFL",
+        "numerical_id": 367
+      },
+      "tournament": null,
+      "game_id": "41522-42288-26-36",
+      "home_competitors": [
+        {
+          "id": "EB3A43FF026E",
+          "numerical_id": 89,
+          "base_id": 87,
+          "name": "Cincinnati Bengals",
+          "abbreviation": "CIN",
+          "logo": "https://cdn.opticodds.com/team-logos/football/87.png"
+        }
+      ],
+      "away_competitors": [
+        {
+          "id": "4E7DB4C57393",
+          "numerical_id": 112,
+          "base_id": 110,
+          "name": "Tampa Bay Buccaneers",
+          "abbreviation": "TB",
+          "logo": "https://cdn.opticodds.com/team-logos/football/110.png"
+        }
+      ],
+      "home_team_display": "Cincinnati Bengals",
+      "away_team_display": "Tampa Bay Buccaneers",
+      "start_date": "2026-09-13T17:00:00Z",
+      "is_live": false,
+      "status": "completed",
+      "season_type": "Regular Season",
+      "season_year": "2026",
+      "season_week": "1",
+      "venue_name": "Paycor Stadium",
+      "venue_location": "Cincinnati, OH, USA",
+      "venue_neutral": false,
+      "odds": [
+        {
+          "id": "41522-42288-26-36:betmgm:anytime_touchdown_scorer:tez_johnson",
+          "sportsbook": "BetMGM",
+          "market": "Anytime Touchdown Scorer",
+          "market_id": "anytime_touchdown_scorer",
+          "name": "Tez Johnson",
+          "selection": "Tez Johnson",
+          "normalized_selection": "tez_johnson",
+          "selection_line": null,
+          "points": null,
+          "player_id": null,
+          "team_id": null,
+          "is_main": true,
+          "olv": {
+            "price": 700,
+            "points": null
+          },
+          "clv": null,
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:anytime_touchdown_scorer:bauer_sharp",
+          "sportsbook": "BetMGM",
+          "market": "Anytime Touchdown Scorer",
+          "market_id": "anytime_touchdown_scorer",
+          "name": "Bauer Sharp",
+          "selection": "Bauer Sharp",
+          "normalized_selection": "bauer_sharp",
+          "selection_line": null,
+          "points": null,
+          "player_id": null,
+          "team_id": null,
+          "is_main": true,
+          "olv": {
+            "price": 3500,
+            "points": null
+          },
+          "clv": null,
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:anytime_touchdown_scorer:cincinnati_bengals_d_st",
+          "sportsbook": "BetMGM",
+          "market": "Anytime Touchdown Scorer",
+          "market_id": "anytime_touchdown_scorer",
+          "name": "Cincinnati Bengals D/ST",
+          "selection": "Cincinnati Bengals D/ST",
+          "normalized_selection": "cincinnati_bengals_d_st",
+          "selection_line": null,
+          "points": null,
+          "player_id": null,
+          "team_id": "EB3A43FF026E",
+          "is_main": true,
+          "olv": {
+            "price": 525,
+            "points": null
+          },
+          "clv": null,
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:anytime_touchdown_scorer:tampa_bay_buccaneers_d_st",
+          "sportsbook": "BetMGM",
+          "market": "Anytime Touchdown Scorer",
+          "market_id": "anytime_touchdown_scorer",
+          "name": "Tampa Bay Buccaneers D/ST",
+          "selection": "Tampa Bay Buccaneers D/ST",
+          "normalized_selection": "tampa_bay_buccaneers_d_st",
+          "selection_line": null,
+          "points": null,
+          "player_id": null,
+          "team_id": "4E7DB4C57393",
+          "is_main": true,
+          "olv": {
+            "price": 675,
+            "points": null
+          },
+          "clv": null,
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:player_touchdowns:samaje_perine_over",
+          "sportsbook": "BetMGM",
+          "market": "Player Touchdowns",
+          "market_id": "player_touchdowns",
+          "name": "Samaje Perine over",
+          "selection": "Samaje Perine",
+          "normalized_selection": "samaje_perine",
+          "selection_line": "over",
+          "points": null,
+          "player_id": null,
+          "team_id": null,
+          "is_main": true,
+          "olv": {
+            "price": 200,
+            "points": 0.5
+          },
+          "clv": null,
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:player_touchdowns:sean_tucker_over",
+          "sportsbook": "BetMGM",
+          "market": "Player Touchdowns",
+          "market_id": "player_touchdowns",
+          "name": "Sean Tucker over",
+          "selection": "Sean Tucker",
+          "normalized_selection": "sean_tucker",
+          "selection_line": "over",
+          "points": null,
+          "player_id": null,
+          "team_id": null,
+          "is_main": true,
+          "olv": {
+            "price": 500,
+            "points": 0.5
+          },
+          "clv": null,
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:player_kicking_points:evan_mcpherson_over",
+          "sportsbook": "BetMGM",
+          "market": "Player Kicking Points",
+          "market_id": "player_kicking_points",
+          "name": "Evan McPherson over",
+          "selection": "Evan McPherson",
+          "normalized_selection": "evan_mcpherson",
+          "selection_line": "over",
+          "points": null,
+          "player_id": null,
+          "team_id": null,
+          "is_main": true,
+          "olv": {
+            "price": 105,
+            "points": 8.5
+          },
+          "clv": null,
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:player_rushing_+_receiving_yards:samaje_perine_over",
+          "sportsbook": "BetMGM",
+          "market": "Player Rushing + Receiving Yards",
+          "market_id": "player_rushing_+_receiving_yards",
+          "name": "Samaje Perine over",
+          "selection": "Samaje Perine",
+          "normalized_selection": "samaje_perine",
+          "selection_line": "over",
+          "points": null,
+          "player_id": null,
+          "team_id": null,
+          "is_main": true,
+          "olv": {
+            "price": -200,
+            "points": 24.5
+          },
+          "clv": null,
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:total_points:over",
+          "sportsbook": "BetMGM",
+          "market": "Total Points",
+          "market_id": "total_points",
+          "name": "over",
+          "selection": "",
+          "normalized_selection": "",
+          "selection_line": "over",
+          "points": null,
+          "player_id": null,
+          "team_id": null,
+          "is_main": true,
+          "olv": {
+            "price": -110,
+            "points": 52.5
+          },
+          "clv": {
+            "price": -110,
+            "points": 52.5
+          },
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:total_points:under",
+          "sportsbook": "BetMGM",
+          "market": "Total Points",
+          "market_id": "total_points",
+          "name": "under",
+          "selection": "",
+          "normalized_selection": "",
+          "selection_line": "under",
+          "points": null,
+          "player_id": null,
+          "team_id": null,
+          "is_main": true,
+          "olv": {
+            "price": -110,
+            "points": 52.5
+          },
+          "clv": {
+            "price": -110,
+            "points": 52.5
+          },
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:moneyline:cincinnati_bengals",
+          "sportsbook": "BetMGM",
+          "market": "Moneyline",
+          "market_id": "moneyline",
+          "name": "Cincinnati Bengals",
+          "selection": "Cincinnati Bengals",
+          "normalized_selection": "cincinnati_bengals",
+          "selection_line": null,
+          "points": null,
+          "player_id": null,
+          "team_id": "EB3A43FF026E",
+          "is_main": true,
+          "olv": {
+            "price": -175,
+            "points": null
+          },
+          "clv": {
+            "price": -200,
+            "points": null
+          },
+          "entries": []
+        },
+        {
+          "id": "41522-42288-26-36:betmgm:moneyline:tampa_bay_buccaneers",
+          "sportsbook": "BetMGM",
+          "market": "Moneyline",
+          "market_id": "moneyline",
+          "name": "Tampa Bay Buccaneers",
+          "selection": "Tampa Bay Buccaneers",
+          "normalized_selection": "tampa_bay_buccaneers",
+          "selection_line": null,
+          "points": null,
+          "player_id": null,
+          "team_id": "4E7DB4C57393",
+          "is_main": true,
+          "olv": {
+            "price": 145,
+            "points": null
+          },
+          "clv": {
+            "price": 165,
+            "points": null
+          },
+          "entries": []
+        }
+      ]
+    }
+  ]
+}

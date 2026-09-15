@@ -340,6 +340,7 @@ export function pairOdds(records, { statDefs }) {
         underOdds: null,
         timestamp: rec.timestamp,
         startDate: rec.startDate,
+        lineSource: rec.lineSource,
       });
     }
     const g = groups.get(key);

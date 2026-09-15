@@ -24,6 +24,7 @@ interface Bet {
   edge: number;
   modelEdge?: number | null;
   edgeBucket: string;
+  lineSource?: string;
   flatStakeUnits: number;
   kellyStakeUnits: number;
   status: "pending" | "won" | "lost" | "push" | string;

@@ -122,6 +122,7 @@ export const PROPS_COLUMNS = [
   "ModelEdge", // OurProb - FairProb : disagreement with the market's true belief
   "EdgeBasis", // which of the two the --min-edge filter was applied to
   "DevigMethod",
+  "LineSource", // live | closing | opening — see historicalToMarkets
   "FixtureID",
   "CapturedAt",
 ];
@@ -150,6 +151,7 @@ export const BETS_COLUMNS = [
   "EdgeBasis",
   "EdgeBucket",
   "DevigMethod",
+  "LineSource",
   "FlatStakeUnits",
   "KellyStakeUnits",
   "KellyFractionUsed",
@@ -501,18 +503,30 @@ function historicalToMarkets(payloads, a) {
 
   const collapsed = [];
   let noPrice = 0;
+  const bySource = { closing: 0, opening: 0, fallback: 0, timeseries: 0 };
   for (const rec of records) {
     const lv = historicalLineValue(rec, { prefer: a.useOpening ? "opening" : "closing" });
     if (!lv) {
       noPrice++;
       continue;
     }
-    collapsed.push({ ...rec, price: lv.price, points: lv.points ?? rec.points });
+    bySource[lv.source] = (bySource[lv.source] ?? 0) + 1;
+    // NOTE: on a historical odd the line lives inside olv/clv, not on the odd
+    // itself — `points` at the top level is null even for an over/under market.
+    // Record WHICH line this price is. A prop backfilled from an opening line
+    // is not the same instrument as one captured live near close, and mixing
+    // them unlabelled would quietly flatter the backtest — opening lines are
+    // softer, before the book has absorbed sharp action.
+    const lineSource = lv.source === "fallback" ? (a.useOpening ? "closing" : "opening") : lv.source;
+    collapsed.push({ ...rec, price: lv.price, points: lv.points ?? rec.points, lineSource });
   }
 
   // Re-pair using the same grouping logic the live path uses.
   const { rows, diagnostics } = pairOdds(collapsed, { statDefs: STAT_DEFS });
-  return { rows, diagnostics: { ...diagnostics, noHistoricalPrice: noPrice } };
+  return {
+    rows,
+    diagnostics: { ...diagnostics, noHistoricalPrice: noPrice, lineValueSources: bySource },
+  };
 }
 
 async function main() {
@@ -601,7 +615,7 @@ async function main() {
     `  ${markets.length} distinct markets after pairing ` +
       `(${markets.filter((m) => m.oneSided).length} one-sided).`
   );
-  reportDiagnostics(diagnostics);
+  reportDiagnostics(diagnostics, a.useOpening);
 
   // Join each market to a RotoWire player, then price it.
   const capturedAt = now.toISOString();
@@ -667,6 +681,7 @@ async function main() {
     ModelEdge: p.modelEdge.toFixed(4),
     EdgeBasis: a.edgeBasis,
     DevigMethod: p.oneSided ? "none" : a.devigMethod,
+    LineSource: p.lineSource ?? "live",
     FixtureID: p.fixtureId,
     CapturedAt: capturedAt,
   }));
@@ -721,6 +736,7 @@ async function main() {
       EdgeBasis: a.edgeBasis,
       EdgeBucket: edgeBucket(selectionEdge(p, a.edgeBasis)),
       DevigMethod: p.oneSided ? "none" : a.devigMethod,
+      LineSource: p.lineSource ?? "live",
       FlatStakeUnits: 1,
       KellyStakeUnits: (kf * 100).toFixed(4), // kf is a fraction of bankroll; 1 unit = 1%
       KellyFractionUsed: kf.toFixed(4),
@@ -743,13 +759,40 @@ async function main() {
   console.log(`Done. ${client.requestCount} OpticOdds requests.`);
 }
 
-function reportDiagnostics(d) {
+function reportDiagnostics(d, a_useOpening = false) {
   if (!d) return;
   if (d.noSide) console.warn(`  ${d.noSide} records had no identifiable side — skipped.`);
   if (d.missingPrice) console.warn(`  ${d.missingPrice} records had no usable price/line — skipped.`);
   if (d.missingPlayer) console.warn(`  ${d.missingPlayer} records had no player — skipped.`);
   if (d.teamEntries) console.log(`  ${d.teamEntries} team entries (D/ST etc.) in player markets — skipped.`);
   if (d.noHistoricalPrice) console.warn(`  ${d.noHistoricalPrice} historical odds carried neither a closing nor an opening price — skipped.`);
+  if (d.lineValueSources) {
+    const { closing = 0, opening = 0, fallback = 0, timeseries = 0 } = d.lineValueSources;
+    const total = closing + opening + fallback + timeseries;
+    if (total > 0) {
+      console.log(
+        `  line values: ${closing} closing, ${opening} opening, ${fallback} fell back, ${timeseries} from timeseries.`
+      );
+    }
+    // `clv` is frequently null — in a real week-1 BetMGM pull only ~26% of odds
+    // carried one — and a fallback silently grades against the OPENING price
+    // instead. That is a materially different number (the line moved, which is
+    // why both exist), so it gets said out loud rather than buried.
+    if (fallback > 0) {
+      const pct = ((fallback / total) * 100).toFixed(0);
+      const got = a_useOpening ? "closing" : "opening";
+      console.warn(
+        `  ${pct}% of odds had no ${a_useOpening ? "opening" : "closing"} line value and were ` +
+          `priced at the ${got} line instead (LineSource="${got}").\n` +
+          `    In a real week-1 BetMGM pull this was 100% of PLAYER props — clv is\n` +
+          `    populated on game markets but null on every player market.\n` +
+          `    An opening line is softer than a closing one: the book has not yet absorbed\n` +
+          `    sharp action, so a model backtested against it will look better than it would\n` +
+          `    have performed betting at close. Treat these rows as a separate cohort from\n` +
+          `    live-captured weeks rather than pooling them.`
+      );
+    }
+  }
   if (d.unmatchedMarkets?.size) {
     // Not necessarily a problem — most are markets we deliberately don't model
     // (moneyline, spreads, kicker props). But a market we DO want showing up

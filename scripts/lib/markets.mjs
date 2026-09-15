@@ -13,24 +13,38 @@
 //             ("player_passing_yards") resolves, since normalization collapses
 //             both to the same key.
 //
-//             CONFIRMED so far: "Anytime Touchdown Scorer" (exact, from a live
-//             BetMGM NFL pull). The rest are still educated guesses — the
-//             published /markets example covers Aussie Rules, and the live
-//             sample we have was pulled without a market filter so it only
-//             returned main markets. A wrong alias means that stat silently
-//             captures nothing, so run `npm run optic-discover -- --markets`
-//             against a live key and prune this list to what it reports.
+//             CONFIRMED against live BetMGM NFL pulls:
+//               "Anytime Touchdown Scorer" -> anytime_touchdown_scorer  (exact)
 //
-//             Markets seen live that we deliberately do NOT model:
-//               "Player Touchdowns"  — over/under on TD count. Its 0.5 line is
+//             The naming CONVENTION is also confirmed, and our remaining
+//             aliases follow it exactly:
+//               - title case with a "Player " prefix
+//               - gerunds, not abbreviations: "Passing"/"Rushing"/"Receiving",
+//                 evidenced by "Player Longest Passing Completion" and
+//                 "Player Rushing + Receiving Yards"
+//               - market_id is the name lowercased with spaces -> underscores
+//             So "Player Passing Yards", "Player Receptions" and the rest are
+//             very likely right — but "likely" is not "seen", and a wrong alias
+//             means that stat silently captures nothing. The samples available
+//             so far were pulled without a market filter and returned only main
+//             markets, so none of the yardage/reception props have been
+//             observed. Run `npm run optic-discover -- --markets` against a
+//             live key and prune this list to what it reports.
+//
+//             Player markets seen live that we deliberately do NOT model:
+//               "Player Touchdowns" — over/under on TD count. Its 0.5 line is
 //                 the same bet as Anytime TD, so modelling both would put two
 //                 perfectly correlated wagers in the ledger and double-count
-//                 the exposure. Adding it means deduping against anytimeTD.
-//               "Player Rushing + Receiving Yards" — a combo market. Our
-//                 projections carry rushing and receiving separately, but their
-//                 SUM needs a joint distribution we don't have (adding two
-//                 two-piece normals assumes an independence that isn't real for
-//                 one player's touches).
+//                 one exposure. Adding it means deduping against anytimeTD.
+//               "Player Rushing + Receiving Yards" — a combo market. We project
+//                 rushing and receiving separately, but their SUM needs a joint
+//                 distribution we don't have; adding two two-piece normals
+//                 assumes an independence that isn't real for one player's
+//                 touches.
+//               "Player Kicking Points" — we don't project kickers at all.
+//               "Player Longest Passing Completion" — an extreme-value
+//                 statistic. A projection of total yards says nothing about the
+//                 distribution of the single longest completion.
 //   hasLine   true  = over/under market with a real line (e.g. 249.5 yards)
 //             false = yes/no market treated as an implicit "over 0.5", which
 //                     matches how lib/td.ts already scores anytime TDs.

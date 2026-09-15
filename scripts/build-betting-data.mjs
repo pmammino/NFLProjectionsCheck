@@ -120,6 +120,17 @@ function build() {
     .sort((a, b) => edgeBucketOrder.indexOf(a[0]) - edgeBucketOrder.indexOf(b[0]))
     .map(([bucket, rows]) => ({ bucket, ...rollup(rows) }));
 
+  // Which line each bet was priced at. A backfilled week uses whatever
+  // historical value exists, and for PLAYER props that is always the OPENING
+  // line — OpticOdds populates `clv` on game markets but leaves it null on
+  // every player market (0 of 122 in a real week-1 pull). An opening line is
+  // softer than the closing price a real bet would have taken, so pooling
+  // backfilled rows with live-captured ones would overstate the strategy.
+  // Keeping the cohorts separate is what makes the comparison honest.
+  const byLineSource = [...groupBy(bets, (r) => r.LineSource || "live")]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([lineSource, rows]) => ({ lineSource, ...rollup(rows) }));
+
   // Overs vs unders. Unders only became bettable with the move to OpticOdds
   // (a one-sided feed can't price them), so tracking them separately is how
   // we find out whether the model is equally good in both directions — a
@@ -141,6 +152,7 @@ function build() {
     overall,
     byStat,
     bySide,
+    byLineSource,
     byEdgeBucket,
     bets: bets
       .map((r) => ({
@@ -165,6 +177,7 @@ function build() {
         edge: num(r.Edge),
         modelEdge: r.ModelEdge === "" || r.ModelEdge === undefined ? null : num(r.ModelEdge),
         edgeBucket: r.EdgeBucket,
+        lineSource: r.LineSource || "live",
         flatStakeUnits: num(r.FlatStakeUnits),
         kellyStakeUnits: num(r.KellyStakeUnits),
         status: r.Status,

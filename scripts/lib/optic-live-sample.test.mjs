@@ -11,7 +11,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { normalizeOddsPayloads, flattenOddsPayloads, readOdd } from "./optic-normalize.mjs";
+import {
+  normalizeOddsPayloads,
+  flattenOddsPayloads,
+  readOdd,
+  flattenHistoricalPayloads,
+  historicalLineValue,
+  pairOdds,
+} from "./optic-normalize.mjs";
 import { STAT_DEFS, matchStatKey } from "./markets.mjs";
 import { buildPlayerIndex, matchPlayer } from "./crosswalk.mjs";
 
@@ -155,4 +162,103 @@ test("a player absent from the roster reports not-found rather than mis-joining"
   const r = matchPlayer(index, { name: "Tyler Conklin", fixtureTeams: ["BUF", "DET"] });
   assert.equal(r.playerId, null);
   assert.equal(r.reason, "not-found");
+});
+
+// ---- Real HISTORICAL response ------------------------------------------------
+// Captured from /fixtures/odds/historical for the completed CIN/TB week-1 game.
+// The historical envelope differs from the live one in ways that would each
+// have broken the backfill silently.
+const HISTORICAL = JSON.parse(
+  readFileSync(join(__dirname, "__fixtures__", "opticodds-nfl-historical-sample.json"), "utf8")
+);
+
+test("the historical envelope replaces price/points with olv and clv", () => {
+  const odd = HISTORICAL.data[0].odds.find((o) => o.market === "Player Touchdowns");
+  assert.equal(odd.price, undefined, "no top-level price on a historical odd");
+  assert.equal(odd.points, null, "the LINE is inside olv/clv, not on the odd");
+  assert.ok(odd.olv, "olv should carry the opening price and line");
+  assert.ok(Number.isFinite(odd.olv.price));
+});
+
+test("player props carry NO player_id in the historical response", () => {
+  // Unlike the live endpoint, where anytime-TD odds DO have one. `selection`
+  // is the only identifier available here, which is why it is read first.
+  const playerMarkets = HISTORICAL.data[0].odds.filter((o) =>
+    o.market.startsWith("Player") || o.market === "Anytime Touchdown Scorer"
+  );
+  assert.ok(playerMarkets.length > 0);
+  for (const o of playerMarkets) assert.equal(o.player_id, null);
+
+  const [rec] = flattenHistoricalPayloads([HISTORICAL]).filter((r) => r.statKey === "anytimeTD");
+  assert.ok(rec.playerName.length > 0, "the name must still be recoverable from `selection`");
+  assert.equal(rec.playerId, "");
+});
+
+test("player props have NO closing line value, so the price falls back to opening", () => {
+  // Measured across the full real response: 0 of 122 player odds carried a
+  // clv, while game markets had one 93-100% of the time. A backfilled prop is
+  // therefore an OPENING-line bet, which is softer than the closing price a
+  // real wager would have taken.
+  const props = HISTORICAL.data[0].odds.filter(
+    (o) => o.market.startsWith("Player") || o.market === "Anytime Touchdown Scorer"
+  );
+  for (const o of props) assert.equal(o.clv, null, `${o.selection} unexpectedly had a clv`);
+
+  const rec = flattenHistoricalPayloads([HISTORICAL]).find((r) => r.statKey === "anytimeTD");
+  const lv = historicalLineValue(rec);
+  assert.equal(lv.source, "fallback", "closing requested, opening delivered");
+  assert.equal(lv.price, rec.olv.price);
+});
+
+test("a game market DOES carry a closing value, and it is preferred", () => {
+  // Proves the fallback above is a property of player markets, not a bug in
+  // how we read clv.
+  const ml = HISTORICAL.data[0].odds.find((o) => o.market === "Moneyline" && o.clv);
+  assert.ok(ml, "moneyline should have a clv");
+  const lv = historicalLineValue({ olv: ml.olv, clv: ml.clv });
+  assert.equal(lv.source, "closing");
+  assert.equal(lv.price, ml.clv.price);
+});
+
+test("the line comes out of olv/clv when the odd's own points is null", () => {
+  const odd = HISTORICAL.data[0].odds.find((o) => o.market === "Player Touchdowns");
+  assert.equal(odd.points, null);
+  const lv = historicalLineValue({ olv: odd.olv, clv: odd.clv });
+  assert.equal(lv.points, 0.5, "the 0.5 line lives inside olv");
+});
+
+test("the timeseries is empty without the include_timeseries permission", () => {
+  for (const o of HISTORICAL.data[0].odds) assert.deepEqual(o.entries, []);
+});
+
+test("a historical pull still pairs into markets we model", () => {
+  const recs = flattenHistoricalPayloads([HISTORICAL]);
+  const collapsed = [];
+  for (const rec of recs) {
+    const lv = historicalLineValue(rec);
+    if (!lv) continue;
+    collapsed.push({ ...rec, price: lv.price, points: lv.points ?? rec.points });
+  }
+  const { rows, diagnostics } = pairOdds(collapsed, opts);
+  assert.ok(rows.length > 0, "should recover anytime-TD markets");
+  for (const r of rows) {
+    assert.equal(r.statKey, "anytimeTD");
+    assert.equal(r.line, 0.5);
+    assert.ok(Number.isFinite(r.overOdds));
+  }
+  // D/ST rows are present in the historical anytime-TD market too.
+  assert.equal(diagnostics.teamEntries, 2);
+  assert.ok(!rows.some((r) => r.playerName.includes("D/S")));
+});
+
+test("markets we don't model are named, so a missing alias is visible", () => {
+  const recs = flattenHistoricalPayloads([HISTORICAL]);
+  const collapsed = recs.map((r) => {
+    const lv = historicalLineValue(r);
+    return lv ? { ...r, price: lv.price, points: lv.points ?? r.points } : r;
+  });
+  const { diagnostics } = pairOdds(collapsed, opts);
+  for (const m of ["Player Kicking Points", "Player Rushing + Receiving Yards", "Player Touchdowns"]) {
+    assert.ok(diagnostics.unmatchedMarkets.has(m), `${m} should be reported, not silently dropped`);
+  }
 });

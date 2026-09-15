@@ -171,6 +171,49 @@ export function normalizeProjectionRecord(rec, { season, week, split, targetsByP
 // Combine the three split feeds for a single week into weekly_projections rows.
 // `feeds` = { M: [...], C: [...], F: [...] } (each an array of raw records).
 // `targetsByPlayer` (optional) fills the Targets column — see TARGETS_SOURCE.
+// ---- data/players/{season}.csv ----------------------------------------------
+// The name -> RotoWire-id crosswalk that the OpticOdds join needs.
+//
+// The projection snapshot is keyed on PlayerID alone and carries no name,
+// which was fine while RotoWire's own props feed handed us its `playerID` on
+// every price. OpticOdds has a separate id space, so the only way to join a
+// prop to a projection is through the player's name and team — and the
+// projection FEED does carry `player`, even though the snapshot schema drops
+// it. This captures that name before it is discarded.
+//
+// Kept as its own file rather than a new column on the projections snapshot so
+// the existing schema (and every dashboard view reading it) stays untouched.
+export const ROSTER_COLUMNS = ["PlayerID", "Name", "Team", "Pos"];
+
+// Build the roster from any projection feed payload. Deduplicates by id,
+// keeping the first non-empty name seen — the three splits (M/C/F) all carry
+// the same roster, so passing any or all of them is equivalent.
+export function buildRoster(feeds) {
+  const byId = new Map();
+  for (const payload of Array.isArray(feeds) ? feeds : Object.values(feeds || {})) {
+    if (!payload) continue;
+    for (const rec of asRecords(payload)) {
+      const playerId = pick(rec, "playerid");
+      if (!playerId) continue;
+      // csv.mjs writes without quoting (every other column in this project is
+      // a number or a short code), so a comma in a name would shift every
+      // later column on that row. Strip it: no NFL name depends on a comma,
+      // and the crosswalk normalizes punctuation away before matching anyway.
+      const name = pick(rec, "player").replace(/,/g, " ").replace(/\s+/g, " ").trim();
+      if (!name) continue;
+      if (byId.has(playerId)) continue;
+      byId.set(playerId, {
+        PlayerID: playerId,
+        Name: name,
+        Team: pick(rec, "team").toUpperCase(),
+        Pos: pick(rec, "position").toUpperCase(),
+      });
+    }
+  }
+  // Sorted by id so the committed file has a stable diff week to week.
+  return [...byId.values()].sort((a, b) => Number(a.PlayerID) - Number(b.PlayerID));
+}
+
 export function normalizeProjections(feeds, { season, week, targetsByPlayer }) {
   const rows = [];
   for (const split of ["M", "C", "F"]) {

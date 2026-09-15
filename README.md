@@ -125,8 +125,11 @@ volume, and exclude-injury-suspect.
 ## Paper trading
 
 A **Paper Trading** tab compares our own Floor/Median/Ceiling projections
-against RotoWire's prop-betting lines, tracking how a simple edge-based
-betting strategy would have done — split by stat and by edge size.
+against live sportsbook prop lines, tracking how a simple edge-based betting
+strategy would have done — split by stat, by side, and by edge size.
+
+**Odds come from [OpticOdds](https://developer.opticodds.com).** Projections
+and actuals still come from RotoWire; only the odds source changed.
 
 ### How the edge is computed
 
@@ -142,16 +145,43 @@ betting strategy would have done — split by stat and by edge size.
    - **TD & turnover-count props** (Anytime TD, Pass/Rush/Rec TD, INT) use a
      **Poisson** model off the projected median count — the same approach
      `lib/td.ts` already uses for the Touchdowns tab's scoring probability.
-2. **Market probability.** RotoWire's `all-bets-props-plus-proj.php` feed is
-   scanned across ~9 books for every tracked stat. **Every market it returns
-   is single-sided** — one price (presumably "Over"/"Yes"), never an opposing
-   price — so there's no way to de-vig against this feed alone. The "market
-   probability" is therefore the vig-included implied probability of a price,
-   not a fair/no-vig line. Different books post different lines for the same
-   player/stat, so every (book, line) combination is scanned and the one with
-   the largest edge against our model is used — not just one book's price.
-3. **Edge** = our probability − that market-implied probability. A bet is
-   only placed when edge clears `--min-edge` (default 3%).
+2. **Market probability.** OpticOdds is queried for every book it offers, for
+   every market we model. It returns **both sides** of each market, which the
+   previous RotoWire feed did not, and that unlocks two things the old
+   pipeline could not do:
+   - **A de-vigged fair price.** Raw implied probabilities on a two-way market
+     sum to more than 1; the excess is the book's margin. Stripping it out
+     recovers what the market actually *believes*. See
+     `scripts/lib/devig.mjs` for the four methods available
+     (`multiplicative` — the default — plus `additive`, `power` and `shin`;
+     the last two correct the favorite–longshot bias and matter most on
+     longshot props like Anytime TD).
+   - **Betting unders.** A one-sided feed can only ever offer overs. Each
+     market is now evaluated from both directions.
+
+   Different books post different lines for the same player/stat, so every
+   (book, line, side) combination is scanned and the best one is used.
+
+3. **Edge** — two numbers, which answer different questions:
+
+   | | Formula | Answers |
+   |---|---|---|
+   | `Edge` | OurProb − **ImpliedProb** (raw) | *Does this bet make money?* |
+   | `ModelEdge` | OurProb − **FairProb** (de-vigged) | *Do we know something the market doesn't?* |
+
+   **`Edge` is what selects bets**, because the break-even probability at a
+   price *is* its raw implied probability — at −110 you must win 52.4% of the
+   time, not 50%. The vig is a cost actually paid, not an artifact to remove.
+
+   `ModelEdge` is the more interesting diagnostic but a trap as a filter: it
+   is *always* larger than `Edge`, by about half the hold, so selecting on it
+   would clear a 3% bar on markets carrying no EV at all and then size them
+   with Kelly as though they did. `--edge-basis novig` switches to it for
+   research; treat the result as a study, not a ledger.
+
+   A bet is placed when the selected edge clears `--min-edge` (default 3%).
+   Markets where only one side is quoted can't be de-vigged, so `FairProb`
+   falls back to the raw price and the row is flagged `OneSided`.
 4. **Sizing.** Every bet that clears the bar is staked two ways, tracked in
    parallel so the edge-bucket analysis isn't confounded by stake size:
    - **Flat 1 unit** — clean for asking "does a bigger edge actually win
@@ -160,35 +190,72 @@ betting strategy would have done — split by stat and by edge size.
      view. 1 unit = 1% of bankroll (a Kelly fraction is bankroll-size-
      independent, so no bankroll amount is ever needed).
 
+   A result landing exactly on a whole-number line is a **push**: the stake is
+   returned, and it counts toward staked volume (so ROI is unaffected) but not
+   toward the win-rate denominator. Half-point lines can never push.
+
 ### Pipeline
 
 ```
+scripts/optic-discover.mjs  # one-off: print what the OpticOdds API actually
+                             #   returns (books, markets, fixtures, raw odds
+                             #   records beside our parse of them)
 scripts/capture-props.mjs   # Wednesday AM: fetch lines, price vs. our model,
                              #   write data/props/{season}/week-NN.csv (every
                              #   price scanned) and data/bets/{season}/week-NN.csv
                              #   (the ones that clear --min-edge)
-scripts/grade-bets.mjs      # daily, as actuals land: fills in Won/Lost + PnL
-                             #   for bets whose player's game has completed
+scripts/grade-bets.mjs      # daily, as actuals land: fills in Won/Lost/Push +
+                             #   PnL for bets whose player's game has completed
 scripts/build-betting-data.mjs  # predev/prebuild: aggregates the ledger into
                              #   public/data/betting.json (bet log + ROI/win-
-                             #   rate rollups by stat and by edge bucket)
+                             #   rate rollups by stat, side and edge bucket)
 ```
 
 ```bash
+export OPTICODDS_API_KEY=...                       # required
+
 npm run capture-props                              # this week, auto season/week
-npm run capture-props -- --season 2025 --week 1 --min-edge 0.05
+npm run capture-props -- --season 2026 --week 1 --min-edge 0.05
+npm run capture-props -- --season 2026 --week 1 --historical   # closing lines
+npm run capture-props -- --devig-method power --edge-basis novig  # research
 npm run grade-bets                                 # grade every week with a ledger
-npm run grade-bets -- --season 2025 --week 1
+npm run grade-bets -- --season 2026 --week 1
 ```
 
 Tracked stats: Anytime TD, Pass Yards, Pass Attempts, Completions, Pass TD,
 Interceptions, Rush Yards, Rush Attempts, Rush TD, Receptions, Rec Yards, Rec
-TD. A stat RotoWire doesn't currently offer as a prop is skipped with a
-warning rather than failing the run (see `scripts/lib/props.mjs`).
+TD — each defined once in `scripts/lib/markets.mjs` (its OpticOdds market
+aliases, its probability model, and the projection and actuals columns it maps
+to). Market names OpticOdds returns that we don't model are counted and
+reported at the end of a run rather than failing it.
+
+### Backfilling a played week
+
+`--historical` pulls each odd's full price history and takes **the last price
+before kickoff** — the closing line. Prices after kickoff are excluded: they
+move on injury and inactive news we would not have had, so grading against
+them would be look-ahead bias.
+
+### The player crosswalk
+
+OpticOdds identifies players by name; the rest of this project is keyed on
+RotoWire's `playerid`. `scripts/ingest.mjs` therefore writes
+`data/players/{season}.csv` (PlayerID, Name, Team, Pos) — the projection feed
+carries player names even though the projection *snapshot* schema drops them.
+
+`scripts/lib/crosswalk.mjs` joins the two, matching in strict-to-loose tiers
+(name+team → name league-wide → first-initial+surname+team), normalizing
+punctuation, accents, generational suffixes and team-abbreviation variants
+along the way. **It refuses to guess**: two different players sharing a key
+report as ambiguous and are skipped, because a wrong join would price a bet
+against the wrong player's projection and corrupt the ledger silently. Every
+unmatched name is printed at the end of a capture run — a rising count there
+means the roster snapshot is stale.
 
 `.github/workflows/props-weekly.yml` runs the capture every **Wednesday ~8am
-ET**; `.github/workflows/ingest-weekly.yml`'s existing daily run grades
-pending bets right after it refreshes actuals.
+ET** and needs the **`OPTICODDS_API_KEY`** repository secret;
+`.github/workflows/ingest-weekly.yml`'s existing daily run grades pending bets
+right after it refreshes actuals.
 
 ## Live weekly ingestion
 
@@ -280,6 +347,24 @@ needs a session cookie, provided via the `ROTOWIRE_COOKIE` repo secret:
 The workflow already passes it to the ingest. If projections come back tiny, the
 ingest logs a loud warning — that means the cookie is missing or expired (RotoWire
 sessions expire periodically, so this may need refreshing).
+
+### Authentication — `OPTICODDS_API_KEY` (required for odds)
+
+All odds come from OpticOdds, which authenticates with an `X-Api-Key` header.
+Set the key as the `OPTICODDS_API_KEY` repository secret (**Settings → Secrets
+and variables → Actions**) and export it locally to run a capture by hand.
+`scripts/capture-props.mjs` fails fast without it rather than writing an empty
+ledger, and the workflow checks for it before running.
+
+The key is only ever sent as a header, never as a query parameter, so it can't
+leak into a logged URL or an error message.
+
+Two API limits shape how a week is pulled, and `scripts/lib/opticodds.mjs`
+handles both: `/fixtures/odds` accepts at most **5 sportsbooks and 5 fixtures
+per request** (as repeated query params, not comma-joined), and the historical
+endpoints are rate-limited to **10 requests per 15 seconds**. A full week is
+therefore dozens of requests, issued through a sliding-window limiter with
+jittered backoff on 429s.
 
 > **Note — post-kickoff refreshes:** snapshots are per player-week, so a player
 > whose game kicks off early (e.g. Thursday) can still have that week's row

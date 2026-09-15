@@ -7,6 +7,8 @@ import {
   ACTUAL_COLUMNS,
   normalizeProjectionRecord,
   normalizeProjections,
+  buildRoster,
+  ROSTER_COLUMNS,
   mergeActuals,
   asRecords,
   toCsv,
@@ -282,4 +284,52 @@ test("mergeActuals works when a feed is wrapped in a { data: [...] } object", ()
   );
   assert.equal(rows.length, 3);
   assert.equal(rows.find((r) => r.ID === "12483").PassAtt, "46");
+});
+
+// ---- buildRoster -------------------------------------------------------------
+// The name -> id crosswalk that the OpticOdds join depends on. The projection
+// SNAPSHOT drops the player name, so this captures it from the feed first.
+
+const ROSTER_FEED = [
+  { playerid: "14442", player: "Joe Burrow", team: "cin", position: "qb" },
+  { playerid: "16965", player: "Andrei Iosivas", team: "CIN", position: "WR" },
+  { playerid: "", player: "No Id", team: "CIN", position: "WR" },
+  { playerid: "99999", player: "", team: "CIN", position: "WR" },
+];
+
+test("buildRoster extracts id, name, team and position from a projection feed", () => {
+  const roster = buildRoster({ M: ROSTER_FEED });
+  assert.equal(roster.length, 2);
+  assert.deepEqual(roster[0], { PlayerID: "14442", Name: "Joe Burrow", Team: "CIN", Pos: "QB" });
+  assert.deepEqual(Object.keys(roster[0]), ROSTER_COLUMNS);
+});
+
+test("buildRoster skips rows with no id or no name", () => {
+  const roster = buildRoster({ M: ROSTER_FEED });
+  assert.ok(!roster.some((r) => r.PlayerID === "" || r.PlayerID === "99999"));
+});
+
+test("buildRoster deduplicates a player across the three splits", () => {
+  // M/C/F all carry the same roster; the result must not triple.
+  const roster = buildRoster({ M: ROSTER_FEED, C: ROSTER_FEED, F: ROSTER_FEED });
+  assert.equal(roster.length, 2);
+});
+
+test("buildRoster sorts by id so the committed file has a stable diff", () => {
+  const roster = buildRoster({ M: ROSTER_FEED });
+  const ids = roster.map((r) => Number(r.PlayerID));
+  assert.deepEqual(ids, [...ids].sort((a, b) => a - b));
+});
+
+test("buildRoster strips commas, which the unquoted CSV writer cannot carry", () => {
+  // A comma in a name would shift every later column on that row.
+  const roster = buildRoster({ M: [{ playerid: "1", player: "Smith, Jr.", team: "CIN", position: "RB" }] });
+  assert.equal(roster[0].Name, "Smith Jr.");
+  assert.ok(!toCsv(ROSTER_COLUMNS, roster).split("\n")[1].startsWith("1,Smith,"));
+});
+
+test("buildRoster accepts an array of feeds as well as a split map", () => {
+  assert.equal(buildRoster([ROSTER_FEED]).length, 2);
+  assert.equal(buildRoster([]).length, 0);
+  assert.equal(buildRoster({}).length, 0);
 });

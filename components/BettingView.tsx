@@ -14,14 +14,19 @@ interface Bet {
   stat: string;
   book: string;
   line: number;
+  side?: string;
   odds: number;
   impliedProb: number;
+  fairProb?: number | null;
+  hold?: number | null;
+  oneSided?: boolean;
   ourProb: number;
   edge: number;
+  modelEdge?: number | null;
   edgeBucket: string;
   flatStakeUnits: number;
   kellyStakeUnits: number;
-  status: "pending" | "won" | "lost" | string;
+  status: "pending" | "won" | "lost" | "push" | string;
   actual: number | null;
   pnlFlatUnits: number | null;
   pnlKellyUnits: number | null;
@@ -173,6 +178,7 @@ export default function BettingView() {
                 <th className="px-3 py-2">Player</th>
                 <th className="px-3 py-2">Stat</th>
                 <th className="px-3 py-2 text-right">Line</th>
+                <th className="px-3 py-2">Side</th>
                 <th className="px-3 py-2">Book</th>
                 <th className="px-3 py-2 text-right">Odds</th>
                 <th className="px-3 py-2 text-right">Our %</th>
@@ -192,12 +198,23 @@ export default function BettingView() {
                   </td>
                   <td className="px-3 py-2 text-slate-300">{STAT_LABELS[b.stat] ?? b.stat}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-300">{b.line}</td>
+                  <td className="px-3 py-2 text-slate-300">{b.side ?? "over"}</td>
                   <td className="px-3 py-2 text-slate-400">{b.book}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-400">
                     {b.odds > 0 ? `+${b.odds}` : b.odds}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-blue-300">{pct(b.ourProb)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-400">{pct(b.impliedProb)}</td>
+                  <td
+                    className="px-3 py-2 text-right tabular-nums text-slate-400"
+                    title={
+                      b.fairProb != null && !b.oneSided
+                        ? `raw ${pct(b.impliedProb)} (incl. vig) · no-vig ${pct(b.fairProb)}`
+                        : "one-sided market — no opposing price, so no de-vig available"
+                    }
+                  >
+                    {pct(b.impliedProb)}
+                    {b.oneSided ? <span className="ml-1 text-amber-500/70">*</span> : null}
+                  </td>
                   <td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-300">{pct(b.edge)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-300">{b.actual ?? "—"}</td>
                   <td className="px-3 py-2">
@@ -251,10 +268,22 @@ function PaperTradingExplainer() {
           projected median count (same approach as the Touchdowns tab).
         </li>
         <li>
-          <b>Edge</b> = our probability − the best available price&apos;s
-          implied probability. Every market here is single-sided (the feed
-          only ever surfaces one price, no opposing side), so this is edge
-          against a vig-included market price, not a de-vigged fair line.
+          <b>Edge</b> = our probability − the price&apos;s raw implied
+          probability. That raw number is the break-even point: at −110 you
+          need to win 52.4% of the time, not 50%, because the vig is a real
+          cost. Odds now come from OpticOdds, which quotes both sides, so we
+          also record a de-vigged <b>fair</b> probability — what the market
+          actually believes. Our gap to that is a measure of whether the model
+          knows something the market doesn&apos;t, and it is always the larger
+          number, which is exactly why it isn&apos;t what we bet on. Markets
+          marked <span className="text-amber-500/70">*</span> are one-sided, so
+          no fair price could be derived.
+        </li>
+        <li>
+          <b>Sides</b>: with both prices available, a projection sitting well
+          below the line is as actionable as one above it, so unders are bet
+          too. A result landing exactly on a whole-number line is a push and
+          returns the stake.
         </li>
         <li>
           <b>Sizing</b>: bets clearing a 3% edge are staked two ways — a flat 1
@@ -272,6 +301,8 @@ function StatusBadge({ status }: { status: string }) {
       ? "bg-green-900/60 text-green-300"
       : status === "lost"
       ? "bg-red-900/60 text-red-300"
+      : status === "push"
+      ? "bg-amber-900/50 text-amber-300"
       : "bg-slate-800 text-slate-400";
   return <span className={`rounded px-1.5 py-0.5 text-[11px] ${cls}`}>{status}</span>;
 }

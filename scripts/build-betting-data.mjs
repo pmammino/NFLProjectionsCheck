@@ -42,10 +42,19 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+const SETTLED = new Set(["won", "lost", "push"]);
+
 // Roll a set of bet rows up into count/win-rate/ROI, for both stake methods.
 function rollup(rows) {
-  const graded = rows.filter((r) => r.Status === "won" || r.Status === "lost");
+  const graded = rows.filter((r) => SETTLED.has(r.Status));
   const wins = graded.filter((r) => r.Status === "won").length;
+  const pushes = graded.filter((r) => r.Status === "push").length;
+  // Win rate is wins over DECIDED bets: a push returns the stake and is
+  // neither a win nor a loss, so counting it in the denominator would drag
+  // the rate down as if it were a loss.
+  const decided = graded.length - pushes;
+  // ROI keeps pushes in the denominator — the stake was still committed, it
+  // just came back — so a book of pushes correctly reads as 0% ROI.
   const flatStaked = graded.reduce((s, r) => s + num(r.FlatStakeUnits), 0);
   const flatPnl = graded.reduce((s, r) => s + num(r.PnlFlatUnits), 0);
   const kellyStaked = graded.reduce((s, r) => s + num(r.KellyStakeUnits), 0);
@@ -54,8 +63,17 @@ function rollup(rows) {
     nTotal: rows.length,
     nGraded: graded.length,
     nPending: rows.length - graded.length,
-    winRate: graded.length ? wins / graded.length : null,
+    nPush: pushes,
+    winRate: decided > 0 ? wins / decided : null,
     avgEdge: rows.length ? rows.reduce((s, r) => s + num(r.Edge), 0) / rows.length : null,
+    // How far our model sits from the market's DE-VIGGED belief, averaged over
+    // the same bets. Structurally larger than avgEdge by about half the hold;
+    // the gap between the two is the margin we are paying to play.
+    // avgOf, not a plain mean: ledgers written before the OpticOdds migration
+    // have no ModelEdge at all, and counting those blanks as zero would drag
+    // the average toward nothing rather than reporting on the rows that have it.
+    avgModelEdge: avgOf(rows.map((r) => r.ModelEdge)),
+    avgHold: avgOf(rows.map((r) => r.Hold)),
     flatStaked: round(flatStaked),
     flatPnl: round(flatPnl),
     flatRoi: flatStaked > 0 ? round(flatPnl / flatStaked) : null,
@@ -63,6 +81,14 @@ function rollup(rows) {
     kellyPnl: round(kellyPnl),
     kellyRoi: kellyStaked > 0 ? round(kellyPnl / kellyStaked) : null,
   };
+}
+
+// Mean of the values that are actually present — a blank Hold (a one-sided
+// market) is "unknown", not zero, and averaging it in as zero would understate
+// the real market margin.
+function avgOf(values) {
+  const nums = values.map(Number).filter((n) => Number.isFinite(n));
+  return nums.length ? round(nums.reduce((s, n) => s + n, 0) / nums.length) : null;
 }
 
 function round(n, d = 4) {
@@ -94,6 +120,15 @@ function build() {
     .sort((a, b) => edgeBucketOrder.indexOf(a[0]) - edgeBucketOrder.indexOf(b[0]))
     .map(([bucket, rows]) => ({ bucket, ...rollup(rows) }));
 
+  // Overs vs unders. Unders only became bettable with the move to OpticOdds
+  // (a one-sided feed can't price them), so tracking them separately is how
+  // we find out whether the model is equally good in both directions — a
+  // model that only beats the market on overs is usually one with a
+  // systematic upward bias rather than real edge.
+  const bySide = [...groupBy(bets, (r) => r.Side || "over")]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([side, rows]) => ({ side, ...rollup(rows) }));
+
   const overall = rollup(bets);
 
   const dataset = {
@@ -105,6 +140,7 @@ function build() {
     },
     overall,
     byStat,
+    bySide,
     byEdgeBucket,
     bets: bets
       .map((r) => ({
@@ -118,10 +154,16 @@ function build() {
         stat: r.Stat,
         book: r.Book,
         line: num(r.Line),
+        side: r.Side || "over",
         odds: num(r.Odds),
+        oppositeOdds: r.OppositeOdds === "" || r.OppositeOdds === undefined ? null : num(r.OppositeOdds),
         impliedProb: num(r.ImpliedProb),
+        fairProb: r.FairProb === "" || r.FairProb === undefined ? null : num(r.FairProb),
+        hold: r.Hold === "" || r.Hold === undefined ? null : num(r.Hold),
+        oneSided: r.OneSided === "1",
         ourProb: num(r.OurProb),
         edge: num(r.Edge),
+        modelEdge: r.ModelEdge === "" || r.ModelEdge === undefined ? null : num(r.ModelEdge),
         edgeBucket: r.EdgeBucket,
         flatStakeUnits: num(r.FlatStakeUnits),
         kellyStakeUnits: num(r.KellyStakeUnits),

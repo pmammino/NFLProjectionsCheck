@@ -30,11 +30,14 @@ import { fileURLToPath } from "node:url";
 import {
   PROJECTION_COLUMNS,
   ACTUAL_COLUMNS,
+  ROSTER_COLUMNS,
   normalizeProjections,
+  buildRoster,
   mergeActuals,
   asRecords,
   toCsv,
 } from "./lib/rotowire.mjs";
+import { readCsv } from "./lib/csv.mjs";
 import { seasonForDate, currentNflWeek, projectionWeek } from "./lib/schedule.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -108,6 +111,7 @@ const projPath = (dir, season, week) =>
   join(ROOT, dir, "projections", String(season), `week-${pad2(week)}.csv`);
 const actualPath = (dir, season, week) =>
   join(ROOT, dir, "actuals", String(season), `week-${pad2(week)}.csv`);
+const rosterPath = (dir, season) => join(ROOT, dir, "players", `${season}.csv`);
 
 const csvRowCount = (csv) => Math.max(0, csv.trim().split("\n").length - 1);
 
@@ -183,6 +187,34 @@ async function ingestProjections(a) {
   // Refresh in place: the daily run keeps this week's projection current as
   // injuries and other context land, until the week's games roll it over.
   writeCsvIfChanged(path, toCsv(PROJECTION_COLUMNS, rows), a, { guardRollover: true });
+
+  // Capture the name -> id crosswalk the OpticOdds join depends on. The
+  // projection snapshot itself is keyed on PlayerID with no name, and this is
+  // the only point in the pipeline where the feed's `player` field is still in
+  // hand. Season-scoped and accumulating: a player who appears in any week
+  // stays in the roster, so a mid-season capture can still resolve someone
+  // whose team has since changed or who has dropped off the projection slate.
+  const roster = buildRoster({ M, C, F });
+  if (roster.length > 0) {
+    const rPath = rosterPath(a.dataDir, a.season);
+    const merged = mergeRoster(rPath, roster);
+    writeCsvIfChanged(rPath, toCsv(ROSTER_COLUMNS, merged), a);
+  }
+}
+
+// Merge this week's roster into whatever is already on disk. Newly-seen
+// players are added; an existing player's name/team/position are refreshed to
+// the latest (teams change mid-season, and the current team is what OpticOdds
+// will be reporting).
+function mergeRoster(path, roster) {
+  const byId = new Map();
+  if (existsSync(path)) {
+    for (const row of readCsv(path)) {
+      if (row.PlayerID) byId.set(row.PlayerID, row);
+    }
+  }
+  for (const row of roster) byId.set(row.PlayerID, row);
+  return [...byId.values()].sort((a, b) => Number(a.PlayerID) - Number(b.PlayerID));
 }
 
 async function ingestActuals(a) {

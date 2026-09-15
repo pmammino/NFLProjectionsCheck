@@ -1,9 +1,12 @@
 name: Capture weekly prop lines
 
-# Captures RotoWire prop lines (data/props/) and prices them against our own
+# Captures OpticOdds prop lines (data/props/) and prices them against our own
 # Floor/Median/Ceiling projections into a paper-trading bet ledger
 # (data/bets/) — see scripts/capture-props.mjs and README's "Paper trading"
 # section.
+#
+# Requires the OPTICODDS_API_KEY secret. Without it the capture step fails
+# fast rather than silently writing an empty ledger.
 #
 # Runs weekly, Wednesday morning, once that week's projections snapshot
 # exists (scripts/ingest.mjs runs daily and produces it). Grading happens
@@ -27,6 +30,18 @@ on:
         description: "Minimum edge to place a paper bet, e.g. 0.03"
         required: false
         default: "0.03"
+      edgeBasis:
+        description: "ev (profitability, default) or novig (model disagreement — research only)"
+        required: false
+        default: "ev"
+      sides:
+        description: "both | over | under"
+        required: false
+        default: "both"
+      historical:
+        description: "Set to true to pull closing lines for a week already played"
+        required: false
+        default: "false"
 
 permissions:
   contents: write
@@ -47,14 +62,21 @@ jobs:
 
       - name: Capture props
         env:
-          ROTOWIRE_COOKIE: ${{ secrets.ROTOWIRE_COOKIE }}
+          OPTICODDS_API_KEY: ${{ secrets.OPTICODDS_API_KEY }}
           SEASON: ${{ github.event.inputs.season }}
           WEEK: ${{ github.event.inputs.week }}
         run: |
+          if [ -z "$OPTICODDS_API_KEY" ]; then
+            echo "::error::OPTICODDS_API_KEY secret is not set — odds cannot be captured."
+            exit 1
+          fi
           args=""
           if [ -n "${{ github.event.inputs.season }}" ]; then args="$args --season ${{ github.event.inputs.season }}"; fi
           if [ -n "${{ github.event.inputs.week }}" ]; then args="$args --week ${{ github.event.inputs.week }}"; fi
           if [ -n "${{ github.event.inputs.minEdge }}" ]; then args="$args --min-edge ${{ github.event.inputs.minEdge }}"; fi
+          if [ -n "${{ github.event.inputs.edgeBasis }}" ]; then args="$args --edge-basis ${{ github.event.inputs.edgeBasis }}"; fi
+          if [ -n "${{ github.event.inputs.sides }}" ]; then args="$args --sides ${{ github.event.inputs.sides }}"; fi
+          if [ "${{ github.event.inputs.historical }}" = "true" ]; then args="$args --historical"; fi
           echo "Running: node scripts/capture-props.mjs $args"
           node scripts/capture-props.mjs $args
 

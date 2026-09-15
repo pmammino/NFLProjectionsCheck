@@ -292,10 +292,17 @@ test("every stat maps to its confirmed live market name", () => {
   assert.equal(Object.keys(CONFIRMED).length, Object.keys(DEFS).length);
 });
 
-test("the market query asks for exactly our twelve markets", () => {
+// The confirmed names above cover all 12 stats we can RECOGNISE, but a capture
+// only asks for the ones we still bet. Anytime TD is retired (bet: false), so
+// it must resolve when seen and never be requested.
+test("the market query asks for exactly the markets we still bet", () => {
   const names = allOpticMarketNames();
-  assert.equal(names.length, 12);
-  assert.deepEqual(new Set(names), new Set(Object.values(CONFIRMED)));
+  const expected = Object.entries(CONFIRMED)
+    .filter(([statKey]) => DEFS[statKey].bet !== false)
+    .map(([, name]) => name);
+  assert.equal(names.length, 11);
+  assert.deepEqual(new Set(names), new Set(expected));
+  assert.ok(!names.includes("Anytime Touchdown Scorer"));
 });
 
 test("period-scoped variants never collide with the full-game market", () => {

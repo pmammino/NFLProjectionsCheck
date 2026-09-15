@@ -86,7 +86,13 @@
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { STAT_DEFS, allOpticMarketNames } from "./lib/markets.mjs";
+import { STAT_DEFS, allOpticMarketNames, projectedValue } from "./lib/markets.mjs";
+import {
+  meetsSupportFloor,
+  marketsExceedingTolerance,
+  marketIdentity,
+  MAX_MARKET_DISAGREEMENT,
+} from "./lib/calibration.mjs";
 import { probOverContinuous, probOverPoisson } from "./lib/probability.mjs";
 import { americanToProb, americanToDecimal, kellyFraction } from "./lib/odds.mjs";
 import { devigTwoWay, DEFAULT_DEVIG_METHOD, DEVIG_METHODS } from "./lib/devig.mjs";
@@ -118,6 +124,7 @@ export const PROPS_COLUMNS = [
   "Book",
   "Line",
   "Side",
+  "Proj", // our projected median for this stat — the value the support floor gates on
   "Odds",
   "OppositeOdds",
   "ImpliedProb", // raw, vig-inclusive — the old methodology's denominator
@@ -232,9 +239,14 @@ function sumCols(row, cols) {
 }
 
 // Our model's P(actual > line) for one market, using that player's F/M/C.
+//
+// Returns null for a retired market (bet: false) as well as an unknown one. A
+// price we will never stake is not worth computing, and refusing here means a
+// retired stat cannot reach an edge set even if a row for it arrives from an
+// archived snapshot or a market alias we did not expect.
 export function ourProbability({ line, statKey }, splits) {
   const statDef = STAT_DEFS[statKey];
-  if (!statDef || !splits || !splits.M) return null;
+  if (!statDef || statDef.bet === false || !splits || !splits.M) return null;
   if (statDef.kind === "poisson") {
     const lambda = sumCols(splits.M, statDef.projCols);
     return probOverPoisson(line, lambda);
@@ -295,13 +307,23 @@ function writeCsvIfChanged(path, csv, a) {
 // The two sides are NOT mirror images of each other once vig is involved:
 // P(over) and P(under) sum to 1 after de-vigging, but the PRICES do not, so a
 // market can carry an edge on one side, both, or neither.
-function priceMarket(market, splits, a) {
+function priceMarket(market, splits, a, reject = null) {
   const probOver = ourProbability(market, splits);
   if (probOver === null) return [];
 
   const rawOver = americanToProb(market.overOdds);
   const rawUnder = market.underOdds === null ? null : americanToProb(market.underOdds);
   if (rawOver === null) return [];
+
+  // Guard 1 (support floor) applies to the MARKET, not to a side: if our
+  // projection sits where the model has been shown not to work, neither side
+  // of it is bettable. Checked before any candidate is built so a rejected
+  // market produces no rows at all.
+  const proj = projectedValue(splits.M, market.statKey);
+  if (!meetsSupportFloor({ stat: market.statKey, projectedMedian: proj, line: market.line })) {
+    reject?.("support-floor", market.statKey);
+    return [];
+  }
 
   const devigged = market.oneSided
     ? null
@@ -328,6 +350,7 @@ function priceMarket(market, splits, a) {
       hold: devigged ? devigged.hold : null,
       edge: probOver - rawOver, // EV: break-even is the raw implied price
       modelEdge: probOver - fair, // disagreement with the market's belief
+      proj,
     });
   }
 
@@ -345,9 +368,14 @@ function priceMarket(market, splits, a) {
       hold: devigged.hold,
       edge: probUnder - rawUnder,
       modelEdge: probUnder - devigged.fairProbUnder,
+      proj,
     });
   }
 
+  // Guard 2 (the market-disagreement cap) is NOT applied here. It needs every
+  // book's price for a market before it can judge the consensus, and this
+  // function only ever sees one book. It runs as a pass over all candidates
+  // once pricing is done — see applyCalibrationGuards.
   return out;
 }
 
@@ -641,6 +669,14 @@ async function main() {
   const priced = [];
   const unmatched = new Map();
   let noProjection = 0;
+  // Calibration guards, counted by reason and stat. A run that silently
+  // captured half as much as last week would look like an API problem; these
+  // counts make it obvious that it was our own filters instead.
+  const rejected = new Map();
+  const countRejection = (reason, statKey) => {
+    const key = `${reason}|${statKey}`;
+    rejected.set(key, (rejected.get(key) ?? 0) + 1);
+  };
 
   for (const market of markets) {
     const fixture = fixtureById.get(market.fixtureId);
@@ -663,7 +699,7 @@ async function main() {
       noProjection++;
       continue;
     }
-    for (const cand of priceMarket(market, splits, a)) {
+    for (const cand of priceMarket(market, splits, a, countRejection)) {
       priced.push({
         ...cand,
         rotowirePlayerId: match.playerId,
@@ -674,11 +710,29 @@ async function main() {
     }
   }
 
-  console.log(`  ${priced.length} priced candidates across ${new Set(priced.map((p) => p.rotowirePlayerId)).size} players.`);
+  // The market-disagreement cap, now that every book's price is in hand.
+  // The support floor already ran inside priceMarket, so nothing here can be
+  // a market we declined to price.
+  const consensusCut = marketsExceedingTolerance(
+    priced.map((p) => ({
+      marketKey: marketIdentity({ playerId: p.rotowirePlayerId, stat: p.statKey, line: p.line, side: p.side }),
+      ourProb: p.ourProb,
+      fairProb: p.fairProb,
+    }))
+  );
+  const survived = priced.filter((p) => {
+    const key = marketIdentity({ playerId: p.rotowirePlayerId, stat: p.statKey, line: p.line, side: p.side });
+    if (!consensusCut.has(key)) return true;
+    countRejection("market-disagreement", p.statKey);
+    return false;
+  });
+
+  console.log(`  ${survived.length} priced candidates across ${new Set(survived.map((p) => p.rotowirePlayerId)).size} players.`);
   reportUnmatched(unmatched, noProjection);
+  reportCalibrationRejections(rejected);
 
   // ---- data/props snapshot: every priced candidate ----
-  const propsRows = priced.map((p) => ({
+  const propsRows = survived.map((p) => ({
     Season: a.season,
     Week: a.week,
     PlayerID: p.rotowirePlayerId,
@@ -690,6 +744,7 @@ async function main() {
     Book: p.sportsbook,
     Line: p.line,
     Side: p.side,
+    Proj: p.proj ?? "",
     Odds: p.odds,
     OppositeOdds: p.oppositeOdds ?? "",
     ImpliedProb: p.impliedProb.toFixed(4),
@@ -798,6 +853,35 @@ function reportDiagnostics(d, a_useOpening = false) {
 // which books the edges live at (a set concentrated in books nobody holds an
 // account with is not an actionable signal), and how many are one-sided
 // (those carry no de-vigged fair price, so ModelEdge equals Edge on them).
+// What the calibration guards threw away, and why.
+//
+// Worth printing every run even when it is boring. A support-floor count that
+// suddenly covers a stat it never used to means the projections shifted; a
+// market-disagreement count that climbs above a trickle means the model has
+// broken somewhere new and the cap is papering over it. Both are invisible if
+// only the surviving candidates are reported.
+function reportCalibrationRejections(rejected) {
+  if (rejected.size === 0) return;
+  const byReason = new Map();
+  for (const [key, n] of rejected) {
+    const [reason, stat] = key.split("|");
+    if (!byReason.has(reason)) byReason.set(reason, []);
+    byReason.get(reason).push([stat, n]);
+  }
+  for (const [reason, stats] of byReason) {
+    const total = stats.reduce((s, [, n]) => s + n, 0);
+    const detail = stats
+      .sort((x, y) => y[1] - x[1])
+      .map(([s, n]) => `${s} ${n}`)
+      .join(", ");
+    const why =
+      reason === "support-floor"
+        ? "projection below the level where the model is calibrated"
+        : `model disagreed with the market by more than ${(MAX_MARKET_DISAGREEMENT * 100).toFixed(0)} points`;
+    console.log(`  skipped ${total} (${reason}): ${why}\n    ${detail}`);
+  }
+}
+
 function reportBetComposition(edgeRows) {
   if (edgeRows.length === 0) return;
 

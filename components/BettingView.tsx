@@ -115,6 +115,9 @@ interface BettingDataset {
 }
 
 const STAT_LABELS: Record<string, string> = {
+  // Retired from betting (see STAT_DEFS in scripts/lib/markets.mjs). The label
+  // stays so archived ledgers that still carry these rows render a name rather
+  // than a raw stat key.
   anytimeTD: "Anytime TD",
   passYds: "Pass Yards",
   passAtt: "Pass Attempts",

@@ -36,26 +36,33 @@
 //     player_id, team_id, price, points, timestamp,
 //     grouping_key, deep_link, limits: { max } }
 //
-// Three of these bite, and each one broke an assumption worth recording:
+// Four of these bite. All are confirmed against a live NFL pull (BetMGM,
+// BUF/DET week 2), not just the OpenAPI definition:
 //
 // 1. THERE IS NO PLAYER NAME FIELD. An odd carries `player_id` (an OpticOdds
-//    hex id, useless to us) and `selection`. On a team market `selection` is
-//    the team name ("Houston Astros"); on a game total it is "". On a player
-//    prop it is the player — that is the only place a name appears, since
-//    `name` is the full label ("Joe Burrow Over 249.5"), not a name.
+//    hex id, useless to us) and `selection`, which IS the player's name on a
+//    prop — confirmed: {"selection": "James Cook", "name": "James Cook"} on an
+//    anytime-TD odd, and {"selection": "Tom Kennedy", "name": "Tom Kennedy
+//    Over 0.5"} on an over/under. `name` is the LABEL, so it is deliberately
+//    not a fallback: it would yield a key matching nothing.
 //
-// 2. `team_id` IS A HEX ID, NOT AN ABBREVIATION. "4F11A5896C24", not "CIN".
-//    The abbreviation lives on the parent fixture's competitors, so this
-//    module builds an id -> abbreviation map per fixture and resolves through
-//    it. Without that the player crosswalk loses its team tier entirely.
+// 2. `team_id` IS NULL ON PLAYER PROPS. Not a hex id — absent entirely. In the
+//    live pull, 0 of 49 player rows carried one; it appears only on team
+//    markets. The parent fixture's two teams are therefore what disambiguate
+//    two players sharing a name (see lib/crosswalk.mjs). Where team_id IS
+//    present it is a hex id, resolved through the competitor map below.
 //
-// 3. `timestamp` IS A UNIX EPOCH FLOAT (1724865905.59815), not an ISO string.
+// 3. `timestamp` IS A UNIX EPOCH FLOAT (1789480037.5886607), not an ISO string.
 //
-// The remaining uncertainty is narrow: the docs contain no player-prop example
-// (every sample is moneyline / run line / total runs), so that `selection`
-// holds the player's name on a prop is inferred from the pattern rather than
-// documented. The tolerant read order below covers it either way, and
-// `scripts/optic-discover.mjs --dump-odds` confirms it against a live key.
+// 4. `selection_line` IS NOT ALWAYS A SIDE. On a Correct Score market it holds
+//    values like "24:23". sideWord() returns null for anything that isn't a
+//    real side word, so these fall through rather than being misread.
+//
+// One more thing the live data settles: a player market can include TEAM
+// entries. An Anytime-TD market carries "Detroit Lions D/ST" rows with a
+// team_id and no player_id. We don't project defenses, so pairOdds drops them
+// and counts them as `teamEntries` rather than letting a team name reach the
+// player crosswalk every week.
 
 import { matchStatKey } from "./markets.mjs";
 
@@ -266,6 +273,7 @@ export function pairOdds(records, { statDefs }) {
     unmatchedMarkets: new Map(), // market name -> count
     missingPrice: 0,
     missingPlayer: 0,
+    teamEntries: 0,
     noSide: 0,
   };
 
@@ -282,6 +290,14 @@ export function pairOdds(records, { statDefs }) {
     }
     if (!rec.playerName && !rec.playerId) {
       diagnostics.missingPlayer++;
+      continue;
+    }
+    // A team entry inside a player market: an Anytime-TD market includes
+    // "Detroit Lions D/ST" alongside the players, with a team_id and no
+    // player_id. We don't project defenses, and letting these through would
+    // put a team name into the player crosswalk every single week.
+    if (!rec.playerId && rec.teamId) {
+      diagnostics.teamEntries++;
       continue;
     }
 

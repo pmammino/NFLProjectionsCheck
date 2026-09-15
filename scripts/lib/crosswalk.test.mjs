@@ -99,10 +99,10 @@ const ROSTER = [
 ];
 const INDEX = buildPlayerIndex(ROSTER);
 
-test("exact name and team is the primary match", () => {
+test("a unique name resolves with no narrowing needed", () => {
   const r = matchPlayer(INDEX, { name: "Ja'Marr Chase", team: "CIN" });
   assert.equal(r.playerId, "100");
-  assert.equal(r.method, "name+team");
+  assert.equal(r.method, "name");
 });
 
 test("punctuation and suffix differences still match", () => {
@@ -129,12 +129,68 @@ test("a stale or missing team falls back to a league-wide name match", () => {
 test("a given-name variant matches on initial plus surname", () => {
   const r = matchPlayer(INDEX, { name: "Josh Allen", team: "BUF" });
   assert.equal(r.playerId, "103");
-  assert.equal(r.method, "initial+last+team");
+  assert.equal(r.method, "initial+last");
 });
 
 test("two players sharing a name resolve by team", () => {
   assert.equal(matchPlayer(INDEX, { name: "Mike Williams", team: "NYJ" }).playerId, "200");
   assert.equal(matchPlayer(INDEX, { name: "Mike Williams", team: "PIT" }).playerId, "201");
+});
+
+// ---- The fixture as the disambiguator ----------------------------------------
+// OpticOdds player props carry NO team (team_id is null on every one), so the
+// fixture's two teams are what separate two players sharing a name.
+test("a shared name resolves via the fixture's two teams", () => {
+  const r = matchPlayer(INDEX, {
+    name: "Mike Williams",
+    team: null, // exactly what a real prop gives us
+    fixtureTeams: ["NYJ", "BUF"],
+  });
+  assert.equal(r.playerId, "200"); // the Jets one; the Steelers one isn't in this game
+  assert.equal(r.method, "name+fixture");
+});
+
+test("the fixture narrows even when the odd has no team at all", () => {
+  const r = matchPlayer(INDEX, { name: "Mike Williams", fixtureTeams: ["PIT", "CLE"] });
+  assert.equal(r.playerId, "201");
+});
+
+test("full team names work as fixture teams", () => {
+  // Competitors can arrive as names rather than abbreviations.
+  const r = matchPlayer(INDEX, {
+    name: "Mike Williams",
+    fixtureTeams: ["New York Jets", "Buffalo Bills"],
+  });
+  assert.equal(r.playerId, "200");
+});
+
+test("a fixture containing BOTH namesakes still refuses to guess", () => {
+  // They play each other. Nothing can separate them, so nothing should try.
+  const r = matchPlayer(INDEX, { name: "Mike Williams", fixtureTeams: ["NYJ", "PIT"] });
+  assert.equal(r.playerId, null);
+  assert.equal(r.reason, "ambiguous");
+});
+
+test("a fixture containing neither namesake refuses too", () => {
+  const r = matchPlayer(INDEX, { name: "Mike Williams", fixtureTeams: ["DAL", "PHI"] });
+  assert.equal(r.playerId, null);
+  assert.equal(r.reason, "ambiguous");
+});
+
+test("an explicit team still wins over the fixture when both are given", () => {
+  const r = matchPlayer(INDEX, {
+    name: "Mike Williams",
+    team: "PIT",
+    fixtureTeams: ["NYJ", "PIT"],
+  });
+  assert.equal(r.playerId, "201");
+  assert.equal(r.method, "name+team");
+});
+
+test("a unique name ignores an irrelevant fixture", () => {
+  // Narrowing only engages on a collision.
+  const r = matchPlayer(INDEX, { name: "Travis Kelce", fixtureTeams: ["DAL", "PHI"] });
+  assert.equal(r.playerId, "104");
 });
 
 test("a shared name with no usable team refuses to guess", () => {

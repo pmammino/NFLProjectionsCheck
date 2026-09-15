@@ -278,11 +278,19 @@ RotoWire's `playerid`. `scripts/ingest.mjs` therefore writes
 `data/players/{season}.csv` (PlayerID, Name, Team, Pos) — the projection feed
 carries player names even though the projection *snapshot* schema drops them.
 
-This matters more than it sounds: an OpticOdds odd has **no player-name field
-at all**. It carries `player_id` (an OpticOdds hex id) and `selection`, which
-holds the player on a prop — `name` is the full label ("Joe Burrow Over 249.5"),
-not a name. Likewise `team_id` is a hex id, resolved to an abbreviation via the
-parent fixture's `competitors`.
+This matters more than it sounds, and the live feed is stranger than the docs
+suggest:
+
+- An odd has **no player-name field**. It carries `player_id` (an OpticOdds hex
+  id) and `selection`, which holds the player on a prop. `name` is the full
+  label (`"Tom Kennedy Over 0.5"`), so it is deliberately not used as a
+  fallback — it would produce a key matching nothing.
+- **Player props carry no team at all.** `team_id` is `null` on every one of
+  them; it appears only on team markets. So the thing that separates two
+  players sharing a name is the **fixture**: a prop belongs to one game, a game
+  has two teams, and at most one namesake is usually in it.
+- A player market can contain **team** entries — an Anytime-TD market includes
+  `"Buffalo Bills D/ST"` rows. Those are dropped before the crosswalk sees them.
 
 `scripts/lib/crosswalk.mjs` joins the two, matching in strict-to-loose tiers
 (name+team → name league-wide → first-initial+surname+team), normalizing

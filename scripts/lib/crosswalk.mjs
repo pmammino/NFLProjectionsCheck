@@ -17,17 +17,27 @@
 // unmatched, leaving a name in the capture log for a human to resolve rather
 // than inventing a join.
 //
-// Matching runs in strict-to-loose tiers, stopping at the first tier that
-// yields exactly ONE candidate:
-//   1. normalized name + team   — the overwhelming majority of rows
-//   2. normalized name, league-wide — catches a player whose team changed
-//      mid-week (waiver claims, practice-squad elevations) where the two
-//      sources disagree on team
-//   3. first-initial + last name + team — catches "D.J. Moore"/"DJ Moore",
-//      "Josh Allen"/"Joshua Allen", "Marquise Brown"/"Hollywood Brown"
-// A tier producing two or more candidates is treated as ambiguous and the
-// match fails rather than falling through to a looser tier, because a looser
-// tier cannot possibly disambiguate what a stricter one could not.
+// ---------------------------------------------------------------------------
+// The team problem, and how the fixture solves it
+// ---------------------------------------------------------------------------
+// OpticOdds player-prop odds carry NO TEAM. `team_id` is null on every one of
+// them — it is populated only on team markets (moneyline, spreads, and the
+// D/ST entries inside an Anytime-TD market). Verified against a live BetMGM
+// pull: 0 of 49 player rows had a team_id.
+//
+// That removes the obvious way to tell two players with the same name apart.
+// What replaces it is the FIXTURE: a prop belongs to one game, and a game has
+// exactly two teams, so a player on that odd must play for one of them. Passing
+// those two teams as `fixtureTeams` is usually enough to resolve a collision
+// even though the odd itself says nothing about the team — the two Mike
+// Williamses are on different teams, and at most one of them is in this game.
+//
+// Matching therefore builds a candidate pool by name (exact first, then
+// first-initial + surname) and narrows it:
+//   1. by an explicit team, when some other source supplied one
+//   2. by the fixture's two teams
+//   3. otherwise, only a pool that is already a single player resolves
+// A pool that stays ambiguous fails the match rather than picking one.
 
 // ---- Teams -------------------------------------------------------------------
 // RotoWire's 32 codes are canonical here (they're what data/projections and
@@ -131,9 +141,8 @@ export function initialLastKey(name) {
 // Every tier maps its key to an ARRAY of candidates, so ambiguity is visible
 // at match time rather than being silently collapsed by last-write-wins.
 export function buildPlayerIndex(rosterRows) {
-  const byNameTeam = new Map();
   const byName = new Map();
-  const byInitialLastTeam = new Map();
+  const byInitialLast = new Map();
 
   const push = (map, key, entry) => {
     if (!key) return;
@@ -151,14 +160,14 @@ export function buildPlayerIndex(rosterRows) {
 
     const nKey = normalizeName(name);
     if (!nKey) continue;
+    // Both indexes are league-wide. Narrowing by team happens at match time
+    // against the candidate pool, because the team we narrow BY now usually
+    // comes from the fixture rather than from the odd itself.
     push(byName, nKey, entry);
-    if (team) {
-      push(byNameTeam, `${nKey}|${team}`, entry);
-      push(byInitialLastTeam, `${initialLastKey(name)}|${team}`, entry);
-    }
+    push(byInitialLast, initialLastKey(name), entry);
   }
 
-  return { byNameTeam, byName, byInitialLastTeam, size: byName.size };
+  return { byName, byInitialLast, size: byName.size };
 }
 
 // ---- Matching ----------------------------------------------------------------
@@ -170,28 +179,64 @@ export function buildPlayerIndex(rosterRows) {
 // a sudden spike in "not-found" means the roster snapshot is stale or a feed
 // changed shape, which is exactly the kind of silent rot this pipeline needs
 // to surface rather than absorb.
-export function matchPlayer(index, { name, team } = {}) {
+export function matchPlayer(index, { name, team, fixtureTeams } = {}) {
   const nKey = normalizeName(name);
   if (!nKey) return { playerId: null, reason: "no-name" };
+
   const tKey = canonicalTeam(team);
+  const allowed = new Set(
+    (Array.isArray(fixtureTeams) ? fixtureTeams : [])
+      .map((t) => canonicalTeam(t))
+      .filter(Boolean)
+  );
 
-  const tiers = [];
-  if (tKey) tiers.push(["name+team", index.byNameTeam.get(`${nKey}|${tKey}`)]);
-  tiers.push(["name", index.byName.get(nKey)]);
-  if (tKey) tiers.push(["initial+last+team", index.byInitialLastTeam.get(`${initialLastKey(name)}|${tKey}`)]);
+  // Exact name first; only if nothing matches at all do we loosen to
+  // first-initial + surname. Loosening is for spelling variants ("Josh"/
+  // "Joshua"), so it should never override a pool that already exists.
+  const tiers = [
+    ["name", index.byName.get(nKey)],
+    ["initial+last", index.byInitialLast.get(initialLastKey(name))],
+  ];
 
-  for (const [method, candidates] of tiers) {
+  for (const [tier, candidates] of tiers) {
     if (!candidates || candidates.length === 0) continue;
-    // Distinct ids only: the same player legitimately appears more than once
-    // if the roster carries duplicate rows for them.
-    const ids = [...new Set(candidates.map((c) => c.playerId))];
-    if (ids.length === 1) {
-      return { playerId: ids[0], method, entry: candidates[0] };
+
+    // Distinct players only: a roster carrying duplicate rows for one player
+    // is not a collision.
+    const pool = dedupeById(candidates);
+    if (pool.length === 1) return hit(pool[0], tier);
+
+    // Two or more real players share this name. Narrow, most specific first.
+    if (tKey) {
+      const byTeam = pool.filter((c) => c.team === tKey);
+      if (byTeam.length === 1) return hit(byTeam[0], `${tier}+team`);
+      if (byTeam.length > 1) return ambiguous(byTeam);
+      // Zero on an explicit team means the team disagrees with our roster —
+      // fall through to the fixture, which is the more reliable signal.
     }
-    // Two different players share this key. A looser tier can only make that
-    // worse, so stop here rather than falling through.
-    return { playerId: null, reason: "ambiguous", candidates: ids };
+
+    if (allowed.size > 0) {
+      const byFixture = pool.filter((c) => c.team && allowed.has(c.team));
+      if (byFixture.length === 1) return hit(byFixture[0], `${tier}+fixture`);
+      if (byFixture.length > 1) return ambiguous(byFixture);
+    }
+
+    // Nothing left to narrow by, and more than one candidate stands.
+    return ambiguous(pool);
   }
 
   return { playerId: null, reason: "not-found" };
 }
+
+function dedupeById(candidates) {
+  const byId = new Map();
+  for (const c of candidates) if (!byId.has(c.playerId)) byId.set(c.playerId, c);
+  return [...byId.values()];
+}
+
+const hit = (entry, method) => ({ playerId: entry.playerId, method, entry });
+const ambiguous = (pool) => ({
+  playerId: null,
+  reason: "ambiguous",
+  candidates: pool.map((c) => c.playerId),
+});

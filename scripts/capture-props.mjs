@@ -560,7 +560,15 @@ async function main() {
   let noProjection = 0;
 
   for (const market of markets) {
-    const match = matchPlayer(playerIndex, { name: market.playerName, team: market.team });
+    const fixture = fixtureById.get(market.fixtureId);
+    // A prop carries no team of its own (OpticOdds leaves team_id null on
+    // player markets), so the fixture's two teams are what disambiguate two
+    // players sharing a name. See lib/crosswalk.mjs.
+    const match = matchPlayer(playerIndex, {
+      name: market.playerName,
+      team: market.team,
+      fixtureTeams: fixture ? [fixture.homeTeam, fixture.awayTeam] : undefined,
+    });
     if (!match.playerId) {
       const key = `${market.playerName} (${market.team || "?"}) — ${match.reason}`;
       unmatched.set(key, (unmatched.get(key) ?? 0) + 1);
@@ -571,7 +579,6 @@ async function main() {
       noProjection++;
       continue;
     }
-    const fixture = fixtureById.get(market.fixtureId);
     for (const cand of priceMarket(market, splits, a)) {
       priced.push({
         ...cand,
@@ -691,6 +698,7 @@ function reportDiagnostics(d) {
   if (d.noSide) console.warn(`  ${d.noSide} records had no identifiable side — skipped.`);
   if (d.missingPrice) console.warn(`  ${d.missingPrice} records had no usable price/line — skipped.`);
   if (d.missingPlayer) console.warn(`  ${d.missingPlayer} records had no player — skipped.`);
+  if (d.teamEntries) console.log(`  ${d.teamEntries} team entries (D/ST etc.) in player markets — skipped.`);
   if (d.noHistoricalPrice) console.warn(`  ${d.noHistoricalPrice} historical odds carried neither a closing nor an opening price — skipped.`);
   if (d.unmatchedMarkets?.size) {
     // Not necessarily a problem — most are markets we deliberately don't model

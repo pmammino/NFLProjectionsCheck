@@ -26,7 +26,7 @@
 // Env: OPTICODDS_API_KEY (required).
 
 import { OpticOddsClient } from "./lib/opticodds.mjs";
-import { STAT_DEFS, allOpticMarketNames, matchStatKey, normalizeMarketName } from "./lib/markets.mjs";
+import { STAT_DEFS, allOpticMarketNames, allOpticMarketAliases, matchStatKey, normalizeMarketName } from "./lib/markets.mjs";
 import { flattenOddsPayloads, readOdd } from "./lib/optic-normalize.mjs";
 import { seasonForDate, projectionWeek } from "./lib/schedule.mjs";
 
@@ -85,11 +85,13 @@ async function showMarkets(client) {
   console.log("\n--- Our stat definitions vs. what the API offers ---");
   const unresolved = [];
   for (const [statKey, def] of Object.entries(STAT_DEFS)) {
-    const hits = def.optic.filter((alias) => liveByNorm.has(normalizeMarketName(alias)));
+    const hits = [def.opticName, ...def.optic].filter((alias) =>
+      liveByNorm.has(normalizeMarketName(alias))
+    );
     if (hits.length) {
       console.log(`  OK    ${statKey.padEnd(12)} -> ${hits.map((h) => liveByNorm.get(normalizeMarketName(h))).join(", ")}`);
     } else {
-      console.log(`  MISS  ${statKey.padEnd(12)} -> none of: ${def.optic.join(" | ")}`);
+      console.log(`  MISS  ${statKey.padEnd(12)} -> none of: ${[def.opticName, ...def.optic].join(" | ")}`);
       unresolved.push(statKey);
     }
   }
@@ -103,7 +105,7 @@ async function showMarkets(client) {
   }
 
   // Player markets we don't model — the candidate pool for fixing a MISS.
-  const ours = new Set(allOpticMarketNames().map(normalizeMarketName));
+  const ours = new Set(allOpticMarketAliases().map(normalizeMarketName));
   const unmapped = liveNames.filter((n) => !ours.has(normalizeMarketName(n)));
   console.log(`\n--- ${unmapped.length} live markets we do not model ---`);
   for (const n of unmapped.sort()) console.log(`    ${n}`);

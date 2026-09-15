@@ -245,12 +245,30 @@ npm run grade-bets                                 # grade every week with a led
 npm run grade-bets -- --season 2026 --week 1
 ```
 
-Tracked stats: Anytime TD, Pass Yards, Pass Attempts, Completions, Pass TD,
-Interceptions, Rush Yards, Rush Attempts, Rush TD, Receptions, Rec Yards, Rec
-TD — each defined once in `scripts/lib/markets.mjs` (its OpticOdds market
-aliases, its probability model, and the projection and actuals columns it maps
-to). Market names OpticOdds returns that we don't model are counted and
-reported at the end of a run rather than failing it.
+Tracked stats, each defined once in `scripts/lib/markets.mjs` (its exact
+OpticOdds market name, its probability model, and the projection and actuals
+columns it maps to). All twelve are **confirmed against the live NFL market
+list** (317 markets returned; all twelve resolved):
+
+| Stat | OpticOdds market |
+|---|---|
+| `anytimeTD` | Anytime Touchdown Scorer |
+| `passYds` / `passAtt` / `completions` / `passTD` | Player Passing Yards / Attempts / Completions / Touchdowns |
+| `int` | Player Interceptions |
+| `rushYds` / `rushAtt` / `rushTD` | Player Rushing Yards / Attempts / Touchdowns |
+| `receptions` / `recYds` / `recTD` | Player Receptions, Player Receiving Yards / Touchdowns |
+
+Market names are matched **exactly**, never by substring, and that is
+load-bearing rather than fastidious. The live list also contains `1st Half
+Player Passing Yards`, `Player Passing Yards (Combo)`, `Player Passing Yards
+(Either)` and `Player Passing Yards Each Half`. A substring match would map
+several of those onto `passYds` and price a full-game projection against a
+half- or quarter-length market. `Player Interceptions` likewise means
+interceptions *thrown* — the list carries a separate `Player Defensive
+Interceptions`.
+
+Market names we don't model are counted and reported at the end of a run rather
+than failing it.
 
 ### Backfilling a played week
 

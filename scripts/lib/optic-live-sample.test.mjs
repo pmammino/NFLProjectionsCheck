@@ -262,3 +262,97 @@ test("markets we don't model are named, so a missing alias is visible", () => {
     assert.ok(diagnostics.unmatchedMarkets.has(m), `${m} should be reported, not silently dropped`);
   }
 });
+
+// ---- The live NFL market list -------------------------------------------------
+// From a real /markets call: 317 NFL markets, all 12 of our stats resolved.
+// These assertions pin the exact names and, more importantly, pin the near
+// misses that make EXACT matching load-bearing.
+import { STAT_DEFS as DEFS, allOpticMarketNames } from "./markets.mjs";
+
+const CONFIRMED = {
+  anytimeTD: "Anytime Touchdown Scorer",
+  passYds: "Player Passing Yards",
+  passAtt: "Player Passing Attempts",
+  completions: "Player Passing Completions",
+  passTD: "Player Passing Touchdowns",
+  int: "Player Interceptions",
+  rushYds: "Player Rushing Yards",
+  rushAtt: "Player Rushing Attempts",
+  rushTD: "Player Rushing Touchdowns",
+  receptions: "Player Receptions",
+  recYds: "Player Receiving Yards",
+  recTD: "Player Receiving Touchdowns",
+};
+
+test("every stat maps to its confirmed live market name", () => {
+  for (const [statKey, name] of Object.entries(CONFIRMED)) {
+    assert.equal(DEFS[statKey].opticName, name, `${statKey} should request "${name}"`);
+    assert.equal(matchStatKey(name), statKey, `"${name}" should resolve to ${statKey}`);
+  }
+  assert.equal(Object.keys(CONFIRMED).length, Object.keys(DEFS).length);
+});
+
+test("the market query asks for exactly our twelve markets", () => {
+  const names = allOpticMarketNames();
+  assert.equal(names.length, 12);
+  assert.deepEqual(new Set(names), new Set(Object.values(CONFIRMED)));
+});
+
+test("period-scoped variants never collide with the full-game market", () => {
+  // The live list carries all of these alongside the ones we want. A substring
+  // match would map them onto our stats and price a full-game projection
+  // against a half- or quarter-length market.
+  for (const m of [
+    "1st Half Player Passing Yards",
+    "1st Quarter Player Passing Yards",
+    "2nd Half Player Receptions",
+    "3rd Quarter Player Rushing Yards",
+    "4th Quarter Player Receiving Touchdowns",
+    "1st Half Anytime Touchdown Scorer",
+    "1st Drive Player Passing Yards",
+  ]) {
+    assert.equal(matchStatKey(m), null, `"${m}" must not map to a stat`);
+  }
+});
+
+test("combo and derivative variants never collide either", () => {
+  for (const m of [
+    "Player Passing Yards (Combo)",
+    "Player Passing Yards (Either)",
+    "Player Passing Yards Each Half",
+    "Player Passing Yards Each Quarter",
+    "Player Rushing Yards (Combo)",
+    "Player Interceptions (Combo)",
+    "Player Touchdowns (Either)",
+    "Player Receiving Yards H2H Moneyline",
+    "Player Passing + Rushing Yards",
+    "Player Rushing + Receiving Yards",
+    "Player Passes Completed", // NOT "Player Passing Completions"
+  ]) {
+    assert.equal(matchStatKey(m), null, `"${m}" must not map to a stat`);
+  }
+});
+
+test("interceptions means thrown, not caught", () => {
+  // The live list separates the two. Mapping the defensive one would price a
+  // defender's takeaways against a quarterback's projected picks.
+  assert.equal(matchStatKey("Player Interceptions"), "int");
+  assert.equal(matchStatKey("Player Defensive Interceptions"), null);
+});
+
+test("markets for positions we do not project stay unmapped", () => {
+  for (const m of [
+    "Player Kicking Points",
+    "Player Field Goals Made",
+    "Player Extra Points Made",
+    "Player Tackles",
+    "Player Sacks",
+    "Player Punts",
+    "Player Fantasy Score (PrizePicks)",
+    "Most Passing Yards Player",
+    "First Touchdown Scorer",
+    "Last Touchdown Scorer",
+  ]) {
+    assert.equal(matchStatKey(m), null, `"${m}" must not map to a stat`);
+  }
+});

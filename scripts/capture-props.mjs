@@ -47,7 +47,12 @@
 //    directions and the ledger carries a Side column. `--sides over` restores
 //    the old overs-only behaviour.
 //
-// 3. PLAYERS ARE JOINED BY NAME, NOT ID. RotoWire's feed handed us its own
+// 3. BOOKS ARE FILTERED TO ACTIVE, ONSHORE, NFL-PRICING ONES. /sportsbooks has
+//    no league filter and lists several hundred books globally, so the NFL set
+//    is derived from /markets and intersected with the onshore/active flags.
+//    See resolveBooks() for what that filter costs.
+//
+// 4. PLAYERS ARE JOINED BY NAME, NOT ID. RotoWire's feed handed us its own
 //    player id; OpticOdds has a separate id space. The join now runs through
 //    data/players/{season}.csv (written by ingest.mjs) and refuses to guess
 //    when a name is ambiguous — see lib/crosswalk.mjs. Unmatched players are
@@ -65,7 +70,8 @@
 //                                  [--devig-method multiplicative]
 //                                  [--edge-basis ev|novig]
 //                                  [--sides both|over|under]
-//                                  [--books "DraftKings,FanDuel"]  (default: all)
+//                                  [--books "DraftKings,FanDuel"]
+//                                  [--include-offshore]
 //                                  [--historical]   closing lines for a played week
 //                                  [--data-dir data] [--dry-run]
 //
@@ -181,6 +187,7 @@ function parseArgs(argv) {
       case "--books": a.books = next().split(",").map((s) => s.trim()).filter(Boolean); break;
       case "--historical": a.historical = true; break;
       case "--use-opening": a.useOpening = true; break;
+      case "--include-offshore": a.includeOffshore = true; break;
       case "--data-dir": a.dataDir = next(); break;
       case "--dry-run": a.dryRun = true; break;
       case "-h": case "--help": a.help = true; break;
@@ -336,6 +343,83 @@ function priceMarket(market, splits, a) {
   return out;
 }
 
+// Decide which sportsbooks to pull, narrowing in three steps.
+//
+// 1. Books that actually price NFL, derived from /markets. The /sportsbooks
+//    endpoint takes no league filter and returns several hundred books
+//    globally; pulling all of them would cost a request per 5 books per
+//    fixture batch, almost all of it wasted on books that never quote an NFL
+//    game.
+// 2. Active only — an inactive book returns nothing but still costs requests.
+// 3. Onshore only (unless --include-offshore).
+//
+// ON "ONSHORE": this is OpticOdds' own flag, and it means a regulated book
+// rather than specifically a US one — "888sport (Canada)" is flagged onshore
+// too. If the intent is strictly the books you can personally bet at, `--books`
+// with an explicit list is the exact control; this flag is the broad one.
+//
+// Worth knowing what the filter costs: the sharpest books (Pinnacle above all)
+// are offshore, and a sharp book's de-vigged price is the best available
+// estimate of a true probability. Excluding them doesn't affect `Edge` — you
+// can only bet what you can reach — but it does make `ModelEdge` a comparison
+// against softer books, so "we disagree with the market" becomes a weaker
+// claim than it would be against Pinnacle.
+async function resolveBooks(client, a) {
+  const nflBooks = await client.sportsbooksForLeague({
+    sport: "football",
+    league: "nfl",
+    marketNames: allOpticMarketNames(),
+  });
+  const nflIds = new Set(nflBooks.map((b) => b.id.toLowerCase()));
+
+  const all = await client.getSportsbooks();
+  const rows = all.map((b) =>
+    typeof b === "string" ? { id: b, name: b, is_active: true, is_onshore: true } : b
+  );
+
+  const keep = [];
+  const dropped = { notNfl: 0, inactive: 0, offshore: 0 };
+  for (const b of rows) {
+    const id = String(b?.id ?? b?.name ?? "");
+    if (!id) continue;
+    // Only apply the NFL filter if /markets actually told us something; an
+    // empty result means the derivation failed, and silently pulling zero
+    // books would look identical to "no odds this week".
+    if (nflIds.size > 0 && !nflIds.has(id.toLowerCase())) {
+      dropped.notNfl++;
+      continue;
+    }
+    if (b?.is_active === false) {
+      dropped.inactive++;
+      continue;
+    }
+    if (!a.includeOffshore && b?.is_onshore === false) {
+      dropped.offshore++;
+      continue;
+    }
+    keep.push(id);
+  }
+
+  if (nflIds.size === 0) {
+    console.warn(
+      "  could not derive the NFL book list from /markets — falling back to every " +
+        "active book, which will be slow. Check the market aliases in lib/markets.mjs."
+    );
+  }
+  console.log(
+    `  books: ${keep.length} kept` +
+      ` (dropped ${dropped.notNfl} non-NFL, ${dropped.inactive} inactive` +
+      `, ${dropped.offshore} offshore${a.includeOffshore ? " — included" : ""})`
+  );
+  if (keep.length === 0) {
+    throw new Error(
+      "No sportsbooks left after filtering — nothing can be priced. " +
+        "Try --include-offshore, or name books explicitly with --books."
+    );
+  }
+  return keep;
+}
+
 // Opponent label matching the existing snapshot format ("vs TB" / "at TB").
 function opponentLabel(team, fixture) {
   if (!fixture) return "";
@@ -431,21 +515,12 @@ async function main() {
   if (a.books?.length) {
     a.resolvedBooks = a.books;
   } else {
-    const books = await client.getSportsbooks({ sport: "football", league: "nfl" });
-    // Skip books flagged inactive: they return no odds, and each one still
-    // costs a request per fixture batch against a tight rate limit.
-    const active = books.filter((b) => typeof b === "string" || b?.is_active !== false);
-    a.resolvedBooks = active
-      .map((b) => (typeof b === "string" ? b : b?.id ?? b?.name))
-      .filter(Boolean);
-    if (books.length !== active.length) {
-      console.log(`  skipping ${books.length - active.length} inactive sportsbook(s).`);
-    }
+    a.resolvedBooks = await resolveBooks(client, a);
     if (a.resolvedBooks.length === 0) {
       throw new Error("OpticOdds returned no sportsbooks — cannot price anything.");
     }
   }
-  console.log(`  books: ${a.resolvedBooks.length} (${a.resolvedBooks.slice(0, 6).join(", ")}…)`);
+  console.log(`  using: ${a.resolvedBooks.slice(0, 8).join(", ")}${a.resolvedBooks.length > 8 ? ", …" : ""}`);
 
   // Fixtures for the week.
   const fixtureRows = await client.getFixtures({
@@ -659,7 +734,13 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                                    more bets — most of them not +EV. For
                                    research, not for a live ledger.
   --sides <s>              both | over | under (default: both)
-  --books <a,b,c>          Sportsbooks to pull (default: every one offered)
+  --books <a,b,c>          Sportsbooks to pull. Bypasses every filter below —
+                           if you name a book you get it. Default: every
+                           active, onshore book that prices NFL.
+  --include-offshore       Also pull offshore books. They cannot be bet at
+                           from a regulated jurisdiction, but the sharpest
+                           (Pinnacle) give the best fair-price reference, so
+                           this is useful for judging ModelEdge.
   --historical             Pull closing lines for a week already played,
                            instead of current odds. OpticOdds retains history
                            on a rolling 2-month window, so older weeks cannot

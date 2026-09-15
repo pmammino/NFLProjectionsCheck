@@ -162,6 +162,26 @@ and actuals still come from RotoWire; only the odds source changed.
    Different books post different lines for the same player/stat, so every
    (book, line, side) combination is scanned and the best one is used.
 
+   **Which books.** Only **active, onshore books that actually price the NFL**.
+   That last filter matters for speed: `/sportsbooks` takes no league argument
+   and returns several hundred books globally, so the NFL set is derived from
+   `/markets` (which nests sports → leagues → sportsbooks) and intersected with
+   the `is_active` / `is_onshore` flags. Pulling the unfiltered list would spend
+   a request per 5 books per fixture batch on books that never quote an NFL
+   game.
+
+   Two caveats on `is_onshore`:
+
+   - It's OpticOdds' own flag and means *regulated*, not specifically *US* —
+     "888sport (Canada)" is flagged onshore too. For strictly the books you can
+     personally bet at, `--books "DraftKings,FanDuel,..."` is the exact control;
+     it bypasses every filter.
+   - The sharpest books (Pinnacle above all) are **offshore**. This doesn't
+     affect `Edge` — you can only bet what you can reach — but it does mean
+     `ModelEdge` is measured against softer books, which makes "we disagree
+     with the market" a weaker claim than it would be against Pinnacle.
+     `--include-offshore` adds them back when that comparison is the point.
+
 3. **Edge** — two numbers, which answer different questions:
 
    | | Formula | Answers |
@@ -219,6 +239,8 @@ npm run capture-props -- --season 2026 --week 1 --min-edge 0.05
 npm run capture-props -- --season 2026 --week 1 --historical   # closing lines
 npm run optic-discover -- --all                    # what the API actually returns
 npm run capture-props -- --devig-method power --edge-basis novig  # research
+npm run capture-props -- --include-offshore        # add Pinnacle et al.
+npm run capture-props -- --books "DraftKings,FanDuel"   # exactly these
 npm run grade-bets                                 # grade every week with a ledger
 npm run grade-bets -- --season 2026 --week 1
 ```

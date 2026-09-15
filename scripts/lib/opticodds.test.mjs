@@ -305,3 +305,69 @@ test("the sliding window throttles once the quota is spent", async () => {
   assert.ok(elapsed >= 100, `expected throttling, took only ${elapsed}ms`);
   assert.equal(c.requestCount, 4);
 });
+
+// ---- Deriving the league's sportsbooks ---------------------------------------
+// /sportsbooks has no league filter and returns every book globally, so the
+// NFL set is derived from /markets, which nests sports -> leagues -> sportsbooks.
+const marketsPayload = {
+  data: [
+    {
+      id: "player_passing_yards",
+      name: "Player Passing Yards",
+      sports: [
+        {
+          id: "football",
+          name: "Football",
+          leagues: [
+            { id: "nfl", name: "NFL", sportsbooks: [{ id: "draftkings", name: "DraftKings" }, { id: "pinnacle", name: "Pinnacle" }] },
+            { id: "ncaaf", name: "NCAAF", sportsbooks: [{ id: "college_only_book", name: "College Only" }] },
+          ],
+        },
+      ],
+    },
+    {
+      id: "moneyline",
+      name: "Moneyline",
+      sports: [
+        { id: "football", name: "Football", leagues: [{ id: "nfl", name: "NFL", sportsbooks: [{ id: "moneyline_only_book", name: "Moneyline Only" }] }] },
+      ],
+    },
+  ],
+};
+
+test("sportsbooksForLeague unions the books nested under that league", async () => {
+  const impl = stubFetch([{ status: 200, body: marketsPayload }]);
+  const books = await client(impl).sportsbooksForLeague({ league: "nfl" });
+  const ids = books.map((b) => b.id).sort();
+  // Both NFL markets contribute; the NCAAF-only book is excluded by league.
+  assert.deepEqual(ids, ["draftkings", "moneyline_only_book", "pinnacle"]);
+  assert.ok(!ids.includes("college_only_book"));
+});
+
+test("sportsbooksForLeague can narrow to the markets we model", async () => {
+  const impl = stubFetch([{ status: 200, body: marketsPayload }]);
+  const books = await client(impl).sportsbooksForLeague({
+    league: "nfl",
+    marketNames: ["Player Passing Yards"],
+  });
+  const ids = books.map((b) => b.id).sort();
+  // A book that only prices moneyline is no use to a props pipeline.
+  assert.deepEqual(ids, ["draftkings", "pinnacle"]);
+});
+
+test("sportsbooksForLeague matches a market by id as well as name", async () => {
+  const impl = stubFetch([{ status: 200, body: marketsPayload }]);
+  const books = await client(impl).sportsbooksForLeague({
+    league: "nfl",
+    marketNames: ["player_passing_yards"],
+  });
+  assert.equal(books.length, 2);
+});
+
+test("getSportsbooks sends no league filter — the endpoint has none", async () => {
+  const impl = stubFetch([{ status: 200, body: { data: [], has_more: false } }]);
+  await client(impl).getSportsbooks();
+  const params = new URL(impl.calls[0]).searchParams;
+  assert.equal(params.get("league"), null);
+  assert.equal(params.get("sport"), null);
+});

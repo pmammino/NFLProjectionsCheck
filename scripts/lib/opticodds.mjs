@@ -246,12 +246,54 @@ export class OpticOddsClient {
   // These drive the market/sportsbook mapping instead of hardcoding names that
   // would silently rot when OpticOdds renames something.
 
-  async getSportsbooks(params = {}) {
-    return this.getAll("/sportsbooks", params);
+  // Every sportsbook OpticOdds knows about, as
+  // { id, name, logo, is_onshore, is_active }.
+  //
+  // NOTE: this endpoint takes no sport or league filter — it is the GLOBAL
+  // list, several hundred books long, most of which never price an NFL game.
+  // Feeding it straight into /fixtures/odds would cost a request per 5 books
+  // per fixture batch for no return, so callers should intersect it with
+  // sportsbooksForLeague() below.
+  async getSportsbooks() {
+    return this.getAll("/sportsbooks");
   }
 
   async getMarkets({ sport = "football", league = "nfl" } = {}) {
     return this.getAll("/markets", { sport, league });
+  }
+
+  // The books that actually price a given league, derived from /markets.
+  //
+  // Each market nests sports -> leagues -> sportsbooks, so the union of that
+  // innermost list is exactly the set of books quoting this league — which is
+  // the only set worth spending requests on. Restricting to `marketNames`
+  // narrows it further to books quoting the markets we actually model.
+  async sportsbooksForLeague({ sport = "football", league = "nfl", marketNames } = {}) {
+    const markets = await this.getMarkets({ sport, league });
+    const wanted = marketNames
+      ? new Set(marketNames.map((m) => String(m).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()))
+      : null;
+
+    const books = new Map();
+    for (const market of markets) {
+      if (wanted) {
+        const key = String(market?.name ?? market?.id ?? "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+        if (!wanted.has(key)) continue;
+      }
+      for (const s of market?.sports ?? []) {
+        for (const l of s?.leagues ?? []) {
+          if (league && String(l?.id ?? "").toLowerCase() !== String(league).toLowerCase()) continue;
+          for (const b of l?.sportsbooks ?? []) {
+            const id = b?.id ?? b?.name;
+            if (id) books.set(String(id), { id: String(id), name: b?.name ?? String(id) });
+          }
+        }
+      }
+    }
+    return [...books.values()];
   }
 
   async getLeagues({ sport = "football" } = {}) {

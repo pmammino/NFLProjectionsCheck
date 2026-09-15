@@ -200,6 +200,21 @@ export function isBettableStat(statKey) {
   return STAT_DEFS[statKey]?.bet !== false && statKey in STAT_DEFS;
 }
 
+// The projected value for one stat, summed across its projection columns.
+//
+// `splitRow` is one row of the weekly projections for a player — normally the
+// M (median) split. Shared rather than reimplemented because the support floor
+// in calibration.mjs is defined against this exact number, and a capture and a
+// replay that computed it differently would disagree about which bets exist.
+//
+// Returns null for an unknown stat or a missing row, which every caller treats
+// as "cannot place this on the calibration curve".
+export function projectedValue(splitRow, statKey) {
+  const def = STAT_DEFS[statKey];
+  if (!def || !splitRow) return null;
+  return def.projCols.reduce((sum, col) => sum + (Number(splitRow[col]) || 0), 0);
+}
+
 // Normalize a market name for comparison: lowercase, drop punctuation, collapse
 // whitespace. "Player Passing Yards" and "player_passing_yards" both become
 // "player passing yards".

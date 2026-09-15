@@ -34,7 +34,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PERSONAS, PERSONA_BY_ID, STARTING_BANKROLL_UNITS, simulateWeek, advanceBankroll } from "./lib/personas.mjs";
 import { indexClosing, computeClv, summarizeClv } from "./lib/clv.mjs";
-import { STAT_DEFS, isBettableStat } from "./lib/markets.mjs";
+import { STAT_DEFS, isBettableStat, projectedValue } from "./lib/markets.mjs";
+import { applyCalibrationGuards } from "./lib/calibration.mjs";
 import { americanToDecimal } from "./lib/odds.mjs";
 import { gradeOutcome } from "./lib/grading.mjs";
 import { readCsv, toCsv } from "./lib/csv.mjs";
@@ -80,6 +81,7 @@ const propsPath = (d, s, w) => join(ROOT, d, "props", String(s), `week-${pad2(w)
 const actualPath = (d, s, w) => join(ROOT, d, "actuals", String(s), `week-${pad2(w)}.csv`);
 const closingPath = (d, s, w) => join(ROOT, d, "closing", String(s), `week-${pad2(w)}.csv`);
 const ledgerPath = (d, p, s, w) => join(ROOT, d, "bets", p, String(s), `week-${pad2(w)}.csv`);
+const projPath = (d, s, w) => join(ROOT, d, "projections", String(s), `week-${pad2(w)}.csv`);
 
 const num = (v) => {
   if (v === undefined || v === null || v === "") return null;
@@ -106,6 +108,9 @@ function toEdge(row) {
     book: row.Book,
     line: num(row.Line),
     side: row.Side || "over",
+    // Absent on rows captured before the support floor existed; keepEdge falls
+    // back to the projections file for those.
+    proj: num(row.Proj),
     odds: num(row.Odds),
     oppositeOdds: num(row.OppositeOdds),
     impliedProb: num(row.ImpliedProb),
@@ -123,19 +128,58 @@ function toEdge(row) {
   };
 }
 
+// Our projected median per player for one week, keyed playerId -> stat -> value.
+// Used to apply the support floor to archived snapshots.
+//
+// Read from data/projections/ rather than from the snapshot's own Proj column,
+// because that column only exists on rows captured after the support floor was
+// introduced and the projections file is durable for every week. Where both
+// are available they agree by construction — both go through projectedValue().
+function loadProjectedValues(a, season, week) {
+  const path = projPath(a.dataDir, season, week);
+  if (!existsSync(path)) return null;
+  const medians = new Map();
+  for (const r of readCsv(path)) {
+    if (r.Split !== "M") continue;
+    medians.set(r.PlayerID, r);
+  }
+  return medians;
+}
+
 function loadEdges(a, season, week) {
   // Prefer the published edge set; fall back to the full props scan for weeks
   // captured before data/edges/ existed.
-  //
-  // Retired markets are dropped HERE rather than only at capture, because this
-  // replay reads archived snapshots that were priced while the market was
-  // still live. Filtering at capture alone would leave every already-captured
-  // week betting a stat we have retired, and the whole point of a deterministic
-  // replay is that today's rules apply to the whole season.
   for (const p of [edgesPath(a.dataDir, season, week), propsPath(a.dataDir, season, week)]) {
-    if (existsSync(p)) return readCsv(p).map(toEdge).filter((e) => isBettableStat(e.stat));
+    if (!existsSync(p)) continue;
+    return applyTodaysRules(readCsv(p).map(toEdge), a, season, week);
   }
   return null;
+}
+
+// Today's rules, applied to the whole season.
+//
+// Every one of these filters exists at capture time too, but this replay reads
+// archived snapshots that were priced under WHATEVER rules were in force the
+// day they were captured. Filtering only at capture would leave already-taken
+// weeks betting retired markets and uncalibrated projections forever, and the
+// point of a deterministic replay is that one consistent rule set decides the
+// entire ledger. So the guards are re-applied on the way in.
+//
+// A week with no projections file cannot be support-floor checked. It fails
+// closed on the floored stats rather than passing them through: an
+// unverifiable projection is exactly what the floor exists to refuse.
+function applyTodaysRules(rows, a, season, week) {
+  const medians = loadProjectedValues(a, season, week);
+  const bettable = rows.filter((e) => isBettableStat(e.stat));
+  const { kept } = applyCalibrationGuards(
+    bettable.map((e) => ({
+      ...e,
+      projectedMedian: Number.isFinite(e.proj)
+        ? e.proj
+        : projectedValue(medians?.get(e.playerId), e.stat),
+    }))
+  );
+  return kept;
 }
 
 function weeksAvailable(a, season) {

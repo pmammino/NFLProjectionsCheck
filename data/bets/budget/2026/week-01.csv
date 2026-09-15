@@ -1,11 +1,11 @@
 Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
-2026,1,budget,4307,Aaron Rodgers,PIT,QB,vs ATL,rushYds,draftkings,0.5,over,101,,0.4975,0.4975,,1,0.9394,0.4419,0.4419,15%+,2.8124,1,100,lost,-3,-2.8124,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,budget,8057,Kirk Cousins,LV,QB,vs MIA,rushYds,circasports,0.5,over,125,,0.4444,0.4444,,1,0.8689,0.4245,0.4245,15%+,2.7017,1,100,lost,-6,-2.7017,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,budget,10729,Jared Goff,DET,QB,vs NO,rushYds,circasports,0.5,over,145,,0.4082,0.4082,,1,0.7696,0.3614,0.3614,15%+,2.3001,1,100,won,2,3.3351,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,budget,10215,Darren Waller,CAR,TE,vs CHI,recYds,draftkings,16.5,over,-113,,0.5305,0.5305,,1,0.8513,0.3208,0.3208,15%+,2.0417,1,100,won,28,1.8068,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,budget,8743,Geno Smith,NYJ,QB,@ TEN,rushYds,betrivers,6.5,over,-110,,0.5238,0.5238,,1,0.8311,0.3073,0.3073,15%+,1.9558,1,100,won,7,1.778,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,budget,13894,KaVontae Turpin,DAL,WR,@ NYG,rushYds,fanduel,3.5,over,-120,,0.5455,0.5455,,1,0.8303,0.2849,0.2849,15%+,1.8132,1,100,lost,0,-1.8132,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,budget,16807,Bryce Young,CAR,QB,vs CHI,rushYds,circasports,13.5,over,-110,,0.5238,0.5238,,1,0.7885,0.2647,0.2647,15%+,1.6846,1,100,lost,10,-1.6846,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,budget,15984,Jaylen Warren,PIT,RB,vs ATL,rushYds,fanduel,41.5,over,-114,,0.5327,0.5327,,1,0.7963,0.2635,0.2635,15%+,1.677,1,100,won,46,1.4711,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,budget,16795,Kayshon Boutte,HOU,WR,vs BUF,recYds,caesars,25.5,over,-108,,0.5192,0.5192,,1,0.7576,0.2384,0.2384,15%+,1.5173,1,100,lost,21,-1.5173,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,budget,15222,Kenny Gainwell,TB,RB,@ CIN,rushYds,thescore,21.5,over,-105,,0.5122,0.5122,,1,0.7473,0.2351,0.2351,15%+,1.4963,1,100,lost,15,-1.4963,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,16795,Kayshon Boutte,HOU,WR,vs BUF,receptions,betrivers,2.5,over,160,,0.3846,0.3846,,1,0.6081,0.2235,0.2235,15%+,2.2869,1,100,lost,1,-2.2869,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,16042,Chig Okonkwo,WAS,TE,@ PHI,receptions,draftkings,2.5,over,-141,,0.5851,0.5851,,1,0.8009,0.2158,0.2158,15%+,2.2081,1,100,lost,2,-2.2081,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,16033,Isaiah Likely,NYG,TE,vs DAL,receptions,draftkings,3.5,over,111,,0.4739,0.4739,,1,0.6822,0.2083,0.2083,15%+,2.1314,1,100,won,8,2.3659,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,13556,David Montgomery,HOU,RB,vs BUF,receptions,caesars,1.5,over,-121,,0.5475,0.5475,,1,0.7462,0.1986,0.1986,15%+,2.0321,1,100,won,3,1.6794,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,15222,Kenny Gainwell,TB,RB,@ CIN,rushYds,draftkings,23.5,over,-108,,0.5192,0.5192,,1,0.7119,0.1927,0.1927,15%+,1.9718,1,100,lost,15,-1.9718,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,15984,Jaylen Warren,PIT,RB,vs ATL,rushYds,betrivers,46.5,over,-118,,0.5413,0.5413,,1,0.7323,0.1910,0.1910,15%+,1.9544,1,100,lost,46,-1.9544,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,12860,Dallas Goedert,PHI,TE,vs WAS,recYds,circasports,34.5,over,-110,,0.5238,0.5238,,1,0.7079,0.1841,0.1841,15%+,1.8838,1,100,won,77,1.7125,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,18520,Kyle Monangai,CHI,RB,@ CAR,receptions,betr,0.5,over,-250,,0.7143,0.7143,,1,0.8975,0.1832,0.1832,15%+,1.8746,1,100,won,2,0.7498,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,14376,Jauan Jennings,MIN,WR,vs GB,recYds,caesars,22.5,over,-105,,0.5122,0.5122,,1,0.6920,0.1798,0.1798,15%+,1.8398,1,100,lost,0,-1.8398,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,budget,13610,T.J. Hockenson,MIN,TE,vs GB,recYds,draftkings,26.5,over,-109,,0.5215,0.5215,,1,0.6992,0.1776,0.1776,15%+,1.8173,1,100,won,36,1.6672,,,,,,,rotowire,2026-09-11T18:12:40.026Z

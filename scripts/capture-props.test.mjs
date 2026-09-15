@@ -71,7 +71,7 @@ test("ourProbability: an unknown stat key -> null rather than a wrong model", ()
 // The published edge set is what every persona reads, so anything the persona
 // engine needs must survive the round-trip to CSV and back.
 test("the published edge set carries everything a persona needs", () => {
-  for (const col of ["Edge", "ModelEdge", "FairProb", "ImpliedProb", "Hold", "OneSided", "Side", "Book", "Line", "Odds", "FixtureID"]) {
+  for (const col of ["Edge", "ModelEdge", "FairProb", "ImpliedProb", "Hold", "OneSided", "Side", "Proj", "Book", "Line", "Odds", "FixtureID"]) {
     assert.ok(PROPS_COLUMNS.includes(col), `PROPS_COLUMNS missing ${col}`);
   }
 });

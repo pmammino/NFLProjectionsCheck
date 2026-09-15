@@ -1,0 +1,72 @@
+name: OpticOdds discovery
+
+# Manual diagnostic. Prints what the OpticOdds API actually returns — the
+# sportsbooks it offers for NFL, the market names (checked against our aliases
+# in scripts/lib/markets.mjs), the week's fixtures, and real odds records beside
+# how we parse them.
+#
+# Run this FIRST, before trusting a capture. The response shapes are pinned to
+# the v3 OpenAPI definition and verified against live samples, but the exact NFL
+# market names for the yardage and reception props have never been observed —
+# our aliases follow the confirmed naming convention and are very likely right,
+# but a wrong one means that stat silently captures zero rows. `--markets`
+# prints an OK/MISS line per stat, which is the check.
+#
+# Writes nothing and commits nothing. Everything lands in the job log.
+
+on:
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "What to inspect"
+        required: false
+        default: "markets"
+        type: choice
+        options: [markets, sportsbooks, fixtures, dump-odds, all]
+      season:
+        description: "Season (year), e.g. 2026. Blank = auto by date."
+        required: false
+      week:
+        description: "NFL week number. Blank = auto by date."
+        required: false
+      books:
+        description: "Books for dump-odds, comma-separated. Blank = first two offered."
+        required: false
+      limit:
+        description: "Odds records to dump (dump-odds only)"
+        required: false
+        default: "3"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: optic-discover
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Discover
+        env:
+          OPTICODDS_API_KEY: ${{ secrets.OPTICODDS_API_KEY }}
+        run: |
+          if [ -z "$OPTICODDS_API_KEY" ]; then
+            echo "::error::OPTICODDS_API_KEY secret is not set."
+            echo "Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          args="--${{ github.event.inputs.what || 'markets' }}"
+          if [ -n "${{ github.event.inputs.season }}" ]; then args="$args --season ${{ github.event.inputs.season }}"; fi
+          if [ -n "${{ github.event.inputs.week }}" ]; then args="$args --week ${{ github.event.inputs.week }}"; fi
+          if [ -n "${{ github.event.inputs.books }}" ]; then args="$args --books '${{ github.event.inputs.books }}'"; fi
+          if [ -n "${{ github.event.inputs.limit }}" ]; then args="$args --limit ${{ github.event.inputs.limit }}"; fi
+          echo "Running: node scripts/optic-discover.mjs $args"
+          eval "node scripts/optic-discover.mjs $args"

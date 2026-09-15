@@ -332,8 +332,15 @@ against the wrong player's projection and corrupt the ledger silently. Every
 unmatched name is printed at the end of a capture run — a rising count there
 means the roster snapshot is stale.
 
-`.github/workflows/props-weekly.yml` runs the capture every **Wednesday ~8am
-ET** and needs the **`OPTICODDS_API_KEY`** repository secret;
+### Workflows
+
+| Workflow | When | What |
+|---|---|---|
+| `ingest-weekly.yml` | daily, 13:00 UTC | RotoWire projections + actuals, and `data/players/{season}.csv` — **run this before the first capture**, the crosswalk needs it |
+| `optic-discover.yml` | manual | Prints what the OpticOdds API actually returns. Run `markets` first: it prints OK/MISS per stat and is how a wrong market alias gets caught |
+| `props-weekly.yml` | Wednesday ~12:00 UTC | The capture. Has a `dryRun` input that prices everything and writes nothing |
+
+`.github/workflows/props-weekly.yml` needs the **`OPTICODDS_API_KEY`** repository secret;
 `.github/workflows/ingest-weekly.yml`'s existing daily run grades pending bets
 right after it refreshes actuals.
 

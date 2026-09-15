@@ -134,6 +134,77 @@ export function initialLastKey(name) {
   return `${parts[0][0]} ${parts.at(-1)}`;
 }
 
+const givenName = (name) => normalizeName(name).split(" ").filter(Boolean)[0] ?? "";
+
+// Nickname pairs that a prefix test cannot catch, because the short form isn't
+// the start of the long one.
+const NICKNAMES = [
+  ["mike", "michael"], ["bill", "william"], ["billy", "william"], ["will", "william"],
+  ["bob", "robert"], ["bobby", "robert"], ["rob", "robert"],
+  ["jim", "james"], ["jimmy", "james"], ["jamie", "james"],
+  ["rick", "richard"], ["rich", "richard"], ["ricky", "richard"], ["dick", "richard"],
+  ["tony", "anthony"], ["tony", "antonio"],
+  ["ted", "theodore"], ["teddy", "theodore"],
+  ["joe", "joseph"], ["joey", "joseph"],
+  ["jack", "john"], ["johnny", "john"],
+  ["hank", "henry"], ["chuck", "charles"], ["charlie", "charles"],
+  ["gabe", "gabriel"], ["nate", "nathaniel"],
+  ["drew", "andrew"], ["andy", "andrew"],
+  ["jake", "jacob"], ["gus", "augustus"], ["moe", "maurice"],
+  ["dick", "dixon"], ["sonny", "santonio"],
+];
+const NICKNAME_PAIRS = new Set(NICKNAMES.flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
+
+// Could these two given names be the SAME person written differently?
+//
+// This is the guard that makes the first-initial tier safe. That tier exists to
+// catch "Josh Allen" / "Joshua Allen" — one player, two renderings. Without a
+// check on the given name it also happily matches "Josh Williams" to "Javonte
+// Williams", who are different people who merely share an initial and a
+// surname. Against the real 506-player roster that is not hypothetical: "Josh
+// Williams" (not on the roster at all) keys to the same slot as both Javonte
+// and Jameson Williams. With one of them present instead of two, the tier would
+// have silently priced one player's prop against another's projection.
+//
+// So a match needs the given names to be identical, one a prefix of the other
+// ("josh"/"joshua", "matt"/"matthew"), or a known nickname pair.
+export function givenNamesCompatible(a, b) {
+  const x = givenName(a);
+  const y = givenName(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (NICKNAME_PAIRS.has(`${x}|${y}`)) return true;
+
+  // Compare stems, so a "-y" diminutive still reaches its formal name:
+  // "Kenny Gainwell" (roster) vs "Kenneth Gainwell" (OpticOdds) is one player,
+  // and that exact pair shows up in real data.
+  for (const sx of stems(x)) {
+    for (const sy of stems(y)) {
+      const [short, long] = sx.length <= sy.length ? [sx, sy] : [sy, sx];
+      // At least 3 characters: a 2-letter prefix like "jo" would match half the
+      // league, which is the permissiveness this whole guard exists to prevent.
+      if (short.length >= 3 && long.startsWith(short)) return true;
+    }
+  }
+  return false;
+}
+
+// A given name plus its plausible stems. "kenny" -> {kenny, kenn, ken}, which
+// lets it prefix-match "kenneth"; "danny" -> {danny, dann, dan} for "daniel".
+// Deliberately conservative: "josh" has no trailing diminutive so it stays
+// {josh}, and never reaches "javonte".
+function stems(given) {
+  const out = new Set([given]);
+  const trimmed = given.replace(/(?:ie|ey|y)$/, "");
+  if (trimmed !== given && trimmed.length >= 3) {
+    out.add(trimmed);
+    // Collapse a doubled final consonant: "kenn" -> "ken", "samm" -> "sam".
+    const collapsed = trimmed.replace(/([bcdfgklmnprstvz])\1$/, "$1");
+    if (collapsed.length >= 3) out.add(collapsed);
+  }
+  return out;
+}
+
 // ---- Index -------------------------------------------------------------------
 // Build lookup tables from roster rows ({ PlayerID, Name, Team, Pos }), as
 // written by ingest.mjs to data/players/{season}.csv.
@@ -203,7 +274,15 @@ export function matchPlayer(index, { name, team, fixtureTeams } = {}) {
 
     // Distinct players only: a roster carrying duplicate rows for one player
     // is not a collision.
-    const pool = dedupeById(candidates);
+    let pool = dedupeById(candidates);
+
+    // The loose tier keys on first-initial + surname, which collides real
+    // people. Keep only candidates whose given name could be the same person.
+    if (tier === "initial+last") {
+      pool = pool.filter((c) => givenNamesCompatible(name, c.name));
+      if (pool.length === 0) continue;
+    }
+
     if (pool.length === 1) return hit(pool[0], tier);
 
     // Two or more real players share this name. Narrow, most specific first.

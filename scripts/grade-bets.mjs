@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { readCsv, toCsv } from "./lib/csv.mjs";
 import { americanToDecimal } from "./lib/odds.mjs";
 import { seasonForDate } from "./lib/schedule.mjs";
+import { STAT_DEFS } from "./lib/markets.mjs";
 import { BETS_COLUMNS } from "./capture-props.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -28,23 +29,13 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const betsPath = (dir, season, week) => join(ROOT, dir, "bets", String(season), `week-${pad2(week)}.csv`);
 const actualPath = (dir, season, week) => join(ROOT, dir, "actuals", String(season), `week-${pad2(week)}.csv`);
 
-// Map a stat key to the actual_games.csv column(s) it resolves against.
-// Anytime TD / rushTD / recTD / passTD / int all sum from the ACTUAL_COLUMNS
-// used by scripts/lib/rotowire.mjs (see mergeActuals).
-const ACTUAL_COLS = {
-  anytimeTD: ["RushTD", "RecptTD"],
-  passYds: ["PassYards"],
-  passAtt: ["PassAtt"],
-  completions: ["PassComp"],
-  passTD: ["PassTD"],
-  int: [], // actuals feed has no INT column (see README) — always left pending
-  rushYds: ["RushYards"],
-  rushAtt: ["Rushes"],
-  rushTD: ["RushTD"],
-  receptions: ["Receptions"],
-  recYds: ["ReceptYds"],
-  recTD: ["RecptTD"],
-};
+// Settle one bet: "won", "lost", or "push" when the result lands exactly on a
+// whole-number line. Exported for unit testing.
+export function gradeOutcome(actual, line, side) {
+  if (actual === line) return "push";
+  if (side === "under") return actual < line ? "won" : "lost";
+  return actual > line ? "won" : "lost";
+}
 
 function parseArgs(argv) {
   const a = { dataDir: "data", dryRun: false };
@@ -100,7 +91,7 @@ function gradeWeek(a, season, week) {
     const actualRow = actualsByPlayer.get(bet.PlayerID);
     if (!actualRow) continue; // this player's game hasn't completed yet
 
-    const cols = ACTUAL_COLS[bet.Stat];
+    const cols = STAT_DEFS[bet.Stat]?.actualCols;
     if (!cols || cols.length === 0) continue; // stat has no actuals source — stays pending
 
     const actual = cols.reduce((s, c) => s + (Number(actualRow[c]) || 0), 0);
@@ -108,12 +99,25 @@ function gradeWeek(a, season, week) {
     const flatStake = Number(bet.FlatStakeUnits);
     const kellyStake = Number(bet.KellyStakeUnits);
     const decimalOdds = americanToDecimal(Number(bet.Odds));
-    const won = actual > line;
+    // Ledgers written before the OpticOdds migration have no Side column and
+    // were all overs, so an absent Side reads as "over".
+    const side = bet.Side || "over";
 
+    const outcome = gradeOutcome(actual, line, side);
     bet.Actual = actual;
-    bet.Status = won ? "won" : "lost";
-    bet.PnlFlatUnits = (won ? flatStake * (decimalOdds - 1) : -flatStake).toFixed(4);
-    bet.PnlKellyUnits = (won ? kellyStake * (decimalOdds - 1) : -kellyStake).toFixed(4);
+    bet.Status = outcome;
+    if (outcome === "push") {
+      // Stake returned: no profit, no loss. Real over/under markets land here
+      // whenever the line is a whole number and the player lands exactly on it
+      // (e.g. Over 5.0 receptions, caught 5). The old RotoWire feed's lines
+      // were effectively all half-points, so this case never arose.
+      bet.PnlFlatUnits = "0.0000";
+      bet.PnlKellyUnits = "0.0000";
+    } else {
+      const won = outcome === "won";
+      bet.PnlFlatUnits = (won ? flatStake * (decimalOdds - 1) : -flatStake).toFixed(4);
+      bet.PnlKellyUnits = (won ? kellyStake * (decimalOdds - 1) : -kellyStake).toFixed(4);
+    }
     changed = true;
   }
 

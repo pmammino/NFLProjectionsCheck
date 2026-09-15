@@ -7,6 +7,7 @@
     "build:betting": "node scripts/build-betting-data.mjs",
     "ingest": "node scripts/ingest.mjs",
     "capture-props": "node scripts/capture-props.mjs",
+    "optic-discover": "node scripts/optic-discover.mjs",
     "grade-bets": "node scripts/grade-bets.mjs",
     "predev": "node scripts/build-data.mjs && node scripts/build-betting-data.mjs",
     "prebuild": "node scripts/build-data.mjs && node scripts/build-betting-data.mjs",

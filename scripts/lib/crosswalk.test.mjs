@@ -8,6 +8,7 @@ import {
   canonicalTeam,
   buildPlayerIndex,
   matchPlayer,
+  givenNamesCompatible,
   NFL_TEAMS,
 } from "./crosswalk.mjs";
 
@@ -246,4 +247,72 @@ test("an empty roster matches nothing without throwing", () => {
   assert.equal(matchPlayer(idx, { name: "Travis Kelce", team: "KC" }).reason, "not-found");
   assert.equal(buildPlayerIndex(null).size, 0);
   assert.equal(buildPlayerIndex(undefined).size, 0);
+});
+
+// ---- The given-name guard on the loose tier ----------------------------------
+// The first-initial + surname tier exists for "Josh Allen"/"Joshua Allen" — one
+// player, two renderings. Without a check on the given name it also matches
+// "Josh Williams" to "Javonte Williams", who are different people. Against the
+// real 506-player roster that is not hypothetical: "Josh Williams" (absent from
+// the roster) keys to the same slot as BOTH Javonte and Jameson Williams. With
+// only one of them present, the tier would silently have priced one player's
+// prop against the other's projection.
+
+test("a short form matches its formal given name", () => {
+  assert.ok(givenNamesCompatible("Josh Allen", "Joshua Allen"));
+  assert.ok(givenNamesCompatible("Matt Stafford", "Matthew Stafford"));
+  assert.ok(givenNamesCompatible("Cam Ward", "Cameron Ward"));
+  assert.ok(givenNamesCompatible("Zach Wilson", "Zachary Wilson"));
+});
+
+test("a -y diminutive reaches its formal name", () => {
+  // Real pair from the feed: OpticOdds says "Kenneth Gainwell", the RotoWire
+  // roster says "Kenny Gainwell".
+  assert.ok(givenNamesCompatible("Kenneth Gainwell", "Kenny Gainwell"));
+  assert.ok(givenNamesCompatible("Danny Amendola", "Daniel Amendola"));
+  assert.ok(givenNamesCompatible("Sammy Watkins", "Samuel Watkins"));
+  assert.ok(givenNamesCompatible("Willie Snead", "William Snead"));
+});
+
+test("nicknames that are not prefixes still match", () => {
+  assert.ok(givenNamesCompatible("Mike Evans", "Michael Evans"));
+  assert.ok(givenNamesCompatible("Bob Smith", "Robert Smith"));
+  assert.ok(givenNamesCompatible("Tony Pollard", "Antonio Pollard"));
+  assert.ok(givenNamesCompatible("Gabe Davis", "Gabriel Davis"));
+});
+
+test("different people sharing an initial and surname do NOT match", () => {
+  assert.ok(!givenNamesCompatible("Josh Williams", "Javonte Williams"));
+  assert.ok(!givenNamesCompatible("Josh Williams", "Jameson Williams"));
+  assert.ok(!givenNamesCompatible("Ke'Shawn Williams", "Kyren Williams"));
+  assert.ok(!givenNamesCompatible("Ke'Shawn Williams", "Kyle Williams"));
+});
+
+test("a two-letter prefix is too permissive to count", () => {
+  // "Jo" would otherwise match half the league.
+  assert.ok(!givenNamesCompatible("Jo Smith", "Jonathan Smith"));
+  assert.ok(!givenNamesCompatible("Al Smith", "Alexander Smith"));
+});
+
+test("the guard only applies to the loose tier, never to an exact name", () => {
+  // An exact-name match must not be second-guessed by the given-name rule.
+  const idx = buildPlayerIndex([{ PlayerID: "7", Name: "Josh Williams", Team: "CIN", Pos: "RB" }]);
+  assert.equal(matchPlayer(idx, { name: "Josh Williams", team: "CIN" }).playerId, "7");
+});
+
+test("an unrelated player with a shared initial reports not-found, not a match", () => {
+  // The whole point: a miss is correct here, a join would be corruption.
+  const idx = buildPlayerIndex([
+    { PlayerID: "10", Name: "Javonte Williams", Team: "DAL", Pos: "RB" },
+  ]);
+  const r = matchPlayer(idx, { name: "Josh Williams", fixtureTeams: ["CIN", "TB"] });
+  assert.equal(r.playerId, null);
+  assert.equal(r.reason, "not-found");
+});
+
+test("the diminutive rule still resolves through the full match path", () => {
+  const idx = buildPlayerIndex([{ PlayerID: "11", Name: "Kenny Gainwell", Team: "TB", Pos: "RB" }]);
+  const r = matchPlayer(idx, { name: "Kenneth Gainwell", fixtureTeams: ["CIN", "TB"] });
+  assert.equal(r.playerId, "11");
+  assert.equal(r.method, "initial+last");
 });

@@ -39,7 +39,15 @@ on:
         required: false
         default: "both"
       historical:
-        description: "Set to true to pull closing lines for a week already played"
+        description: "Pull historical lines for a week already played (true/false)"
+        required: false
+        default: "false"
+      includeOffshore:
+        description: "Also pull offshore books, e.g. Pinnacle (true/false)"
+        required: false
+        default: "false"
+      dryRun:
+        description: "Fetch and price but write nothing — use this for the first run (true/false)"
         required: false
         default: "false"
 
@@ -77,17 +85,19 @@ jobs:
           if [ -n "${{ github.event.inputs.edgeBasis }}" ]; then args="$args --edge-basis ${{ github.event.inputs.edgeBasis }}"; fi
           if [ -n "${{ github.event.inputs.sides }}" ]; then args="$args --sides ${{ github.event.inputs.sides }}"; fi
           if [ "${{ github.event.inputs.historical }}" = "true" ]; then args="$args --historical"; fi
+          if [ "${{ github.event.inputs.includeOffshore }}" = "true" ]; then args="$args --include-offshore"; fi
+          if [ "${{ github.event.inputs.dryRun }}" = "true" ]; then args="$args --dry-run"; fi
           echo "Running: node scripts/capture-props.mjs $args"
           node scripts/capture-props.mjs $args
 
       # Grade what we can immediately (e.g. re-running a past week), though
       # most grading happens the following days as ingest-weekly.yml runs.
       - name: Grade pending bets
-        if: always()
+        if: always() && github.event.inputs.dryRun != 'true'
         run: node scripts/grade-bets.mjs
 
       - name: Commit snapshots
-        if: always()
+        if: always() && github.event.inputs.dryRun != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

@@ -1,0 +1,21 @@
+Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
+2026,2,kelly,17732,Keon Coleman,BUF,WR,vs DET,receptions,theScore,3.5,over,1800,,0.0526,0.0526,,1,0.2218,0.1692,0.1692,15%+,2.425,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,15892,Khalil Shakir,BUF,WR,vs DET,receptions,DraftKings,7.5,over,970,,0.0935,0.0935,,1,0.2894,0.1960,0.1960,15%+,2.425,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,10729,Jared Goff,DET,QB,at BUF,anytimeTD,BetMGM,0.5,over,2500,,0.0385,0.0385,,1,0.0769,0.0384,0.0384,3-5%,0.8078,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,18526,Raheim Sanders,CLE,RB,at TB,anytimeTD,BetMGM,0.5,over,825,,0.1081,0.1081,,1,0.1975,0.0894,0.0894,5-10%,2.0254,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,17704,Malik Nabers,NYG,WR,at LAR,receptions,Hard Rock,9.5,over,800,,0.1111,0.1111,,1,0.1754,0.0643,0.0643,5-10%,1.4616,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,15807,Kyren Williams,LAR,RB,vs NYG,rushYds,Hard Rock,77.5,over,170,-250,0.3704,0.3415,0.0847,0,0.5744,0.2040,0.2329,15%+,2.425,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,17690,Blake Corum,LAR,RB,vs NYG,rushYds,FanDuel,43.5,over,-114,-114,0.5327,0.5000,0.0654,0,0.8162,0.2835,0.3162,15%+,2.425,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,13424,DK Metcalf,PIT,WR,at NE,anytimeTD,DraftKings,0.5,over,260,,0.2778,0.2778,,1,0.3750,0.0972,0.0972,5-10%,2.425,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,14506,Tee Higgins,CIN,WR,at HOU,anytimeTD,Caesars,0.5,over,167,,0.3745,0.3745,,1,0.4727,0.0982,0.0982,5-10%,2.425,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,18811,Jacory Croskey-Merritt,WAS,RB,at DAL,anytimeTD,theScore,0.5,over,145,,0.4082,0.4082,,1,0.4984,0.0903,0.0903,5-10%,2.425,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,13610,T.J. Hockenson,MIN,TE,at CHI,anytimeTD,BetMGM,0.5,over,425,,0.1905,0.1905,,1,0.2289,0.0385,0.0385,3-5%,0.9592,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,16898,Kendre Miller,NO,RB,at BAL,anytimeTD,BetMGM,0.5,over,500,,0.1667,0.1667,,1,0.1975,0.0308,0.0308,3-5%,0.7477,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,18516,Quinshon Judkins,CLE,RB,at TB,anytimeTD,DraftKings,0.5,over,150,,0.4000,0.4000,,1,0.4727,0.0727,0.0727,5-10%,2.425,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,14416,Jalen Hurts,PHI,QB,at TEN,anytimeTD,theScore,0.5,over,150,,0.4000,0.4000,,1,0.4621,0.0621,0.0621,5-10%,2.0916,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,16661,De'Von Achane,MIA,RB,at SF,anytimeTD,Caesars,0.5,over,126,,0.4425,0.4425,,1,0.5084,0.0659,0.0659,5-10%,2.3895,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,15946,Christian Watson,GB,WR,at NYJ,anytimeTD,theScore,0.5,over,150,,0.4000,0.4000,,1,0.4566,0.0566,0.0566,5-10%,1.9063,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,18522,RJ Harvey,DEN,RB,vs JAX,anytimeTD,DraftKings,0.5,over,230,,0.3030,0.3030,,1,0.3430,0.0399,0.0399,3-5%,1.1589,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,13536,Terry McLaurin,WAS,WR,at DAL,anytimeTD,Caesars,0.5,over,210,,0.3226,0.3226,,1,0.3624,0.0398,0.0398,3-5%,1.1879,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,16895,Jordan Addison,MIN,WR,at CHI,anytimeTD,BetMGM,0.5,over,220,,0.3125,0.3125,,1,0.3495,0.0370,0.0370,3-5%,1.0876,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z
+2026,2,kelly,18547,Tetairoa McMillan,CAR,WR,at ATL,anytimeTD,DraftKings,0.5,over,190,,0.3448,0.3448,,1,0.3812,0.0364,0.0364,3-5%,1.1219,1,80.8335,pending,,,,,,,,,opticodds,2026-09-15T18:07:45.828Z

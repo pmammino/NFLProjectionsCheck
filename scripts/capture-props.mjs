@@ -47,10 +47,12 @@
 //    directions and the ledger carries a Side column. `--sides over` restores
 //    the old overs-only behaviour.
 //
-// 3. BOOKS ARE FILTERED TO ACTIVE, ONSHORE, NFL-PRICING ONES. /sportsbooks has
-//    no league filter and lists several hundred books globally, so the NFL set
-//    is derived from /markets and intersected with the onshore/active flags.
-//    See resolveBooks() for what that filter costs.
+// 3. PRICES COME FROM A CURATED BOOK ROSTER. The capture takes the BEST price
+//    across every book it pulls, which is only meaningful among books you can
+//    actually bet at — a best price at a book with no account behind it is a
+//    return nobody could have earned, and best-of-N finds the most generous
+//    outlier by construction. The roster lives in lib/books.mjs; --all-books
+//    restores the old "every onshore book" behaviour for research.
 //
 // 4. PLAYERS ARE JOINED BY NAME, NOT ID. RotoWire's feed handed us its own
 //    player id; OpticOdds has a separate id space. The join now runs through
@@ -70,8 +72,8 @@
 //                                  [--devig-method multiplicative]
 //                                  [--edge-basis ev|novig]
 //                                  [--sides both|over|under]
-//                                  [--books "DraftKings,FanDuel"]
-//                                  [--include-offshore]
+//                                  [--books "DraftKings,FanDuel"] (default: lib/books.mjs)
+//                                  [--all-books] [--include-offshore]
 //                                  [--historical]   closing lines for a played week
 //                                  [--data-dir data] [--dry-run]
 //
@@ -92,6 +94,7 @@ import {
   pairOdds,
 } from "./lib/optic-normalize.mjs";
 import { buildPlayerIndex, matchPlayer, canonicalTeam } from "./lib/crosswalk.mjs";
+import { DEFAULT_BOOKS, resolveBookIds } from "./lib/books.mjs";
 import { readCsv, toCsv } from "./lib/csv.mjs";
 import { seasonForDate, projectionWeek } from "./lib/schedule.mjs";
 import { edgeBucket } from "./lib/edge.mjs";
@@ -191,6 +194,7 @@ function parseArgs(argv) {
       case "--use-opening": a.useOpening = true; break;
       case "--allow-empty": a.allowEmpty = true; break;
       case "--include-offshore": a.includeOffshore = true; break;
+      case "--all-books": a.allBooks = true; break;
       case "--data-dir": a.dataDir = next(); break;
       case "--dry-run": a.dryRun = true; break;
       case "-h": case "--help": a.help = true; break;
@@ -396,59 +400,75 @@ function priceMarket(market, splits, a) {
 // against softer books, so "we disagree with the market" becomes a weaker
 // claim than it would be against Pinnacle.
 async function resolveBooks(client, a) {
-  const nflBooks = await client.sportsbooksForLeague({
-    sport: "football",
-    league: "nfl",
-    marketNames: allOpticMarketNames(),
-  });
-  const nflIds = new Set(nflBooks.map((b) => b.id.toLowerCase()));
-
   const all = await client.getSportsbooks();
-  const rows = all.map((b) =>
-    typeof b === "string" ? { id: b, name: b, is_active: true, is_onshore: true } : b
-  );
 
-  const keep = [];
-  const dropped = { notNfl: 0, inactive: 0, offshore: 0 };
-  for (const b of rows) {
-    const id = String(b?.id ?? b?.name ?? "");
-    if (!id) continue;
-    // Only apply the NFL filter if /markets actually told us something; an
-    // empty result means the derivation failed, and silently pulling zero
-    // books would look identical to "no odds this week".
-    if (nflIds.size > 0 && !nflIds.has(id.toLowerCase())) {
-      dropped.notNfl++;
-      continue;
+  // --all-books: the old behaviour, every active book that prices NFL. Kept
+  // for research, not for a ledger — see the note in lib/books.mjs on why
+  // best-of-86 produces returns nobody could have earned.
+  if (a.allBooks) {
+    const nflBooks = await client.sportsbooksForLeague({
+      sport: "football",
+      league: "nfl",
+      marketNames: allOpticMarketNames(),
+    });
+    const nflIds = new Set(nflBooks.map((b) => b.id.toLowerCase()));
+    if (nflIds.size === 0) {
+      console.warn(
+        "  could not derive the NFL book list from /markets — falling back to every " +
+          "active book, which will be slow."
+      );
     }
-    if (b?.is_active === false) {
-      dropped.inactive++;
-      continue;
+
+    const keep = [];
+    const dropped = { notNfl: 0, inactive: 0, offshore: 0 };
+    for (const b of all) {
+      const row = typeof b === "string" ? { id: b, is_active: true, is_onshore: true } : b;
+      const id = String(row?.id ?? row?.name ?? "");
+      if (!id) continue;
+      if (nflIds.size > 0 && !nflIds.has(id.toLowerCase())) { dropped.notNfl++; continue; }
+      if (row?.is_active === false) { dropped.inactive++; continue; }
+      if (!a.includeOffshore && row?.is_onshore === false) { dropped.offshore++; continue; }
+      keep.push(id);
     }
-    if (!a.includeOffshore && b?.is_onshore === false) {
-      dropped.offshore++;
-      continue;
-    }
-    keep.push(id);
+    console.log(
+      `  books: ${keep.length} kept (--all-books)` +
+        ` — dropped ${dropped.notNfl} non-NFL, ${dropped.inactive} inactive` +
+        `, ${dropped.offshore} offshore${a.includeOffshore ? " (included)" : ""}`
+    );
+    if (keep.length === 0) throw new Error("No sportsbooks left after filtering.");
+    return keep;
   }
 
-  if (nflIds.size === 0) {
+  // The normal path: a curated roster, resolved against the live list so a
+  // shorthand like "hardrock" finds whatever id the API actually uses.
+  const requested = a.books ?? DEFAULT_BOOKS;
+  const { ids, matched, missing, ambiguous } = resolveBookIds(requested, all);
+
+  console.log(`  books: ${ids.length} of ${requested.length} requested, resolved against ${all.length} live books`);
+  for (const [want, id] of matched) {
+    console.log(`    ${want}${want === id ? "" : ` -> ${id}`}`);
+  }
+
+  // A book that fails to resolve is NOT an API error — it just returns no odds,
+  // which is indistinguishable from the book not pricing that week. Say so.
+  if (missing.length) {
     console.warn(
-      "  could not derive the NFL book list from /markets — falling back to every " +
-        "active book, which will be slow. Check the market aliases in lib/markets.mjs."
+      `  ${missing.length} requested book(s) matched nothing live and will contribute ` +
+        `NO odds: ${missing.join(", ")}\n` +
+        `    Run \`npm run optic-discover -- --sportsbooks\` to see the real names.`
     );
   }
-  console.log(
-    `  books: ${keep.length} kept` +
-      ` (dropped ${dropped.notNfl} non-NFL, ${dropped.inactive} inactive` +
-      `, ${dropped.offshore} offshore${a.includeOffshore ? " — included" : ""})`
-  );
-  if (keep.length === 0) {
+  for (const [want, candidates] of ambiguous) {
+    console.warn(`  "${want}" is ambiguous (${candidates.join(", ")}) — skipped. Name one exactly.`);
+  }
+
+  if (ids.length === 0) {
     throw new Error(
-      "No sportsbooks left after filtering — nothing can be priced. " +
-        "Try --include-offshore, or name books explicitly with --books."
+      `None of the requested books resolved: ${requested.join(", ")}. ` +
+        "Run `npm run optic-discover -- --sportsbooks` to see what is available."
     );
   }
-  return keep;
+  return ids;
 }
 
 // Opponent label matching the existing snapshot format ("vs TB" / "at TB").
@@ -552,18 +572,15 @@ async function main() {
 
   const client = new OpticOddsClient();
 
-  // Books: every one OpticOdds offers, unless narrowed with --books. Line
-  // shopping across the full set is the point — different books post
-  // different lines for the same player, and the best of them is what we bet.
-  if (a.books?.length) {
-    a.resolvedBooks = a.books;
-  } else {
-    a.resolvedBooks = await resolveBooks(client, a);
-    if (a.resolvedBooks.length === 0) {
-      throw new Error("OpticOdds returned no sportsbooks — cannot price anything.");
-    }
-  }
-  console.log(`  using: ${a.resolvedBooks.slice(0, 8).join(", ")}${a.resolvedBooks.length > 8 ? ", …" : ""}`);
+  // Books: a curated roster by default (lib/books.mjs), or whatever --books
+  // names. Either way the names go through resolveBooks, which matches them
+  // against the live list — a name the API doesn't recognise returns no odds
+  // rather than erroring, so it has to be caught here or not at all.
+  a.resolvedBooks = await resolveBooks(client, a);
+  // Printed in full, not truncated: this list decides which prices the ledger
+  // is allowed to claim, and a book you cannot actually bet at makes a paper
+  // return you could never have earned. Seeing all of them is the point.
+  console.log(`  using (${a.resolvedBooks.length}): ${a.resolvedBooks.join(", ")}`);
 
   // Fixtures for the week.
   const fixtureRows = await client.getFixtures({
@@ -634,7 +651,8 @@ async function main() {
       fixtureTeams: fixture ? [fixture.homeTeam, fixture.awayTeam] : undefined,
     });
     if (!match.playerId) {
-      const key = `${market.playerName} (${market.team || "?"}) — ${match.reason}`;
+      const where = market.team || [fixture?.awayTeam, fixture?.homeTeam].filter(Boolean).join("/") || "?";
+      const key = `${market.playerName} (${where}) — ${match.reason}`;
       unmatched.set(key, (unmatched.get(key) ?? 0) + 1);
       continue;
     }
@@ -754,6 +772,7 @@ async function main() {
     `  ${betRows.length} bets clear the ${(a.minEdge * 100).toFixed(1)}% edge bar ` +
       `(${overs} over, ${betRows.length - overs} under).`
   );
+  reportBetComposition(betRows);
   writeCsvIfChanged(existingPath, toCsv(BETS_COLUMNS, betRows), a);
 
   console.log(`Done. ${client.requestCount} OpticOdds requests.`);
@@ -803,6 +822,36 @@ function reportDiagnostics(d, a_useOpening = false) {
   }
 }
 
+// Where the selected bets actually came from.
+//
+// The ledger takes the best price across every book pulled, so if that best
+// price keeps landing at books you have no account with, the paper return is
+// one you could never have earned. This is the line that makes that visible —
+// a long tail of unfamiliar books is the signal to narrow --books.
+function reportBetComposition(betRows) {
+  if (betRows.length === 0) return;
+
+  const oneSided = betRows.filter((b) => b.OneSided === 1).length;
+  if (oneSided > 0) {
+    console.log(
+      `  ${oneSided}/${betRows.length} selected bets are one-sided (no opposing price), ` +
+        `so their FairProb falls back to the raw price and ModelEdge equals Edge.`
+    );
+  }
+
+  const byBook = new Map();
+  for (const b of betRows) byBook.set(b.Book, (byBook.get(b.Book) ?? 0) + 1);
+  const ranked = [...byBook.entries()].sort((x, y) => y[1] - x[1]);
+  console.log(`  best price came from ${byBook.size} distinct book(s):`);
+  for (const [book, n] of ranked.slice(0, 12)) {
+    console.log(`    ${String(n).padStart(4)}  ${book}`);
+  }
+  if (ranked.length > 12) {
+    const rest = ranked.slice(12).reduce((s, [, n]) => s + n, 0);
+    console.log(`    ${String(rest).padStart(4)}  across ${ranked.length - 12} other book(s)`);
+  }
+}
+
 function reportUnmatched(unmatched, noProjection) {
   if (noProjection) {
     console.log(`  ${noProjection} markets matched a player with no projection this week — skipped.`);
@@ -835,13 +884,17 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                                    more bets — most of them not +EV. For
                                    research, not for a live ledger.
   --sides <s>              both | over | under (default: both)
-  --books <a,b,c>          Sportsbooks to pull. Bypasses every filter below —
-                           if you name a book you get it. Default: every
-                           active, onshore book that prices NFL.
-  --include-offshore       Also pull offshore books. They cannot be bet at
-                           from a regulated jurisdiction, but the sharpest
-                           (Pinnacle) give the best fair-price reference, so
-                           this is useful for judging ModelEdge.
+  --books <a,b,c>          Sportsbooks to price against. Names are resolved
+                           against the live list, so "hardrock" finds whatever
+                           id the API uses. Default: the roster in
+                           lib/books.mjs (${DEFAULT_BOOKS.join(", ")}).
+  --all-books              Ignore the roster and use every active book that
+                           prices NFL. The ledger takes the BEST price across
+                           whatever is pulled, so this reports returns nobody
+                           could have earned — research only.
+  --include-offshore       With --all-books, also include offshore books. The
+                           sharpest (Pinnacle) give the best fair-price
+                           reference for judging ModelEdge.
   --historical             Pull closing lines for a week already played,
                            instead of current odds. OpticOdds retains history
                            on a rolling 2-month window, so older weeks cannot

@@ -162,13 +162,25 @@ and actuals still come from RotoWire; only the odds source changed.
    Different books post different lines for the same player/stat, so every
    (book, line, side) combination is scanned and the best one is used.
 
-   **Which books.** Only **active, onshore books that actually price the NFL**.
-   That last filter matters for speed: `/sportsbooks` takes no league argument
-   and returns several hundred books globally, so the NFL set is derived from
-   `/markets` (which nests sports → leagues → sportsbooks) and intersected with
-   the `is_active` / `is_onshore` flags. Pulling the unfiltered list would spend
-   a request per 5 books per fixture batch on books that never quote an NFL
-   game.
+   **Which books.** A **curated roster** — DraftKings, FanDuel, BetMGM,
+   Caesars, BetRivers, Hard Rock, theScore and Circa — defined in
+   `scripts/lib/books.mjs`.
+
+   This is deliberately not "every book available". The capture takes the best
+   price across whatever it pulls, which is only meaningful among books you can
+   actually bet at: a best price at a book with no account behind it is a
+   return nobody could have earned, and best-of-N finds the most generous
+   outlier by construction. The first live run showed the scale of it — active
+   + onshore + NFL still left **86 books**, including bet99, betano and
+   888sport, because `is_onshore` means *regulated*, not *US*.
+
+   Names are resolved against the live list, so `hardrock` finds whatever id
+   the API uses (`hard_rock_bet`). A name matching nothing is reported loudly:
+   an unrecognised book isn't an API error, it just returns no odds, which is
+   indistinguishable from that book not pricing the week.
+
+   `--books` overrides the roster; `--all-books` restores the old behaviour for
+   research.
 
    Two caveats on `is_onshore`:
 

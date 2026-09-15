@@ -1,9 +1,14 @@
-name: Capture weekly prop lines
+name: Publish weekly edges (Tuesday drop)
 
-# Captures OpticOdds prop lines (data/props/) and prices them against our own
-# Floor/Median/Ceiling projections into a paper-trading bet ledger
-# (data/bets/) — see scripts/capture-props.mjs and README's "Paper trading"
-# section.
+# THE DROP. Captures OpticOdds prop lines, prices them against our own
+# Floor/Median/Ceiling projections, and publishes every qualifying edge to
+# data/edges/. That published set is the product — what a subscriber would
+# receive Tuesday morning.
+#
+# It then replays every simulated bettor (scripts/simulate-personas.mjs) over
+# the season's edges to regenerate data/bets/{persona}/. Ledgers are rebuilt
+# from scratch every run rather than graded incrementally, so a persona rule
+# change is just a re-run.
 #
 # Requires the OPTICODDS_API_KEY secret. Without it the capture step fails
 # fast rather than silently writing an empty ledger.
@@ -14,10 +19,12 @@ name: Capture weekly prop lines
 
 on:
   schedule:
-    # Wednesday 12:00 UTC ≈ 08:00 ET (drifts to 07:00 ET during EST, same
-    # DST approximation ingest-weekly.yml already accepts). Gated to season
-    # months (Sep–Feb).
-    - cron: "0 12 * 9-12,1-2 3"
+    # Tuesday 13:00 UTC ≈ 09:00 ET. Tuesday morning is the simulated drop
+    # time: the week's lines are up, and it is early enough that a subscriber
+    # acting on the edges would still find them. It is also the SOFTEST point
+    # of the week — which is exactly why closing-line value is captured
+    # separately and reported alongside ROI.
+    - cron: "0 13 * 9-12,1-2 2"
   workflow_dispatch:
     inputs:
       season:
@@ -90,11 +97,11 @@ jobs:
           echo "Running: node scripts/capture-props.mjs $args"
           node scripts/capture-props.mjs $args
 
-      # Grade what we can immediately (e.g. re-running a past week), though
-      # most grading happens the following days as ingest-weekly.yml runs.
-      - name: Grade pending bets
+      # Regenerate every persona ledger from the full season of edges. Cheap,
+      # deterministic, and picks up results that landed since the last run.
+      - name: Replay personas
         if: always() && github.event.inputs.dryRun != 'true'
-        run: node scripts/grade-bets.mjs
+        run: node scripts/simulate-personas.mjs
 
       - name: Commit snapshots
         if: always() && github.event.inputs.dryRun != 'true'
@@ -105,6 +112,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No new props/bets to commit."
           else
-            git commit -m "Capture prop lines [skip ci]"
+            git commit -m "Publish weekly edges + replay personas [skip ci]"
             git push
           fi

@@ -79,11 +79,12 @@ jobs:
           echo "Running: node scripts/ingest.mjs $args"
           node scripts/ingest.mjs $args
 
-      # Grade any paper bets whose actuals just landed above. Safe to run even
-      # when --only projections was chosen (it just finds nothing new to grade).
-      - name: Grade pending bets
+      # Re-settle every persona ledger against the actuals just ingested.
+      # Deterministic and full-season, so a game finishing today correctly
+      # updates the bankroll path for every week after it.
+      - name: Replay personas
         if: always()
-        run: node scripts/grade-bets.mjs
+        run: node scripts/simulate-personas.mjs
 
       # Always commit whatever was written, even if one artifact failed (e.g. a
       # feed error or an empty in-week actuals pull).

@@ -1,0 +1,26 @@
+Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
+2026,1,kelly,17057,Isaiah Davis,NYJ,RB,@ TEN,anytimeTD,fanduel,0.5,over,1000,,0.0909,0.0909,,1,0.2134,0.1225,0.1225,10-15%,3,1,100,pending,,,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,16036,Daniel Bellinger,TEN,TE,vs NYJ,anytimeTD,betrivers,0.5,over,1500,,0.0625,0.0625,,1,0.1393,0.0768,0.0768,5-10%,2.048,1,100,lost,0,-2.048,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,15828,Malik Davis,DAL,RB,@ NYG,anytimeTD,fanduel,0.5,over,800,,0.1111,0.1111,,1,0.2366,0.1255,0.1255,10-15%,3,1,100,pending,,,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,8057,Kirk Cousins,LV,QB,vs MIA,anytimeTD,betrivers,0.5,over,2800,,0.0345,0.0345,,1,0.0676,0.0331,0.0331,3-5%,0.8575,1,100,lost,0,-0.8575,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,4307,Aaron Rodgers,PIT,QB,vs ATL,rushYds,draftkings,0.5,over,101,,0.4975,0.4975,,1,0.9394,0.4419,0.4419,15%+,3,1,100,lost,-3,-3,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,10729,Jared Goff,DET,QB,vs NO,rushYds,circasports,0.5,over,145,,0.4082,0.4082,,1,0.7696,0.3614,0.3614,15%+,3,1,100,won,2,4.35,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,19314,Omar Cooper,NYJ,WR,@ TEN,anytimeTD,draftkings,0.5,over,1200,,0.0769,0.0769,,1,0.1393,0.0624,0.0624,5-10%,1.6894,1,100,lost,0,-1.6894,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,10215,Darren Waller,CAR,TE,vs CHI,anytimeTD,betrivers,0.5,over,500,,0.1667,0.1667,,1,0.2882,0.1216,0.1216,10-15%,3,1,100,lost,0,-3,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,18503,Gunnar Helm,TEN,TE,vs NYJ,anytimeTD,betrivers,0.5,over,575,,0.1481,0.1481,,1,0.2366,0.0885,0.0885,5-10%,2.5959,1,100,lost,0,-2.5959,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,8743,Geno Smith,NYJ,QB,@ TEN,rushYds,betrivers,6.5,over,-110,,0.5238,0.5238,,1,0.8311,0.3073,0.3073,15%+,3,1,100,won,7,2.7273,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,16795,Kayshon Boutte,HOU,WR,vs BUF,receptions,betrivers,2.5,over,160,,0.3846,0.3846,,1,0.6081,0.2235,0.2235,15%+,3,1,100,lost,1,-3,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,12616,Calvin Ridley,TEN,WR,vs NYJ,anytimeTD,fanduel,0.5,over,500,,0.1667,0.1667,,1,0.2592,0.0925,0.0925,5-10%,2.776,1,100,pending,,,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,16069,John Metchie,CAR,WR,vs CHI,anytimeTD,mgm,0.5,over,1150,,0.0800,0.0800,,1,0.1219,0.0419,0.0419,3-5%,1.1386,1,100,pending,,,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,13894,KaVontae Turpin,DAL,WR,@ NYG,rushYds,fanduel,3.5,over,-120,,0.5455,0.5455,,1,0.8303,0.2849,0.2849,15%+,3,1,100,lost,0,-3,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,16807,Bryce Young,CAR,QB,vs CHI,rushYds,circasports,13.5,over,-110,,0.5238,0.5238,,1,0.7885,0.2647,0.2647,15%+,3,1,100,lost,10,-3,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,18445,Omarion Hampton,LAC,RB,vs ARI,receptions,betrivers,2.5,over,130,,0.4348,0.4348,,1,0.6534,0.2187,0.2187,15%+,3,1,100,lost,0,-3,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,15984,Jaylen Warren,PIT,RB,vs ATL,rushYds,fanduel,41.5,over,-114,,0.5327,0.5327,,1,0.7963,0.2635,0.2635,15%+,3,1,100,won,46,2.6316,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,19242,KC Concepcion,CLE,WR,@ JAX,anytimeTD,fanduel,0.5,over,550,,0.1538,0.1538,,1,0.2289,0.0751,0.0751,5-10%,2.2175,1,100,lost,0,-2.2175,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,15222,Kenny Gainwell,TB,RB,@ CIN,rushYds,thescore,21.5,over,-105,,0.5122,0.5122,,1,0.7473,0.2351,0.2351,15%+,3,1,100,lost,15,-3,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,16033,Isaiah Likely,NYG,TE,vs DAL,receptions,draftkings,3.5,over,111,,0.4739,0.4739,,1,0.6822,0.2083,0.2083,15%+,3,1,100,won,8,3.33,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,16025,Jalen Nailor,LV,WR,vs MIA,anytimeTD,thescore,0.5,over,450,,0.1818,0.1818,,1,0.2592,0.0774,0.0774,5-10%,2.3644,1,100,lost,0,-2.3644,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,15802,Rachaad White,WAS,RB,@ PHI,receptions,betr,2.5,over,142,,0.4132,0.4132,,1,0.5884,0.1751,0.1751,15%+,3,1,100,lost,2,-3,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,11008,Dak Prescott,DAL,QB,@ NYG,rushYds,betr,7.5,over,-110,,0.5238,0.5238,,1,0.7443,0.2205,0.2205,15%+,3,1,100,won,14,2.7273,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,12764,Mike Gesicki,CIN,TE,vs TB,receptions,betrivers,2.5,over,128,,0.4386,0.4386,,1,0.6045,0.1659,0.1659,15%+,3,1,100,won,5,3.84,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,kelly,16042,Chig Okonkwo,WAS,TE,@ PHI,receptions,draftkings,2.5,over,-141,,0.5851,0.5851,,1,0.8009,0.2158,0.2158,15%+,3,1,100,lost,2,-3,,,,,,,rotowire,2026-09-11T18:12:40.026Z

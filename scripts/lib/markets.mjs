@@ -3,7 +3,7 @@
 // actuals columns grade it. No I/O — unit tested directly (see markets.test.mjs).
 //
 // This consolidates what used to be spread across two files: props.mjs owned
-// `projCols` while grade-bets.mjs kept its own parallel ACTUAL_COLS table. A
+// `projCols` while the grading script kept its own parallel ACTUAL_COLS table. A
 // stat defined in two places drifts, so both now live here.
 //
 // Field reference:

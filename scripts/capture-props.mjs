@@ -8,12 +8,16 @@
 //                                      price seen, with our probability and
 //                                      edge against it — the full scouted
 //                                      market.
-//   data/bets/{season}/week-NN.csv    the subset that clears --min-edge: one
-//                                      row per (player, stat), the single
-//                                      best-edge (book, line, side) combination,
-//                                      sized two ways (flat + Kelly). This is
-//                                      the paper-trading ledger; grade-bets.mjs
-//                                      fills in the result once actuals land.
+//   data/edges/{season}/week-NN.csv   the subset clearing --min-edge, at EVERY
+//                                      book quoting it. This is the published
+//                                      signal — what a subscriber would see on
+//                                      Tuesday morning. Not collapsed to the
+//                                      best price, because a bettor who can
+//                                      only reach one book needs that book's
+//                                      own quote.
+//
+// scripts/simulate-personas.mjs turns data/edges/ into per-persona ledgers
+// under data/bets/{persona}/. Nothing here writes a ledger directly.
 //
 // ---------------------------------------------------------------------------
 // What changed when this moved off RotoWire
@@ -130,40 +134,6 @@ export const PROPS_COLUMNS = [
   "CapturedAt",
 ];
 
-export const BETS_COLUMNS = [
-  "Season",
-  "Week",
-  "PlayerID",
-  "Name",
-  "Team",
-  "Pos",
-  "Opp",
-  "Stat",
-  "Book",
-  "Line",
-  "Side",
-  "Odds",
-  "OppositeOdds",
-  "ImpliedProb",
-  "FairProb",
-  "Hold",
-  "OneSided",
-  "OurProb",
-  "Edge",
-  "ModelEdge",
-  "EdgeBasis",
-  "EdgeBucket",
-  "DevigMethod",
-  "LineSource",
-  "FlatStakeUnits",
-  "KellyStakeUnits",
-  "KellyFractionUsed",
-  "CapturedAt",
-  "Status", // pending | won | lost | push | void
-  "Actual",
-  "PnlFlatUnits",
-  "PnlKellyUnits",
-];
 
 function parseArgs(argv) {
   const a = {
@@ -195,6 +165,8 @@ function parseArgs(argv) {
       case "--allow-empty": a.allowEmpty = true; break;
       case "--include-offshore": a.includeOffshore = true; break;
       case "--all-books": a.allBooks = true; break;
+      case "--closing": a.closing = true; break;
+      case "--closing-window-hours": a.closingWindowHours = Number(next()); break;
       case "--data-dir": a.dataDir = next(); break;
       case "--dry-run": a.dryRun = true; break;
       case "-h": case "--help": a.help = true; break;
@@ -221,7 +193,8 @@ const selectionEdge = (cand, basis) => (basis === "novig" ? cand.modelEdge : can
 const pad2 = (n) => String(n).padStart(2, "0");
 const projPath = (dir, season, week) => join(ROOT, dir, "projections", String(season), `week-${pad2(week)}.csv`);
 const propsPath = (dir, season, week) => join(ROOT, dir, "props", String(season), `week-${pad2(week)}.csv`);
-const betsPath = (dir, season, week) => join(ROOT, dir, "bets", String(season), `week-${pad2(week)}.csv`);
+const edgesPath = (dir, season, week) => join(ROOT, dir, "edges", String(season), `week-${pad2(week)}.csv`);
+const closingPath = (dir, season, week) => join(ROOT, dir, "closing", String(season), `week-${pad2(week)}.csv`);
 const rosterPath = (dir, season) => join(ROOT, dir, "players", `${season}.csv`);
 
 // Load this week's Floor/Median/Ceiling projection snapshot into a map keyed
@@ -588,7 +561,7 @@ async function main() {
     seasonYear: a.season,
     seasonWeek: a.week,
   });
-  const fixtures = fixtureRows
+  let fixtures = fixtureRows
     .map((f) => ({
       id: String(f?.id ?? ""),
       // Prefer the competitor abbreviation ("CIN") over the display name
@@ -605,6 +578,35 @@ async function main() {
     return;
   }
   const fixtureById = new Map(fixtures.map((f) => [f.id, f]));
+
+  // --closing narrows to fixtures kicking off soon, so a daily run records
+  // each game's last pre-kickoff price exactly once. Games start Thursday,
+  // Sunday and Monday, so no single weekly pull can catch them all — but a
+  // daily pull with a short window catches every one of them close to its own
+  // kickoff, which is what a closing line actually means.
+  if (a.closing) {
+    const windowMs = (a.closingWindowHours ?? 24) * 3600_000;
+    const now = Date.now();
+    const alreadyRecorded = loadRecordedFixtures(a);
+    const due = fixtures.filter((f) => {
+      if (alreadyRecorded.has(f.id)) return false;
+      const kick = f.startDate ? Date.parse(f.startDate) : NaN;
+      if (!Number.isFinite(kick)) return false;
+      return kick > now && kick - now <= windowMs;
+    });
+    console.log(
+      `  closing mode: ${due.length} of ${fixtures.length} fixtures kick off within ` +
+        `${(windowMs / 3600_000).toFixed(0)}h and are not yet recorded ` +
+        `(${alreadyRecorded.size} already captured).`
+    );
+    if (due.length === 0) {
+      console.log("  nothing to record. Done.");
+      return;
+    }
+    fixtures = due;
+    fixtureById.clear();
+    for (const f of fixtures) fixtureById.set(f.id, f);
+  }
 
   const { rows: markets, diagnostics } = await fetchWeekOdds(client, a, fixtures);
 
@@ -704,76 +706,44 @@ async function main() {
     CapturedAt: capturedAt,
   }));
   propsRows.sort((x, y) => Number(y.Edge) - Number(x.Edge));
+
+  // Closing mode appends to the week's closing file and stops. It never
+  // touches props/ or edges/ — those are the Tuesday drop, and overwriting
+  // them with Sunday prices would destroy the very comparison CLV exists to
+  // make.
+  if (a.closing) {
+    const path = closingPath(a.dataDir, a.season, a.week);
+    const existing = existsSync(path) ? readCsv(path) : [];
+    const merged = [...existing, ...propsRows];
+    writeCsvIfChanged(path, toCsv(PROPS_COLUMNS, merged), a);
+    console.log(
+      `  recorded ${propsRows.length} closing prices for ${fixtures.length} fixture(s) ` +
+        `(${merged.length} total this week).`
+    );
+    console.log(`Done. ${client.requestCount} OpticOdds requests.`);
+    return;
+  }
+
   writeCsvIfChanged(propsPath(a.dataDir, a.season, a.week), toCsv(PROPS_COLUMNS, propsRows), a);
 
-  // ---- data/bets ledger: best (book, line, side) per (player, stat) ----
-  const bestByKey = new Map();
-  for (const p of priced) {
-    const key = `${p.rotowirePlayerId}|${p.statKey}`;
-    const cur = bestByKey.get(key);
-    if (!cur || selectionEdge(p, a.edgeBasis) > selectionEdge(cur, a.edgeBasis)) {
-      bestByKey.set(key, p);
-    }
-  }
-
-  const existingPath = betsPath(a.dataDir, a.season, a.week);
-  const existingBets = existsSync(existingPath) ? readCsv(existingPath) : [];
-  const existingByKey = new Map(existingBets.map((r) => [`${r.PlayerID}|${r.Stat}`, r]));
-
-  const betRows = [];
-  for (const [key, p] of bestByKey) {
-    if (selectionEdge(p, a.edgeBasis) < a.minEdge) continue;
-    const decimalOdds = americanToDecimal(p.odds);
-    const kf = Math.min(a.kellyFraction * kellyFraction(p.ourProb, decimalOdds), a.kellyCap);
-    const prior = existingByKey.get(key);
-    // Preserve grading if this player/stat/week was already graded by an
-    // earlier capture this week; a re-run before kickoff just refreshes
-    // price/edge.
-    const alreadyGraded = prior && prior.Status && prior.Status !== "pending";
-    betRows.push({
-      Season: a.season,
-      Week: a.week,
-      PlayerID: p.rotowirePlayerId,
-      Name: p.playerName,
-      Team: p.team,
-      Pos: p.pos,
-      Opp: p.opp,
-      Stat: p.statKey,
-      Book: p.sportsbook,
-      Line: p.line,
-      Side: p.side,
-      Odds: p.odds,
-      OppositeOdds: p.oppositeOdds ?? "",
-      ImpliedProb: p.impliedProb.toFixed(4),
-      FairProb: p.fairProb.toFixed(4),
-      Hold: p.hold === null ? "" : p.hold.toFixed(4),
-      OneSided: p.oneSided ? 1 : 0,
-      OurProb: p.ourProb.toFixed(4),
-      Edge: p.edge.toFixed(4),
-      ModelEdge: p.modelEdge.toFixed(4),
-      EdgeBasis: a.edgeBasis,
-      EdgeBucket: edgeBucket(selectionEdge(p, a.edgeBasis)),
-      DevigMethod: p.oneSided ? "none" : a.devigMethod,
-      LineSource: p.lineSource ?? "live",
-      FlatStakeUnits: 1,
-      KellyStakeUnits: (kf * 100).toFixed(4), // kf is a fraction of bankroll; 1 unit = 1%
-      KellyFractionUsed: kf.toFixed(4),
-      CapturedAt: capturedAt,
-      Status: alreadyGraded ? prior.Status : "pending",
-      Actual: alreadyGraded ? prior.Actual : "",
-      PnlFlatUnits: alreadyGraded ? prior.PnlFlatUnits : "",
-      PnlKellyUnits: alreadyGraded ? prior.PnlKellyUnits : "",
-    });
-  }
-  betRows.sort((x, y) => Number(y.Edge) - Number(x.Edge));
-
-  const overs = betRows.filter((b) => b.Side === "over").length;
+  // ---- data/edges: the published signal ----
+  //
+  // Every candidate clearing the edge bar, at EVERY book that quotes it —
+  // deliberately not collapsed to the best price. A persona that can only
+  // reach DraftKings needs DraftKings' own quote, and collapsing here would
+  // hand every simulated bettor a price most of them cannot get.
+  //
+  // This is the file a subscriber would effectively receive on Tuesday
+  // morning. scripts/simulate-personas.mjs turns it into per-persona ledgers.
+  const edgeRows = propsRows.filter((r) => Number(r[a.edgeBasis === "novig" ? "ModelEdge" : "Edge"]) >= a.minEdge);
   console.log(
-    `  ${betRows.length} bets clear the ${(a.minEdge * 100).toFixed(1)}% edge bar ` +
-      `(${overs} over, ${betRows.length - overs} under).`
+    `  ${edgeRows.length} of ${propsRows.length} candidates clear the ` +
+      `${(a.minEdge * 100).toFixed(1)}% bar, across ` +
+      `${new Set(edgeRows.map((r) => `${r.PlayerID}|${r.Stat}`)).size} player-stats.`
   );
-  reportBetComposition(betRows);
-  writeCsvIfChanged(existingPath, toCsv(BETS_COLUMNS, betRows), a);
+  writeCsvIfChanged(edgesPath(a.dataDir, a.season, a.week), toCsv(PROPS_COLUMNS, edgeRows), a);
+
+  reportBetComposition(edgeRows);
 
   console.log(`Done. ${client.requestCount} OpticOdds requests.`);
 }
@@ -822,27 +792,28 @@ function reportDiagnostics(d, a_useOpening = false) {
   }
 }
 
-// Where the selected bets actually came from.
+// What the published edge set actually consists of.
 //
-// The ledger takes the best price across every book pulled, so if that best
-// price keeps landing at books you have no account with, the paper return is
-// one you could never have earned. This is the line that makes that visible —
-// a long tail of unfamiliar books is the signal to narrow --books.
-function reportBetComposition(betRows) {
-  if (betRows.length === 0) return;
+// Two things a reader needs before trusting the numbers downstream:
+// which books the edges live at (a set concentrated in books nobody holds an
+// account with is not an actionable signal), and how many are one-sided
+// (those carry no de-vigged fair price, so ModelEdge equals Edge on them).
+function reportBetComposition(edgeRows) {
+  if (edgeRows.length === 0) return;
 
-  const oneSided = betRows.filter((b) => b.OneSided === 1).length;
+  const oneSided = edgeRows.filter((b) => Number(b.OneSided) === 1).length;
   if (oneSided > 0) {
+    const pct = ((oneSided / edgeRows.length) * 100).toFixed(0);
     console.log(
-      `  ${oneSided}/${betRows.length} selected bets are one-sided (no opposing price), ` +
-        `so their FairProb falls back to the raw price and ModelEdge equals Edge.`
+      `  ${pct}% of published edges are one-sided (no opposing price), so their ` +
+        `FairProb falls back to the raw price and ModelEdge equals Edge.`
     );
   }
 
   const byBook = new Map();
-  for (const b of betRows) byBook.set(b.Book, (byBook.get(b.Book) ?? 0) + 1);
+  for (const b of edgeRows) byBook.set(b.Book, (byBook.get(b.Book) ?? 0) + 1);
   const ranked = [...byBook.entries()].sort((x, y) => y[1] - x[1]);
-  console.log(`  best price came from ${byBook.size} distinct book(s):`);
+  console.log(`  edges available at ${byBook.size} distinct book(s):`);
   for (const [book, n] of ranked.slice(0, 12)) {
     console.log(`    ${String(n).padStart(4)}  ${book}`);
   }
@@ -863,6 +834,14 @@ function reportUnmatched(unmatched, noProjection) {
     console.warn(`    ${n}× ${key}`);
   }
   if (unmatched.size > 15) console.warn(`    …and ${unmatched.size - 15} more.`);
+}
+
+// Fixtures already present in the week's closing file. Recording a fixture
+// twice would put two "closing" prices in play for the same market.
+function loadRecordedFixtures(a) {
+  const path = closingPath(a.dataDir, a.season, a.week);
+  if (!existsSync(path)) return new Set();
+  return new Set(readCsv(path).map((r) => r.FixtureID).filter(Boolean));
 }
 
 const HELP = `Capture OpticOdds prop lines and price them against our projections.
@@ -908,14 +887,21 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                            refused — an empty pull and a week with no bets look
                            identical on disk, and the snapshots are the durable
                            record.
+  --closing                Record CLOSING lines instead of publishing edges.
+                           Narrows to fixtures kicking off within the window,
+                           skips any already recorded, and appends to
+                           data/closing/. Run daily; each game gets captured
+                           once, near its own kickoff. Never touches props/ or
+                           edges/.
+  --closing-window-hours   How close to kickoff counts as closing (default 24)
   --dry-run                Fetch and price but do not write files
   -h, --help               Show this help
 
 Env: OPTICODDS_API_KEY (required).`;
 
-// Only run when executed directly — grade-bets.mjs and the test suite import
-// this module for its column constants / ourProbability, and must not trigger
-// a live capture as a side effect of that import.
+// Only run when executed directly — the test suite imports this module for
+// PROPS_COLUMNS and ourProbability, and must not trigger a live capture as a
+// side effect of that import.
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((err) => {
     console.error("capture-props failed:", err.message);

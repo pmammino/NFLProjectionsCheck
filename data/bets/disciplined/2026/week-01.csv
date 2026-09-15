@@ -1,0 +1,11 @@
+Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
+2026,1,disciplined,4307,Aaron Rodgers,PIT,QB,vs ATL,rushYds,draftkings,0.5,over,101,,0.4975,0.4975,,1,0.9394,0.4419,0.4419,15%+,1,1,100,lost,-3,-1,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,disciplined,8057,Kirk Cousins,LV,QB,vs MIA,rushYds,draftkings,0.5,over,123,,0.4484,0.4484,,1,0.8689,0.4205,0.4205,15%+,1,1,100,lost,-6,-1,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,disciplined,10729,Jared Goff,DET,QB,vs NO,rushYds,draftkings,0.5,over,134,,0.4274,0.4274,,1,0.7696,0.3422,0.3422,15%+,1,1,100,won,2,1.34,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,disciplined,10215,Darren Waller,CAR,TE,vs CHI,recYds,draftkings,16.5,over,-113,,0.5305,0.5305,,1,0.8513,0.3208,0.3208,15%+,1,1,100,won,28,0.885,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,disciplined,8743,Geno Smith,NYJ,QB,@ TEN,rushYds,draftkings,6.5,over,-116,,0.5370,0.5370,,1,0.8311,0.2941,0.2941,15%+,1,1,100,won,7,0.8621,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,disciplined,15984,Jaylen Warren,PIT,RB,vs ATL,rushYds,draftkings,43.5,over,-113,,0.5305,0.5305,,1,0.7718,0.2413,0.2413,15%+,1,1,100,won,46,0.885,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,disciplined,16807,Bryce Young,CAR,QB,vs CHI,rushYds,draftkings,14.5,over,-115,,0.5349,0.5349,,1,0.7641,0.2292,0.2292,15%+,1,1,100,lost,10,-1,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,disciplined,16795,Kayshon Boutte,HOU,WR,vs BUF,recYds,draftkings,26.5,over,-111,,0.5261,0.5261,,1,0.7455,0.2194,0.2194,15%+,1,1,100,lost,21,-1,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,disciplined,16042,Chig Okonkwo,WAS,TE,@ PHI,receptions,draftkings,2.5,over,-141,,0.5851,0.5851,,1,0.8009,0.2158,0.2158,15%+,1,1,100,lost,2,-1,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,disciplined,18445,Omarion Hampton,LAC,RB,vs ARI,receptions,draftkings,2.5,over,125,,0.4444,0.4444,,1,0.6534,0.2090,0.2090,15%+,1,1,100,lost,0,-1,,,,,,,rotowire,2026-09-11T18:12:40.026Z

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ourProbability, PROPS_COLUMNS, BETS_COLUMNS } from "./capture-props.mjs";
+import { ourProbability, PROPS_COLUMNS } from "./capture-props.mjs";
+import { LEDGER_COLUMNS } from "./simulate-personas.mjs";
 
 // Joe Burrow, week-1-shaped projection split (F/M/C rows keyed like the real
 // weekly_projections snapshot).
@@ -40,19 +41,17 @@ test("ourProbability: an unknown stat key -> null rather than a wrong model", ()
   assert.equal(ourProbability({ line: 250, statKey: "fieldGoals" }, BURROW_SPLITS), null);
 });
 
-// The ledger schema is a contract: grade-bets.mjs rewrites the file using
-// BETS_COLUMNS, so a column present in the data but missing from the list
-// would be silently dropped on the first grading pass.
-test("the ledger carries both the EV edge and the model edge", () => {
-  for (const col of ["Edge", "ModelEdge", "EdgeBasis", "FairProb", "ImpliedProb", "Hold", "OneSided", "Side"]) {
-    assert.ok(BETS_COLUMNS.includes(col), `BETS_COLUMNS missing ${col}`);
+// The published edge set is what every persona reads, so anything the persona
+// engine needs must survive the round-trip to CSV and back.
+test("the published edge set carries everything a persona needs", () => {
+  for (const col of ["Edge", "ModelEdge", "FairProb", "ImpliedProb", "Hold", "OneSided", "Side", "Book", "Line", "Odds", "FixtureID"]) {
     assert.ok(PROPS_COLUMNS.includes(col), `PROPS_COLUMNS missing ${col}`);
   }
 });
 
-test("the ledger carries the grading fields grade-bets.mjs writes back", () => {
-  for (const col of ["Status", "Actual", "PnlFlatUnits", "PnlKellyUnits"]) {
-    assert.ok(BETS_COLUMNS.includes(col), `BETS_COLUMNS missing ${col}`);
+test("the persona ledger carries its settlement and CLV fields", () => {
+  for (const col of ["Status", "Actual", "PnlUnits", "StakeUnits", "BankrollBefore", "ClvStatus", "ClvProb"]) {
+    assert.ok(LEDGER_COLUMNS.includes(col), `LEDGER_COLUMNS missing ${col}`);
   }
 });
 
@@ -83,13 +82,13 @@ function writeGuarded(path, csv, { allowEmpty = false } = {}) {
 test("an empty result never overwrites a populated snapshot", () => {
   const dir = mkdtempSync(join(tmpdir(), "bets-"));
   const path = join(dir, "week-01.csv");
-  const populated = toCsv(BETS_COLUMNS, [
+  const populated = toCsv(LEDGER_COLUMNS, [
     { Season: 2026, Week: 1, PlayerID: "1", Stat: "passYds", Edge: "0.05" },
     { Season: 2026, Week: 1, PlayerID: "2", Stat: "rushYds", Edge: "0.04" },
   ]);
   writeFileSync(path, populated);
 
-  const empty = toCsv(BETS_COLUMNS, []);
+  const empty = toCsv(LEDGER_COLUMNS, []);
   assert.equal(writeGuarded(path, empty), "refused");
   assert.equal(readFileSync(path, "utf8"), populated, "the ledger must be untouched");
 });
@@ -97,22 +96,22 @@ test("an empty result never overwrites a populated snapshot", () => {
 test("--allow-empty is the deliberate override", () => {
   const dir = mkdtempSync(join(tmpdir(), "bets-"));
   const path = join(dir, "week-01.csv");
-  writeFileSync(path, toCsv(BETS_COLUMNS, [{ Season: 2026, Week: 1, PlayerID: "1" }]));
-  assert.equal(writeGuarded(path, toCsv(BETS_COLUMNS, []), { allowEmpty: true }), "written");
+  writeFileSync(path, toCsv(LEDGER_COLUMNS, [{ Season: 2026, Week: 1, PlayerID: "1" }]));
+  assert.equal(writeGuarded(path, toCsv(LEDGER_COLUMNS, []), { allowEmpty: true }), "written");
 });
 
 test("an empty result is fine when there is nothing to lose", () => {
   // A brand-new week with no odds yet should still write its header.
   const dir = mkdtempSync(join(tmpdir(), "bets-"));
   const path = join(dir, "week-09.csv");
-  assert.equal(writeGuarded(path, toCsv(BETS_COLUMNS, [])), "written");
+  assert.equal(writeGuarded(path, toCsv(LEDGER_COLUMNS, [])), "written");
 });
 
 test("a non-empty result replaces a populated snapshot as normal", () => {
   const dir = mkdtempSync(join(tmpdir(), "bets-"));
   const path = join(dir, "week-01.csv");
-  writeFileSync(path, toCsv(BETS_COLUMNS, [{ Season: 2026, Week: 1, PlayerID: "1" }]));
-  const updated = toCsv(BETS_COLUMNS, [
+  writeFileSync(path, toCsv(LEDGER_COLUMNS, [{ Season: 2026, Week: 1, PlayerID: "1" }]));
+  const updated = toCsv(LEDGER_COLUMNS, [
     { Season: 2026, Week: 1, PlayerID: "1" },
     { Season: 2026, Week: 1, PlayerID: "2" },
   ]);

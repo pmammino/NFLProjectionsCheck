@@ -1,5 +1,6 @@
 Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
 2026,1,shopper,16795,Kayshon Boutte,HOU,WR,vs BUF,receptions,betrivers,2.5,over,160,,0.3846,0.3846,,1,0.6081,0.2235,0.2235,15%+,1,1,100,lost,1,-1,,,,,,,rotowire,2026-09-11T18:12:40.026Z
+2026,1,shopper,11008,Dak Prescott,DAL,QB,@ NYG,rushYds,betr,7.5,over,-110,,0.5238,0.5238,,1,0.7443,0.2205,0.2205,15%+,1,1,100,won,14,0.9091,,,,,,,rotowire,2026-09-11T18:12:40.026Z
 2026,1,shopper,16042,Chig Okonkwo,WAS,TE,@ PHI,receptions,draftkings,2.5,over,-141,,0.5851,0.5851,,1,0.8009,0.2158,0.2158,15%+,1,1,100,lost,2,-1,,,,,,,rotowire,2026-09-11T18:12:40.026Z
 2026,1,shopper,16033,Isaiah Likely,NYG,TE,vs DAL,receptions,draftkings,3.5,over,111,,0.4739,0.4739,,1,0.6822,0.2083,0.2083,15%+,1,1,100,won,8,1.11,,,,,,,rotowire,2026-09-11T18:12:40.026Z
 2026,1,shopper,13556,David Montgomery,HOU,RB,vs BUF,receptions,caesars,1.5,over,-121,,0.5475,0.5475,,1,0.7462,0.1986,0.1986,15%+,1,1,100,won,3,0.8264,,,,,,,rotowire,2026-09-11T18:12:40.026Z
@@ -8,4 +9,3 @@ Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,Opposite
 2026,1,shopper,12860,Dallas Goedert,PHI,TE,vs WAS,recYds,circasports,34.5,over,-110,,0.5238,0.5238,,1,0.7079,0.1841,0.1841,15%+,1,1,100,won,77,0.9091,,,,,,,rotowire,2026-09-11T18:12:40.026Z
 2026,1,shopper,18520,Kyle Monangai,CHI,RB,@ CAR,receptions,betr,0.5,over,-250,,0.7143,0.7143,,1,0.8975,0.1832,0.1832,15%+,1,1,100,won,2,0.4,,,,,,,rotowire,2026-09-11T18:12:40.026Z
 2026,1,shopper,14376,Jauan Jennings,MIN,WR,vs GB,recYds,caesars,22.5,over,-105,,0.5122,0.5122,,1,0.6920,0.1798,0.1798,15%+,1,1,100,lost,0,-1,,,,,,,rotowire,2026-09-11T18:12:40.026Z
-2026,1,shopper,13610,T.J. Hockenson,MIN,TE,vs GB,recYds,draftkings,26.5,over,-109,,0.5215,0.5215,,1,0.6992,0.1776,0.1776,15%+,1,1,100,won,36,0.9174,,,,,,,rotowire,2026-09-11T18:12:40.026Z

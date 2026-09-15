@@ -320,7 +320,7 @@ function priceMarket(market, splits, a, reject = null) {
   // of it is bettable. Checked before any candidate is built so a rejected
   // market produces no rows at all.
   const proj = projectedValue(splits.M, market.statKey);
-  if (!meetsSupportFloor(market.statKey, proj)) {
+  if (!meetsSupportFloor({ stat: market.statKey, projectedMedian: proj, line: market.line })) {
     reject?.("support-floor", market.statKey);
     return [];
   }

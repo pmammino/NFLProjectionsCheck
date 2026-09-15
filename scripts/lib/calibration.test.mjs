@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   MIN_PROJECTION,
+  MIN_LINE,
   MAX_MARKET_DISAGREEMENT,
   meetsSupportFloor,
   marketsExceedingTolerance,
@@ -10,41 +11,64 @@ import {
 } from "./calibration.mjs";
 import { STAT_DEFS } from "./markets.mjs";
 
-// ---- Guard 1: the support floor ---------------------------------------------
+// ---- Guard 1: the support floor --------------------------------------------
+// Two floors doing different jobs. MIN_LINE is the real guard — it removes the
+// near-zero lines where a point mass at zero lives and a two-piece normal
+// cannot represent it. MIN_PROJECTION is a light backstop for players we
+// barely project at all.
 
-test("a stat with no floor is always supported", () => {
-  assert.equal(meetsSupportFloor("passYds", 0.1), true);
-  assert.equal(meetsSupportFloor("completions", 0), true);
+const mkt = (o) => ({ stat: "rushYds", projectedMedian: 40, line: 24.5, ...o });
+
+test("a stat with neither floor is always supported", () => {
+  assert.equal(meetsSupportFloor(mkt({ stat: "passYds", projectedMedian: 0.1, line: 0.5 })), true);
+  assert.equal(meetsSupportFloor(mkt({ stat: "completions", projectedMedian: 0, line: 0.5 })), true);
 });
 
-test("a floored stat is gated on the projected median", () => {
-  assert.equal(meetsSupportFloor("rushYds", 4.4), false); // Aaron Rodgers, week 1
-  assert.equal(meetsSupportFloor("rushYds", 12.1), false); // Geno Smith, week 1
-  assert.equal(meetsSupportFloor("rushYds", 19.99), false);
-  assert.equal(meetsSupportFloor("rushYds", 20), true); // boundary is inclusive
-  assert.equal(meetsSupportFloor("rushYds", 85), true);
+// The failure this guard exists for lives at the lowest lines, not at low
+// projections: pooled over every projected player, rushYds is +20 points
+// overconfident at a 0.5 line and within 3 points from 1.5 upward.
+test("a near-zero line is refused even for a heavily projected player", () => {
+  assert.equal(meetsSupportFloor(mkt({ projectedMedian: 90, line: 0.5 })), false);
+  assert.equal(meetsSupportFloor(mkt({ projectedMedian: 90, line: 1.5 })), false);
+  assert.equal(meetsSupportFloor(mkt({ projectedMedian: 90, line: 2.5 })), true);
 });
 
-// All five of the bets that prompted this work were rushing yards on
-// quarterbacks and a returner, priced at 77-94% against books quoting 40-50%.
-test("every bet that prompted the support floor is now refused", () => {
-  for (const projectedMedian of [4.4, 4.49, 2.14, 12.1, 7.91]) {
-    assert.equal(meetsSupportFloor("rushYds", projectedMedian), false);
+// The whole point of lowering the projection floor: these are well calibrated
+// at the line (gap -1 to -4) and the earlier projection-based floor threw them
+// all away.
+test("a lightly projected player is bettable at an ordinary line", () => {
+  assert.equal(meetsSupportFloor(mkt({ projectedMedian: 6.81, line: 24.5 })), true);
+  assert.equal(meetsSupportFloor(mkt({ projectedMedian: 4, line: 3.5 })), true);
+  assert.equal(meetsSupportFloor(mkt({ stat: "recYds", projectedMedian: 5, line: 14.5 })), true);
+});
+
+test("the projection backstop still refuses a player we barely project", () => {
+  assert.equal(meetsSupportFloor(mkt({ projectedMedian: 2.9, line: 24.5 })), false);
+  assert.equal(meetsSupportFloor(mkt({ projectedMedian: 3, line: 24.5 })), true); // inclusive
+});
+
+// All five bets that prompted this work were rushing yards. Four were priced
+// at a 0.5 line; Geno Smith's was 6.5 on a 12.1 projection, which the line
+// floor does NOT catch — the disagreement cap is what removes that one.
+test("the near-zero-line bets that prompted this are refused by the line floor", () => {
+  for (const projectedMedian of [4.4, 4.49, 2.14]) {
+    assert.equal(meetsSupportFloor(mkt({ projectedMedian, line: 0.5 })), false);
   }
 });
 
-test("an unknown or missing projection fails closed on a floored stat", () => {
-  assert.equal(meetsSupportFloor("rushYds", undefined), false);
-  assert.equal(meetsSupportFloor("rushYds", NaN), false);
-  assert.equal(meetsSupportFloor("rushYds", null), false);
+test("a missing or non-finite line or projection fails closed", () => {
+  assert.equal(meetsSupportFloor(mkt({ line: undefined })), false);
+  assert.equal(meetsSupportFloor(mkt({ line: NaN })), false);
+  assert.equal(meetsSupportFloor(mkt({ projectedMedian: undefined })), false);
+  assert.equal(meetsSupportFloor(mkt({ projectedMedian: null })), false);
 });
 
-// The floor cannot be checked for a stat that does not use Floor/Ceiling, so
-// silently adding one to a Poisson stat would be a threshold with no
-// measurement behind it.
-test("floors only exist for continuous stats", () => {
-  for (const stat of Object.keys(MIN_PROJECTION)) {
+// A line floor on a stat with no Floor/Ceiling, or on a retired market, would
+// be config that can never fire.
+test("floors only exist for live continuous stats", () => {
+  for (const stat of [...Object.keys(MIN_PROJECTION), ...Object.keys(MIN_LINE)]) {
     assert.equal(STAT_DEFS[stat].kind, "continuous", `${stat} should be continuous`);
+    assert.equal(STAT_DEFS[stat].hasLine, true, `${stat} should have a real line`);
     assert.notEqual(STAT_DEFS[stat].bet, false, `${stat} is retired — a floor on it is dead config`);
   }
 });
@@ -142,7 +166,7 @@ test("a sound bet passes both guards", () => {
 
 test("each guard reports the reason it fired", () => {
   const { kept, rejected } = applyCalibrationGuards([
-    cand({ playerId: "floor", projectedMedian: 3 }),
+    cand({ playerId: "floor", line: 0.5 }),
     cand({ playerId: "wild", ourProb: 0.95, fairProb: 0.4 }),
     cand({ playerId: "fine" }),
   ]);
@@ -159,8 +183,8 @@ test("a floored-out row cannot vote in the consensus that judges another book", 
   // Same market at two books. One row is below the floor (it should not exist
   // at all), and it is the only price that would pull the median our way.
   const rows = [
-    cand({ stat: "rushYds", projectedMedian: 4, fairProb: 0.85 }),
-    cand({ stat: "rushYds", projectedMedian: 4, fairProb: 0.5 }),
+    cand({ stat: "rushYds", line: 0.5, fairProb: 0.85 }),
+    cand({ stat: "rushYds", line: 0.5, fairProb: 0.5 }),
   ];
   const { kept, rejected } = applyCalibrationGuards(rows.map((r) => ({ ...r, ourProb: 0.9 })));
   assert.equal(kept.length, 0);
@@ -170,7 +194,7 @@ test("a floored-out row cannot vote in the consensus that judges another book", 
 test("guards are order-independent for a mixed batch", () => {
   const batch = [
     cand({ playerId: "a" }),
-    cand({ playerId: "b", projectedMedian: 2 }),
+    cand({ playerId: "b", projectedMedian: 2, line: 0.5 }),
     cand({ playerId: "c", ourProb: 0.99, fairProb: 0.3 }),
   ];
   const fwd = applyCalibrationGuards(batch);

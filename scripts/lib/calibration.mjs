@@ -49,45 +49,154 @@
 // edge on the table. That is why there is no single global variance fix and no
 // floor on those stats: one multiplier would have to widen rushing and narrow
 // passing at the same time.
+//
+// ---------------------------------------------------------------------------
+// Why there is no sigma multiplier here
+// ---------------------------------------------------------------------------
+// Inflating sigma to make the bands cover 50% was tried and measured, and it
+// does not help. Sweeping a global multiplier k over every (player, line) pair
+// with a known outcome (n=25,840):
+//
+//     k      1.0     1.2     1.5     1.8     2.1
+//     Brier  .1675   .1668   .1682   .1710   .1744
+//     maxgap  7.8     7.9     9.7    11.6    12.9
+//
+// Brier is flat to three decimals and the worst reliability gap gets steadily
+// worse. The reason is that the residual error is not a sharpness problem that
+// widening fixes. The reliability curve reads -7, +5, +8, +7, +3 across
+// predicted-probability buckets: realized outcomes come in BELOW our number
+// almost everywhere, which is a systematic over-prediction of overs, not a
+// distribution that is too narrow. Widening pulls every probability toward 0.5
+// and so fixes one end while breaking the other.
+//
+// Correcting a uniform shift would mean fitting a recalibration curve, and one
+// week cannot separate "projections are optimistic" from "week 1 was low
+// scoring". That needs several weeks, and until then the honest thing is to
+// leave the model alone and let the guards below cut what is unbettable.
+//
+// ---------------------------------------------------------------------------
+// The likely cause of the over-dispersion, and why it is not corrected yet
+// ---------------------------------------------------------------------------
+// The projections are built by moving BOTH volume (attempts, carries, targets)
+// AND efficiency (yards per attempt, TDs per touch) to their own high or low
+// end for the Ceiling and Floor. So the stated Ceiling is roughly
+// volume_75 x efficiency_75, not the 75th percentile of the product.
+//
+// For two independent components that is too wide, and by a predictable
+// amount: stacking each component's own quartile offset adds their spreads,
+// whereas the product's true quartile combines them in quadrature. The
+// overshoot is (sv + se) / sqrt(sv^2 + se^2), which is sqrt(2) ~ 1.41 when the
+// two contribute equally — implying a sigma multiplier of 1/sqrt(2) ~ 0.71.
+//
+// That prediction is visible in the projections themselves. Median relative
+// band width, (Ceiling - Floor) / Median, volume vs the yardage it drives:
+//
+//     passing     volume 0.361   yards 0.508   ratio 1.41
+//     rushing     volume 0.429   yards 0.781   ratio 1.82
+//     receiving   volume 1.129   yards 1.002   ratio 0.89
+//
+// Passing lands on 1.41 almost exactly. Rushing at 1.82 says efficiency
+// dominates there, which fits — yards per carry is far more volatile than
+// attempts. This is a real structural explanation for why passYds/passAtt/
+// completions come out over-dispersed, and it is the leading candidate for
+// fixing them.
+//
+// It is NOT applied yet, because the outcome data cannot support it. Only 32
+// quarterbacks have week-1 actuals, and at k=0.71 the results do not agree:
+// passAtt coverage improves (66% -> 53%) but passYds overshoots into being too
+// NARROW (63% -> 38%) and its line calibration gets worse at the low end. The
+// correction also increases confidence, which is the direction that has
+// already cost us money once.
+//
+// To act on this properly: re-measure once several weeks of quarterback
+// actuals exist, and fit the multiplier per stat from the volume/yards band
+// ratio above rather than assuming equal contribution.
 
 // ---------------------------------------------------------------------------
 // Guard 1: support floor
 // ---------------------------------------------------------------------------
-// Minimum projected median for a continuous stat to be priced at all, chosen
-// as the lowest threshold whose band coverage reaches ~50%.
+// The band-coverage table above says WHERE the model is wrong. It does not say
+// what to gate on, and the first version of this guard got that wrong: it
+// floored the projected median (rushYds >= 20 and so on), which threw away a
+// large and perfectly well-calibrated part of the board.
 //
-// Gated on OUR projected median rather than the book's line, because the
-// median is the variable the miscalibration was measured against. The two are
-// closely correlated in practice, but the measurement is what should decide.
+// Band coverage measures the whole shape of the distribution. Betting only
+// ever asks one question: P(actual > THIS line). Those come apart, and the
+// second is the one that decides money. Measured directly — model probability
+// vs realized frequency, pooled over every projected player:
 //
-// These are deliberately coarse. They come from a single week (n in the
-// hundreds per stat, which is enough to establish 84%-vs-25% but nowhere near
-// enough to distinguish a 20 cutoff from a 22 one), so treat them as "roughly
-// where the model starts working" rather than as tuned parameters. Re-derive
-// them once several weeks of actuals exist.
+//     line     0.5    1.5    2.5    3.5   ...  14.5   24.5
+//     rushYds  +20     +3     -1     -1         -4     -3
+//     recYds   +10     +7     +4     +2         -1     -1
+//     rushAtt   -4     -4     -3     -6         -1     +1
+//     recept    -5     -1     +3     +4          -      -
 //
-// Stats absent from this table have no floor:
+// (+ is overconfident.) The model is sound at essentially every line except
+// the very lowest. The projection floor was cutting bets at 24.5 and 39.5 —
+// where the gap is -3 and -2 — to avoid a failure that lives entirely at 0.5.
+//
+// What actually fails there is a point mass. Share of players recording
+// exactly zero or less, by projected median:
+//
+//     stat        <3    3-8   8-15  15-25  25+
+//     rushYds     85%     -    22%    0%    0%
+//     rushAtt     73%    0%     0%     -     -
+//     recYds      48%   45%    31%   20%    7%
+//
+// 82% of players projected 0-8 rushing yards recorded <= 0. A "will he get
+// ANY" line is a question about whether someone touches the ball, and a
+// two-piece normal centred on a positive median cannot answer it: at any
+// sigma it puts roughly half its mass above the median, which is why widening
+// moves P(over 0.5) only from 53% to 49% where the truth is 18%.
+//
+// Hence two floors that do different jobs. The LINE floor is the real guard —
+// it removes the near-zero lines where the point mass lives. The PROJECTION
+// floor is now only a light backstop for players we barely project at all.
+
+// Minimum line for a continuous stat to be priced. This is the guard that
+// targets the measured failure.
+//
+// Set where the gap closes for the hardest subgroup, players projected under 8:
+// rushYds is +8 at 1.5 and +0 at 2.5; recYds is +8 at 1.5 and -3 at 2.5.
+// rushAtt and receptions are not overconfident at any line and carry no floor —
+// rushAtt is under-confident throughout.
+export const MIN_LINE = {
+  rushYds: 2.5,
+  recYds: 2.5,
+};
+
+// Minimum projected median. A backstop only, well below where the model has
+// been shown to break, because the line floor above is doing the real work.
+// Left in place so a market on someone we project at essentially nothing does
+// not get priced on the strength of a rounding error.
+//
+// Stats absent from both tables have no floor:
 //   - passYds, passAtt, completions are over-dispersed, never under-dispersed
 //   - poisson stats (passTD, rushTD, recTD, int) do not use Floor/Ceiling at
 //     all, so the band measurement says nothing about them. Absence here is
 //     "not measured", not "verified fine".
 export const MIN_PROJECTION = {
-  rushYds: 20, // 50% coverage at >=20 (20% unfiltered)
-  recYds: 25, // 50% coverage at >=25 (32% unfiltered)
-  rushAtt: 5, //  50% coverage at >=5  (18% unfiltered)
-  receptions: 1, // 49% coverage at >=1 (42% unfiltered)
+  rushYds: 3,
+  recYds: 3,
+  rushAtt: 1,
+  receptions: 0.5,
 };
 
-// Does this projection sit where the model has been shown to work?
+// Does this market sit where the model has been shown to work?
 //
-// A missing or non-finite projection fails: we cannot place it on the
+// A missing or non-finite projection or line fails: we cannot place it on the
 // calibration curve, and betting an unmeasurable number is the thing this
 // guard exists to stop.
-export function meetsSupportFloor(statKey, projectedMedian) {
-  const floor = MIN_PROJECTION[statKey];
-  if (floor === undefined) return true;
+export function meetsSupportFloor({ stat, projectedMedian, line }) {
+  const lineFloor = MIN_LINE[stat];
+  if (lineFloor !== undefined) {
+    if (!Number.isFinite(line)) return false;
+    if (line < lineFloor) return false;
+  }
+  const projFloor = MIN_PROJECTION[stat];
+  if (projFloor === undefined) return true;
   if (!Number.isFinite(projectedMedian)) return false;
-  return projectedMedian >= floor;
+  return projectedMedian >= projFloor;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +297,7 @@ export function applyCalibrationGuards(rows) {
 
   const supported = [];
   for (const r of rows ?? []) {
-    if (meetsSupportFloor(r.stat, r.projectedMedian)) supported.push(r);
+    if (meetsSupportFloor(r)) supported.push(r);
     else rejected.push({ row: r, reason: "support-floor" });
   }
 

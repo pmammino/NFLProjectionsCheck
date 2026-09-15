@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { gradeOutcome } from "./grade-bets.mjs";
-import { STAT_DEFS } from "./lib/markets.mjs";
+import { gradeOutcome } from "./grading.mjs";
+import { STAT_DEFS } from "./markets.mjs";
 
 test("an over settles on beating the line", () => {
   assert.equal(gradeOutcome(280, 249.5, "over"), "won");

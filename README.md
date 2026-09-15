@@ -124,255 +124,156 @@ volume, and exclude-injury-suspect.
 
 ## Paper trading
 
-A **Paper Trading** tab compares our own Floor/Median/Ceiling projections
-against live sportsbook prop lines, tracking how a simple edge-based betting
-strategy would have done — split by stat, by side, and by edge size.
+The question this answers is not "did these bets win" but **"would these
+projections help someone find bets?"** — and that depends on who is asking.
 
-**Odds come from [OpticOdds](https://developer.opticodds.com).** Projections
-and actuals still come from RotoWire; only the odds source changed.
+### The drop
+
+Every **Tuesday morning** the pipeline publishes every prop where our
+projection disagrees with a sportsbook by more than the edge bar, to
+`data/edges/{season}/week-NN.csv`. That file is the product: what a subscriber
+would receive. Everything downstream simulates people acting on it.
+
+Tuesday is deliberate, and it cuts both ways. It is early enough that a
+subscriber could still get the price — and it is the **softest line of the
+week**, because books post early with low limits and sharpen toward kickoff. So
+a healthy ROI measured against Tuesday prices cannot on its own separate "the
+projections are good" from "we measured against a stale number". That is what
+closing-line value is for.
 
 ### How the edge is computed
 
-1. **Our probability.** Each player-week's Floor(25th pct)/Median(50th)/
-   Ceiling(75th pct) projection is turned into a full probability
-   distribution, not just three points:
-   - **Yardage/attempt/completion/reception props** use a **two-piece
-     normal**: a normal distribution anchored at the Median whose lower half
-     is scaled so its 25th percentile lands on Floor, spliced with an upper
-     half scaled so its 75th percentile lands on Ceiling, joined continuously
-     at the Median. This preserves whatever skew the Floor/Ceiling spread
-     already implies, rather than forcing a symmetric distribution.
-   - **TD & turnover-count props** (Anytime TD, Pass/Rush/Rec TD, INT) use a
-     **Poisson** model off the projected median count — the same approach
-     `lib/td.ts` already uses for the Touchdowns tab's scoring probability.
-2. **Market probability.** OpticOdds is queried for every book it offers, for
-   every market we model. It returns **both sides** of each market, which the
-   previous RotoWire feed did not, and that unlocks two things the old
-   pipeline could not do:
-   - **A de-vigged fair price.** Raw implied probabilities on a two-way market
-     sum to more than 1; the excess is the book's margin. Stripping it out
-     recovers what the market actually *believes*. See
-     `scripts/lib/devig.mjs` for the four methods available
-     (`multiplicative` — the default — plus `additive`, `power` and `shin`;
-     the last two correct the favorite–longshot bias and matter most on
-     longshot props like Anytime TD).
-   - **Betting unders.** A one-sided feed can only ever offer overs. Each
-     market is now evaluated from both directions.
+1. **Our probability.** Each player-week's Floor(25th)/Median(50th)/
+   Ceiling(75th) projection becomes a full distribution: a **two-piece normal**
+   for yardage, attempts, completions and receptions (preserving whatever skew
+   the Floor/Ceiling spread implies rather than forcing symmetry), and a
+   **Poisson** for touchdown and turnover counts.
 
-   Different books post different lines for the same player/stat, so every
-   (book, line, side) combination is scanned and the best one is used.
+2. **Market probability.** OpticOdds returns both sides where a book quotes
+   them, so the price can be de-vigged into what the market actually believes.
+   Roughly three quarters of player props are quoted one-sided, and those rows
+   are flagged `OneSided` — no fair price can be derived from a single quote.
 
-   **Which books.** A **curated roster** — DraftKings, FanDuel, BetMGM,
+3. **Which books.** A **curated roster** — DraftKings, FanDuel, BetMGM,
    Caesars, BetRivers, Hard Rock, theScore and Circa — defined in
    `scripts/lib/books.mjs`.
 
-   This is deliberately not "every book available". The capture takes the best
-   price across whatever it pulls, which is only meaningful among books you can
+   Deliberately not "every book available". The capture takes the best price
+   across whatever it pulls, which is only meaningful among books you can
    actually bet at: a best price at a book with no account behind it is a
    return nobody could have earned, and best-of-N finds the most generous
-   outlier by construction. The first live run showed the scale of it — active
-   + onshore + NFL still left **86 books**, including bet99, betano and
-   888sport, because `is_onshore` means *regulated*, not *US*.
+   outlier by construction. The first live run showed the scale — active +
+   onshore + NFL still left **86 books**, including bet99, betano and 888sport,
+   because OpticOdds' `is_onshore` flag means *regulated*, not *US*.
 
-   Names are resolved against the live list, so `hardrock` finds whatever id
-   the API uses (`hard_rock_bet`). A name matching nothing is reported loudly:
-   an unrecognised book isn't an API error, it just returns no odds, which is
+   Names resolve against the live list, so `hardrock` finds whatever id the API
+   uses (`hard_rock_bet`). A name matching nothing is reported loudly: an
+   unrecognised book isn't an API error, it just returns no odds, which is
    indistinguishable from that book not pricing the week.
 
-   `--books` overrides the roster; `--all-books` restores the old behaviour for
-   research.
+   `--books` overrides the roster; `--all-books` restores the unfiltered
+   behaviour for research, and `--include-offshore` adds Pinnacle and friends
+   when a sharper fair-price reference is the point.
 
-   Two caveats on `is_onshore`:
-
-   - It's OpticOdds' own flag and means *regulated*, not specifically *US* —
-     "888sport (Canada)" is flagged onshore too. For strictly the books you can
-     personally bet at, `--books "DraftKings,FanDuel,..."` is the exact control;
-     it bypasses every filter.
-   - The sharpest books (Pinnacle above all) are **offshore**. This doesn't
-     affect `Edge` — you can only bet what you can reach — but it does mean
-     `ModelEdge` is measured against softer books, which makes "we disagree
-     with the market" a weaker claim than it would be against Pinnacle.
-     `--include-offshore` adds them back when that comparison is the point.
-
-3. **Edge** — two numbers, which answer different questions:
+4. **Two edges, answering different questions:**
 
    | | Formula | Answers |
    |---|---|---|
    | `Edge` | OurProb − **ImpliedProb** (raw) | *Does this bet make money?* |
    | `ModelEdge` | OurProb − **FairProb** (de-vigged) | *Do we know something the market doesn't?* |
 
-   **`Edge` is what selects bets**, because the break-even probability at a
-   price *is* its raw implied probability — at −110 you must win 52.4% of the
-   time, not 50%. The vig is a cost actually paid, not an artifact to remove.
+   `Edge` selects bets, because the break-even probability at a price **is** its
+   raw implied probability — at −110 you need 52.4%, not 50%. `ModelEdge` is the
+   more interesting diagnostic but a trap as a filter: it is always larger, by
+   about half the hold.
 
-   `ModelEdge` is the more interesting diagnostic but a trap as a filter: it
-   is *always* larger than `Edge`, by about half the hold, so selecting on it
-   would clear a 3% bar on markets carrying no EV at all and then size them
-   with Kelly as though they did. `--edge-basis novig` switches to it for
-   research; treat the result as a study, not a ledger.
+### The personas
 
-   A bet is placed when the selected edge clears `--min-edge` (default 3%).
-   Markets where only one side is quoted can't be de-vigged, so `FairProb`
-   falls back to the raw price and the row is flagged `OneSided`.
-4. **Sizing.** Every bet that clears the bar is staked two ways, tracked in
-   parallel so the edge-bucket analysis isn't confounded by stake size:
-   - **Flat 1 unit** — clean for asking "does a bigger edge actually win
-     more/pay more," independent of sizing.
-   - **Quarter-Kelly, capped at 3 units** — a more realistic bankroll-growth
-     view. 1 unit = 1% of bankroll (a Kelly fraction is bankroll-size-
-     independent, so no bankroll amount is ever needed).
+Nobody tails four hundred edges a week. `scripts/lib/personas.mjs` defines
+simulated bettors who differ on the dimensions that actually separate real
+ones — **which books they can reach**, **how many bets they place**, **how they
+choose**, **how they size**, and **whether their bankroll resets weekly or
+compounds**.
 
-   A result landing exactly on a whole-number line is a **push**: the stake is
-   returned, and it counts toward staked volume (so ROI is unaffected) but not
-   toward the win-rate denominator. Half-point lines can never push.
+| Persona | What it is |
+|---|---|
+| **The Firehose** | Every qualifying edge, flat 1u, all books. Not a person — the statistical benchmark. |
+| **The Disciplined Flat Bettor** | 10 bets/week, 1u, DraftKings only, never two on one player. |
+| **The Line Shopper** | Identical rules, all eight books. **The gap to the above is what line shopping is worth.** |
+| **The Kelly Compounder** | Quarter-Kelly on a compounding bankroll, up to 25 bets, ranked by EV. |
+| **The Weekly Budget** | 20u a week fully committed, split across the top ten in proportion to edge. |
+| **The Purist** | Two-sided markets only, ranked by de-vigged disagreement. Tests whether de-viggable edges outperform. |
+
+Ledgers land in `data/bets/{persona}/{season}/week-NN.csv` and are
+**regenerated from scratch on every run** — a persona's ledger is a pure
+function of (edges, actuals, rules), so changing a rule or adding a persona is
+just a re-run, and replaying history is the same operation as running the
+current week.
+
+Two modelling choices worth knowing. Each persona collapses a player-stat to
+**one** bet at the best price it can reach (you do not place the same wager at
+five books), and `maxPerPlayer` stops correlated stacking — Over Rushing Yards
+and Anytime TD on the same back win and lose together, so treating them as
+independent overstates return and understates variance.
+
+### Read the confidence band, not the ROI
+
+This is the main way the analysis could mislead:
+
+| Cohort | Bets/season | 95% band on ROI |
+|---|---|---|
+| The Firehose | thousands | ±1-2% — can detect a real edge |
+| A 10-bet-a-week persona | ~180 | **±14%** — tells you almost nothing |
+
+Every rollup ships an `evidence` block with its sample size and band, and the
+dashboard labels anything too small to be conclusive. A persona's ROI shows
+what a strategy would have **felt** like; only the benchmark can establish
+whether the projections work.
+
+### Closing line value
+
+The measurement that does not depend on bets winning. `data/closing/` records
+each game's last price before kickoff, captured daily (NFL games run Thursday,
+Sunday and Monday, so no single weekly pull sits near all of them; each fixture
+is recorded once, close to its own kickoff, and never overwrites the Tuesday
+drop).
+
+If the price we took consistently beats where the market closed, the
+projections are reaching information before the market does. That is the
+durable claim — and because CLV is a continuous measurement on every bet rather
+than one bit of win/loss, it converges far faster than ROI.
+
+A line that moves to a different **number** (Over 249.5 closing at 251.5) is
+reported as a direction only. Converting a half-point into price terms needs a
+model of what a half-point is worth for that stat, which we do not have and do
+not invent.
 
 ### Pipeline
 
 ```
-scripts/optic-discover.mjs  # one-off: print what the OpticOdds API actually
-                             #   returns (books, markets, fixtures, raw odds
-                             #   records beside our parse of them)
-scripts/capture-props.mjs   # Wednesday AM: fetch lines, price vs. our model,
-                             #   write data/props/{season}/week-NN.csv (every
-                             #   price scanned) and data/bets/{season}/week-NN.csv
-                             #   (the ones that clear --min-edge)
-scripts/grade-bets.mjs      # daily, as actuals land: fills in Won/Lost/Push +
-                             #   PnL for bets whose player's game has completed
-scripts/build-betting-data.mjs  # predev/prebuild: aggregates the ledger into
-                             #   public/data/betting.json (bet log + ROI/win-
-                             #   rate rollups by stat, side and edge bucket)
+scripts/capture-props.mjs            Tuesday: publish data/edges/
+scripts/capture-props.mjs --closing  daily: record data/closing/ near each kickoff
+scripts/simulate-personas.mjs        replay every persona over the season
+scripts/build-betting-data.mjs       aggregate into public/data/betting.json
 ```
 
 ```bash
-export OPTICODDS_API_KEY=...                       # required
+export OPTICODDS_API_KEY=...
 
-npm run capture-props                              # this week, auto season/week
-npm run capture-props -- --season 2026 --week 1 --min-edge 0.05
-npm run capture-props -- --season 2026 --week 1 --historical   # closing lines
-npm run optic-discover -- --all                    # what the API actually returns
-npm run capture-props -- --devig-method power --edge-basis novig  # research
-npm run capture-props -- --include-offshore        # add Pinnacle et al.
-npm run capture-props -- --books "DraftKings,FanDuel"   # exactly these
-npm run grade-bets                                 # grade every week with a ledger
-npm run grade-bets -- --season 2026 --week 1
+npm run capture-props                              # publish this week's edges
+npm run capture-closing                            # record closing lines
+npm run simulate                                   # replay all personas
+npm run simulate -- --persona kelly --dry-run      # one persona, no writes
 ```
-
-Tracked stats, each defined once in `scripts/lib/markets.mjs` (its exact
-OpticOdds market name, its probability model, and the projection and actuals
-columns it maps to). All twelve are **confirmed against the live NFL market
-list** (317 markets returned; all twelve resolved):
-
-| Stat | OpticOdds market |
-|---|---|
-| `anytimeTD` | Anytime Touchdown Scorer |
-| `passYds` / `passAtt` / `completions` / `passTD` | Player Passing Yards / Attempts / Completions / Touchdowns |
-| `int` | Player Interceptions |
-| `rushYds` / `rushAtt` / `rushTD` | Player Rushing Yards / Attempts / Touchdowns |
-| `receptions` / `recYds` / `recTD` | Player Receptions, Player Receiving Yards / Touchdowns |
-
-Market names are matched **exactly**, never by substring, and that is
-load-bearing rather than fastidious. The live list also contains `1st Half
-Player Passing Yards`, `Player Passing Yards (Combo)`, `Player Passing Yards
-(Either)` and `Player Passing Yards Each Half`. A substring match would map
-several of those onto `passYds` and price a full-game projection against a
-half- or quarter-length market. `Player Interceptions` likewise means
-interceptions *thrown* — the list carries a separate `Player Defensive
-Interceptions`.
-
-Market names we don't model are counted and reported at the end of a run rather
-than failing it.
-
-### Backfilling a played week
-
-`--historical` uses `/fixtures/odds/historical`, which returns each odd's
-**opening** (`olv`) and **closing** (`clv`) line value directly — no scan of a
-price series needed. Closing is used by default: it's the most informed price
-the market produced and the one we could realistically have taken. The endpoint
-only covers up to kickoff, so look-ahead bias is excluded at the source.
-`--use-opening` grades against the opening line instead; the gap between the two
-measures how far a line moved after posting.
-
-**Backfilled props are OPENING lines, not closing lines.** OpticOdds returns
-`olv` (opening) and `clv` (closing) per odd, but `clv` is populated only on
-*game* markets. On a real week-1 pull it was present on 93-100% of moneyline
-and half/quarter totals and on **0 of 122 player-prop odds**. So a backfilled
-prop falls back to its opening price.
-
-This matters for interpretation, not correctness. An opening line is softer —
-the book has not yet absorbed sharp action — so a model backtested against it
-looks better than it would have performed betting at close. Every row therefore
-records a `LineSource` (`live` / `closing` / `opening`), the dashboard rolls up
-`byLineSource`, and a run that falls back says so loudly. Treat backfilled
-weeks as a separate cohort rather than pooling them with live-captured ones.
-
-**Verify access before spending a week's requests.** A historical response can
-come back as a valid fixture with an empty `odds` array — an unauthorized key,
-a week past the retention window, and a book with nothing archived all look
-identical. Check one fixture first:
-
-```bash
-curl -H "X-Api-Key: $OPTICODDS_API_KEY" \
-  'https://api.opticodds.com/api/v3/fixtures/odds/historical?fixture_id=<ID>&sportsbook=BetMGM'
-```
-
-If `odds` is empty there, the backfill cannot work and the most likely cause is
-that the key lacks historical-odds permission.
-
-Because of that, **a run producing zero rows will not overwrite a populated
-snapshot** — it refuses and says so. The files under `data/` are the durable
-record of what we actually saw and can't be reconstructed once lost.
-`--allow-empty` overrides it when clearing a week is genuinely intended.
-
-Two further constraints make this slow and time-limited:
-
-- **One fixture per request.** Unlike `/fixtures/odds` (5 fixtures, 5 books),
-  the historical endpoint takes a single `fixture_id`. A 16-game week across 20
-  books is 64+ requests at 10 per 15 seconds — budget a couple of minutes.
-- **History is retained on a rolling 2-month window.** A week older than that
-  can't be backfilled at any price, so backfilling is a deadline, not a task
-  that waits.
-
-### The player crosswalk
-
-OpticOdds identifies players by name; the rest of this project is keyed on
-RotoWire's `playerid`. `scripts/ingest.mjs` therefore writes
-`data/players/{season}.csv` (PlayerID, Name, Team, Pos) — the projection feed
-carries player names even though the projection *snapshot* schema drops them.
-
-This matters more than it sounds, and the live feed is stranger than the docs
-suggest:
-
-- An odd has **no player-name field**. It carries `player_id` (an OpticOdds hex
-  id) and `selection`, which holds the player on a prop. `name` is the full
-  label (`"Tom Kennedy Over 0.5"`), so it is deliberately not used as a
-  fallback — it would produce a key matching nothing.
-- **Player props carry no team at all.** `team_id` is `null` on every one of
-  them; it appears only on team markets. So the thing that separates two
-  players sharing a name is the **fixture**: a prop belongs to one game, a game
-  has two teams, and at most one namesake is usually in it.
-- A player market can contain **team** entries — an Anytime-TD market includes
-  `"Buffalo Bills D/ST"` rows. Those are dropped before the crosswalk sees them.
-
-`scripts/lib/crosswalk.mjs` joins the two, matching in strict-to-loose tiers
-(name+team → name league-wide → first-initial+surname+team), normalizing
-punctuation, accents, generational suffixes and team-abbreviation variants
-along the way. **It refuses to guess**: two different players sharing a key
-report as ambiguous and are skipped, because a wrong join would price a bet
-against the wrong player's projection and corrupt the ledger silently. Every
-unmatched name is printed at the end of a capture run — a rising count there
-means the roster snapshot is stale.
-
-### Workflows
 
 | Workflow | When | What |
 |---|---|---|
-| `ingest-weekly.yml` | daily, 13:00 UTC | RotoWire projections + actuals, and `data/players/{season}.csv` — **run this before the first capture**, the crosswalk needs it |
-| `optic-discover.yml` | manual | Prints what the OpticOdds API actually returns. Run `markets` first: it prints OK/MISS per stat and is how a wrong market alias gets caught |
-| `props-weekly.yml` | Wednesday ~12:00 UTC | The capture. Has a `dryRun` input that prices everything and writes nothing |
+| `ingest-weekly.yml` | daily | RotoWire projections + actuals, the player roster, then replays personas |
+| `props-weekly.yml` | **Tuesday** | The drop: publish edges, replay personas |
+| `closing-lines.yml` | daily | Record closing lines for games kicking off soon |
+| `optic-discover.yml` | manual | Inspect what the OpticOdds API returns |
 
-`.github/workflows/props-weekly.yml` needs the **`OPTICODDS_API_KEY`** repository secret;
-`.github/workflows/ingest-weekly.yml`'s existing daily run grades pending bets
-right after it refreshes actuals.
+`data/legacy-bets/` holds the pre-rework ledger; see the README there.
 
 ## Live weekly ingestion
 

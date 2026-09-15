@@ -1,0 +1,87 @@
+name: Capture closing lines
+
+# Records each game's LAST price before kickoff, which is what closing-line
+# value is measured against.
+#
+# Why daily rather than once a week: NFL games kick off Thursday, Sunday and
+# Monday, so no single weekly pull sits near all of them. This runs every day
+# and captures only the fixtures starting within the window, skipping any
+# already recorded — so every game gets exactly one closing snapshot, taken
+# close to its own kickoff.
+#
+# It appends to data/closing/ and never touches data/props/ or data/edges/.
+# Those hold the Tuesday drop, and overwriting them with Sunday prices would
+# destroy the before/after comparison this exists to enable.
+#
+# Cheap: the curated book roster puts a full week at ~8 requests, and a single
+# day's fixtures at fewer.
+
+on:
+  schedule:
+    # Daily 15:00 UTC ≈ 11:00 ET. Ahead of the 13:00 ET Sunday kickoffs and
+    # comfortably inside the default 24h window for Thursday and Monday games.
+    # Gated to season months.
+    - cron: "0 15 * 9-12,1-2 *"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season (year). Blank = auto by date."
+        required: false
+      week:
+        description: "NFL week. Blank = auto by date."
+        required: false
+      windowHours:
+        description: "How close to kickoff counts as closing (default 24)"
+        required: false
+        default: "24"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: closing-lines
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Capture closing lines
+        env:
+          OPTICODDS_API_KEY: ${{ secrets.OPTICODDS_API_KEY }}
+        run: |
+          if [ -z "$OPTICODDS_API_KEY" ]; then
+            echo "::error::OPTICODDS_API_KEY secret is not set — closing lines cannot be captured."
+            exit 1
+          fi
+          args="--closing"
+          if [ -n "${{ github.event.inputs.season }}" ]; then args="$args --season ${{ github.event.inputs.season }}"; fi
+          if [ -n "${{ github.event.inputs.week }}" ]; then args="$args --week ${{ github.event.inputs.week }}"; fi
+          if [ -n "${{ github.event.inputs.windowHours }}" ]; then args="$args --closing-window-hours ${{ github.event.inputs.windowHours }}"; fi
+          echo "Running: node scripts/capture-props.mjs $args"
+          node scripts/capture-props.mjs $args
+
+      # CLV only becomes computable once a closing snapshot exists, so refresh
+      # the ledgers in the same run.
+      - name: Replay personas
+        if: always()
+        run: node scripts/simulate-personas.mjs
+
+      - name: Commit snapshots
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No closing lines to commit."
+          else
+            git commit -m "Capture closing lines [skip ci]"
+            git push
+          fi

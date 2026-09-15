@@ -19,12 +19,20 @@ name: Publish weekly edges (Tuesday drop)
 
 on:
   schedule:
-    # Tuesday 13:00 UTC ≈ 09:00 ET. Tuesday morning is the simulated drop
+    # Tuesday 14:00 UTC ≈ 10:00 ET. Tuesday morning is the simulated drop
     # time: the week's lines are up, and it is early enough that a subscriber
     # acting on the edges would still find them. It is also the SOFTEST point
     # of the week — which is exactly why closing-line value is captured
     # separately and reported alongside ROI.
-    - cron: "0 13 * 9-12,1-2 2"
+    #
+    # AN HOUR AFTER ingest-weekly (13:00), and that gap is load-bearing. The
+    # NFL week rolls forward on Tuesday: projectionWeek() looks two days ahead,
+    # so from Tuesday it resolves to the NEXT week. This job therefore needs
+    # week N+1 projections, and Monday's ingest only wrote week N — they are
+    # created by the very run that precedes this one. Starting them together
+    # races, and the capture fails with "No projections snapshot at
+    # data/projections/{season}/week-NN.csv".
+    - cron: "0 14 * 9-12,1-2 2"
   workflow_dispatch:
     inputs:
       season:
@@ -62,7 +70,15 @@ permissions:
   contents: write
 
 concurrency:
-  group: props-weekly
+  # All three data-writing workflows share ONE group so they can never run
+  # concurrently. They all `git add data/` and push to the same branch, so two
+  # at once means the second push is rejected as a non-fast-forward.
+  #
+  # Sharing the group also enforces the ordering dependency below: scheduled
+  # runs can be delayed by GitHub for many minutes under load, so an hour of
+  # clock separation is not on its own a guarantee that ingest finishes before
+  # the drop starts.
+  group: data-commit
   cancel-in-progress: false
 
 jobs:
@@ -113,5 +129,20 @@ jobs:
             echo "No new props/bets to commit."
           else
             git commit -m "Publish weekly edges + replay personas [skip ci]"
-            git push
+            # Rebase-and-retry. The shared concurrency group should already
+            # prevent two of these running at once, but GitHub queues at most
+            # ONE pending run per group and the branch can move for reasons
+            # outside it. Every commit here only ADDS data files, so rebasing
+            # onto whatever landed first is always the right resolution.
+            pushed=false
+            for attempt in 1 2 3; do
+              if git push; then pushed=true; break; fi
+              echo "Push rejected (attempt $attempt) — rebasing onto $GITHUB_REF_NAME and retrying."
+              git pull --rebase origin "$GITHUB_REF_NAME" || break
+              sleep 5
+            done
+            if [ "$pushed" != "true" ]; then
+              echo "::error::Could not push after 3 attempts."
+              exit 1
+            fi
           fi

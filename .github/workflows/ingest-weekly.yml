@@ -45,7 +45,15 @@ permissions:
   contents: write
 
 concurrency:
-  group: ingest-weekly
+  # All three data-writing workflows share ONE group so they can never run
+  # concurrently. They all `git add data/` and push to the same branch, so two
+  # at once means the second push is rejected as a non-fast-forward.
+  #
+  # Sharing the group also enforces the ordering dependency below: scheduled
+  # runs can be delayed by GitHub for many minutes under load, so an hour of
+  # clock separation is not on its own a guarantee that ingest finishes before
+  # the drop starts.
+  group: data-commit
   cancel-in-progress: false
 
 jobs:
@@ -98,5 +106,20 @@ jobs:
             echo "No new snapshots to commit."
           else
             git commit -m "Ingest snapshots (${{ steps.mode.outputs.only }}) [skip ci]"
-            git push
+            # Rebase-and-retry. The shared concurrency group should already
+            # prevent two of these running at once, but GitHub queues at most
+            # ONE pending run per group and the branch can move for reasons
+            # outside it. Every commit here only ADDS data files, so rebasing
+            # onto whatever landed first is always the right resolution.
+            pushed=false
+            for attempt in 1 2 3; do
+              if git push; then pushed=true; break; fi
+              echo "Push rejected (attempt $attempt) — rebasing onto $GITHUB_REF_NAME and retrying."
+              git pull --rebase origin "$GITHUB_REF_NAME" || break
+              sleep 5
+            done
+            if [ "$pushed" != "true" ]; then
+              echo "::error::Could not push after 3 attempts."
+              exit 1
+            fi
           fi

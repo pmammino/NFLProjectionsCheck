@@ -87,6 +87,7 @@ PlayerID,Name,Team,Pos
 13525,Parris Campbell,DAL,WR
 13536,Terry McLaurin,WAS,WR
 13556,David Montgomery,HOU,RB
+13565,Lil'Jordan Humphrey,DEN,WR
 13582,Josh Jacobs,GB,RB
 13587,Ty Johnson,BUF,RB
 13590,Tony Pollard,TEN,RB
@@ -109,6 +110,7 @@ PlayerID,Name,Team,Pos
 14378,Michael Pittman,PIT,WR
 14386,Brandon Aiyuk,SF,WR
 14394,D'Andre Swift,CHI,RB
+14410,DeeJay Dallas,MIN,RB
 14411,CeeDee Lamb,DAL,WR
 14416,Jalen Hurts,PHI,QB
 14418,J.K. Dobbins,DEN,RB
@@ -201,6 +203,7 @@ PlayerID,Name,Team,Pos
 15976,Tyler Allgeier,ARI,RB
 15979,Ty Chandler,NO,RB
 15984,Jaylen Warren,PIT,RB
+15990,Tyler Goodson,DAL,RB
 15996,Jeremy Ruckert,NYJ,TE
 16005,Skyy Moore,GB,WR
 16010,Jalen Tolbert,MIA,WR
@@ -218,6 +221,7 @@ PlayerID,Name,Team,Pos
 16163,Jordan Mason,MIN,RB
 16277,Drew Ogletree,IND,TE
 16282,Ko Kieft,TB,TE
+16337,Britain Covey,PHI,WR
 16418,Jake Tonges,SF,TE
 16560,Rashid Shaheed,SEA,WR
 16649,Tucker Kraft,GB,TE
@@ -293,6 +297,7 @@ PlayerID,Name,Team,Pos
 17091,Emari Demercado,DAL,RB
 17130,Blake Whiteheart,CLE,TE
 17185,Jalen Brooks,ARI,WR
+17319,Jaleel McLaughlin,CLE,RB
 17330,Brycen Tremayne,CAR,WR
 17335,Julian Hill,NE,TE
 17467,Xavier Smith,LAR,WR

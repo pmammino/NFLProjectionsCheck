@@ -22,6 +22,7 @@ PlayerID,Name,Team,Pos
 10215,Darren Waller,CAR,TE
 10729,Jared Goff,DET,QB
 10735,Hunter Henry,NE,TE
+10739,Laquon Treadwell,IND,WR
 10748,Austin Hooper,ATL,TE
 10819,Derrick Henry,BAL,RB
 10854,Tyler Higbee,LAR,TE
@@ -252,6 +253,7 @@ PlayerID,Name,Team,Pos
 16807,Bryce Young,CAR,QB
 16808,Jahmyr Gibbs,DET,RB
 16810,Keaton Mitchell,LAC,RB
+16847,Jared Wayne,HOU,WR
 16849,Marvin Mims,DEN,WR
 16855,Luke Schoonmaker,DAL,TE
 16866,Josh Whyle,GB,TE

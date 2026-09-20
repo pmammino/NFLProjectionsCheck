@@ -1,6 +1,7 @@
 PlayerID,Name,Team,Pos
 4307,Aaron Rodgers,PIT,QB
 5648,Joe Flacco,CIN,QB
+5653,Josh Johnson,CIN,QB
 5971,Matthew Stafford,LAR,QB
 7355,Andy Dalton,PHI,QB
 7357,Tyrod Taylor,GB,QB
@@ -61,6 +62,7 @@ PlayerID,Name,Team,Pos
 12490,Sam Darnold,SEA,QB
 12507,Saquon Barkley,PHI,RB
 12508,Christian Kirk,SF,WR
+12511,Nick Mullens,JAX,QB
 12514,Dalton Schultz,HOU,TE
 12559,Mark Andrews,BAL,TE
 12561,Lamar Jackson,BAL,QB
@@ -82,6 +84,7 @@ PlayerID,Name,Team,Pos
 13438,Jarrett Stidham,DEN,QB
 13449,Devin Singletary,NYG,RB
 13466,Dawson Knox,BUF,TE
+13484,Travis Homer,PIT,RB
 13491,Daniel Jones,IND,QB
 13502,Hollywood Brown,PHI,WR
 13517,Jakobi Meyers,JAX,WR
@@ -122,6 +125,7 @@ PlayerID,Name,Team,Pos
 14458,Jerry Jeudy,CLE,WR
 14463,Colby Parkinson,LAR,TE
 14465,Tua Tagovailoa,ATL,QB
+14495,Cody White,LV,WR
 14506,Tee Higgins,CIN,WR
 14509,Justin Jefferson,MIN,WR
 14510,Darnell Mooney,NYG,WR
@@ -210,6 +214,7 @@ PlayerID,Name,Team,Pos
 16010,Jalen Tolbert,MIA,WR
 16022,Alec Pierce,IND,WR
 16025,Jalen Nailor,LV,WR
+16026,Kevin Austin,NO,WR
 16027,Romeo Doubs,NE,WR
 16032,Cade Otton,TB,TE
 16033,Isaiah Likely,NYG,TE
@@ -354,6 +359,7 @@ PlayerID,Name,Team,Pos
 17966,Tip Reiman,ARI,TE
 17967,Tyrone Tracy,NYG,RB
 17968,George Holani,SEA,RB
+17971,Anthony Gould,IND,WR
 17974,Ryan Flournoy,DAL,WR
 17975,Devaughn Vele,NO,WR
 17976,Jalen Coker,CAR,WR
@@ -485,6 +491,7 @@ PlayerID,Name,Team,Pos
 19320,Ted Hurst,TB,WR
 19321,Josh Cameron,JAX,WR
 19322,Kevin Coleman,MIA,WR
+19326,Lewis Bond,HOU,WR
 19330,De'Zhaun Stribling,SF,WR
 19335,Eli Heidenreich,PIT,RB
 19336,Barion Brown,NO,WR
@@ -501,6 +508,7 @@ PlayerID,Name,Team,Pos
 19368,Athan Kaliakmanis,WAS,QB
 19425,Chip Trayanum,NYJ,RB
 19426,Josh Cuevas,BAL,TE
+19431,CJ Donaldson,NO,RB
 19432,Malik Benson,LV,WR
 19443,Kendrick Law,DET,WR
 19445,Reggie Virgil,ARI,WR

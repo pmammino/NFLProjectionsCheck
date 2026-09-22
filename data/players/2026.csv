@@ -72,6 +72,7 @@ PlayerID,Name,Team,Pos
 12623,Kyle Allen,BUF,QB
 12629,Mason Rudolph,PIT,QB
 12764,Mike Gesicki,CIN,TE
+12771,Braxton Berrios,NYG,WR
 12807,Durham Smythe,BAL,TE
 12809,Tyler Conklin,DET,TE
 12858,Ian Thomas,LV,TE
@@ -88,6 +89,7 @@ PlayerID,Name,Team,Pos
 13491,Daniel Jones,IND,QB
 13502,Hollywood Brown,PHI,WR
 13517,Jakobi Meyers,JAX,WR
+13522,Darius Slayton,IND,WR
 13525,Parris Campbell,DAL,WR
 13536,Terry McLaurin,WAS,WR
 13556,David Montgomery,HOU,RB
@@ -304,6 +306,7 @@ PlayerID,Name,Team,Pos
 17091,Emari Demercado,DAL,RB
 17130,Blake Whiteheart,CLE,TE
 17185,Jalen Brooks,ARI,WR
+17218,E.J. Jenkins,PHI,TE
 17319,Jaleel McLaughlin,CLE,RB
 17330,Brycen Tremayne,CAR,WR
 17335,Julian Hill,NE,TE

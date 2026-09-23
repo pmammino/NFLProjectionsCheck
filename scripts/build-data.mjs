@@ -9,6 +9,10 @@
 //  - Volume stats (Pass Att, Rush Att, Targets) compared directly.
 //  - Efficiency stats compared as RATES (e.g. Yards/Target), never totals.
 //    Each split's rate = that split's total / that split's volume.
+//  - Touchdowns are compared as PURE COUNTS — never per attempt or per target.
+//    A TD rate is a tiny quotient of a rare event over a noisy denominator, so
+//    the rate frame mostly measured the denominator. The projected TD total is
+//    what the feed actually forecasts, so that is what we grade.
 //  - Stats are only emitted for a row when relevant to the player's position
 //    (QBs aren't graded on receiving; non-QBs aren't graded on passing).
 
@@ -92,7 +96,7 @@ const METRICS = [
     projVol: "Targets",
     actualVol: "Targets",
   },
-  // ---- Passing efficiency (QB only) ----
+  // ---- Passing efficiency + TD count (QB only) ----
   {
     key: "passYpa",
     label: "Pass Yards / Attempt",
@@ -117,19 +121,23 @@ const METRICS = [
     projVol: "PassAttempts",
     actualVol: "PassAtt",
   },
+  // Pure TD count, not a per-attempt rate. The volume fields stay the passing
+  // opportunity so the row is only graded when the QB actually dropped back,
+  // and the UI volume sliders keep working in the same units as the rest of
+  // the Passing group.
   {
-    key: "passTdRate",
-    label: "Pass TD / Attempt",
+    key: "passTD",
+    label: "Passing TDs",
     group: "Passing",
-    kind: "efficiency",
-    unit: "rate",
+    kind: "volume",
+    unit: "count",
     positions: ["QB"],
-    proj: { numer: "PassTDs", denom: "PassAttempts" },
-    actual: { numer: "PassTD", denom: "PassAtt" },
+    proj: "PassTDs",
+    actual: "PassTD",
     projVol: "PassAttempts",
     actualVol: "PassAtt",
   },
-  // ---- Rushing efficiency ----
+  // ---- Rushing efficiency + TD count ----
   {
     key: "rushYpc",
     label: "Rush Yards / Attempt",
@@ -142,19 +150,20 @@ const METRICS = [
     projVol: "RushAttempts",
     actualVol: "Rushes",
   },
+  // Pure TD count (see passTD).
   {
-    key: "rushTdRate",
-    label: "Rush TD / Attempt",
+    key: "rushTD",
+    label: "Rushing TDs",
     group: "Rushing",
-    kind: "efficiency",
-    unit: "rate",
+    kind: "volume",
+    unit: "count",
     positions: ["QB", "RB", "WR", "TE"],
-    proj: { numer: "RushTDs", denom: "RushAttempts" },
-    actual: { numer: "RushTD", denom: "Rushes" },
+    proj: "RushTDs",
+    actual: "RushTD",
     projVol: "RushAttempts",
     actualVol: "Rushes",
   },
-  // ---- Receiving efficiency ----
+  // ---- Receiving efficiency + TD count ----
   {
     key: "recYpt",
     label: "Rec Yards / Target",
@@ -179,15 +188,16 @@ const METRICS = [
     projVol: "Targets",
     actualVol: "Targets",
   },
+  // Pure TD count (see passTD).
   {
-    key: "recTdRate",
-    label: "Rec TD / Target",
+    key: "recTD",
+    label: "Receiving TDs",
     group: "Receiving",
-    kind: "efficiency",
-    unit: "rate",
+    kind: "volume",
+    unit: "count",
     positions: ["RB", "WR", "TE"],
-    proj: { numer: "RecTDs", denom: "Targets" },
-    actual: { numer: "RecptTD", denom: "Targets" },
+    proj: "RecTDs",
+    actual: "RecptTD",
     projVol: "Targets",
     actualVol: "Targets",
   },
@@ -446,7 +456,7 @@ const ACTUAL_NUM_COLS = [
 const SEASON_COMPLETE_WEEKS = 18;
 
 // Sum each column across rows; a column with no non-blank value stays blank so
-// unprojected fields (e.g. Targets) remain "missing" and skip, not read as 0.
+// unprojected fields remain "missing" and skip, rather than reading as 0.
 function aggregateSum(rows, columns) {
   const out = {};
   for (const col of columns) {

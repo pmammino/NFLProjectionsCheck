@@ -220,9 +220,11 @@ export default function CalibrationView({
         confidence interval half-width.
       </p>
       <p className="text-xs text-amber-300/80">
-        Note: the TD <i>rate</i> rows (Pass/Rush/Rec TD per attempt or target)
-        are unreliable here — touchdowns are essentially a 0/1 outcome per game,
-        so a continuous rate band is the wrong frame. See the{" "}
+        Note: the TD rows (Passing/Rushing/Receiving TDs) are graded as pure
+        counts — projected TD total vs. actual TD total, never per attempt or
+        per target. Read their band coverage loosely: a game&rsquo;s actual is a
+        whole number (usually 0 or 1) against a fractional projection, so a
+        continuous band is a coarse frame for them. See the{" "}
         <b>Touchdowns</b> tab for a proper rare-event treatment (expected-vs-actual
         calibration, scoring probability, Brier &amp; log loss).
       </p>

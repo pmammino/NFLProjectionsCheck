@@ -220,11 +220,13 @@ export default function CalibrationView({
         confidence interval half-width.
       </p>
       <p className="text-xs text-amber-300/80">
-        Note: the TD rows (Passing/Rushing/Receiving TDs) are graded as pure
-        counts — projected TD total vs. actual TD total, never per attempt or
-        per target. Read their band coverage loosely: a game&rsquo;s actual is a
-        whole number (usually 0 or 1) against a fractional projection, so a
-        continuous band is a coarse frame for them. See the{" "}
+        Note: touchdowns are deliberately absent from this table. A TD is a
+        near-binary event — most player-games are zero — and no
+        floor&ndash;ceiling band can contain that outcome, so any within-band
+        figure here would measure the frame rather than the projection. TDs are
+        graded as a <i>probability</i> forecast instead: each projected expected
+        TD count becomes a P(&ge;1 TD) and is scored against what happened. See
+        the{" "}
         <b>Touchdowns</b> tab for a proper rare-event treatment (expected-vs-actual
         calibration, scoring probability, Brier &amp; log loss).
       </p>

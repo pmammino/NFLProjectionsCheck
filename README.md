@@ -22,13 +22,18 @@ Per the project requirements, stats are split into:
   - Passing: Yards/Att, Completion %
   - Rushing: Yards/Att
   - Receiving: Yards/Target, Catch Rate
-- **Touchdowns** (compared as *pure counts*): Passing TDs, Rushing TDs,
-  Receiving TDs — projected TD total vs. actual TD total, **never** per
-  attempt or per target. A TD rate is a rare event divided by a noisy
-  denominator, so the rate frame mostly graded the denominator; the projected
-  TD total is what the feed actually forecasts, so that is what we grade. A
-  TD row still uses its group's opportunity volume (attempts / targets) for
-  position relevance and the volume sliders.
+- **Touchdowns** (compared as a *probability*): **not** graded in the metric
+  table above — neither as per-attempt/per-target rates nor as raw counts.
+  Both framings fail. A TD is a near-binary event and a floor–median–ceiling
+  band cannot contain the modal outcome of zero, so a within-band number
+  measures the frame rather than the projection. Measured on 2025: the
+  projected floor sits above zero in 92% of receiving rows while 85% of them
+  score nothing, which drags receiving-TD band coverage to **9.6%** against a
+  50% target — an artefact, not a finding.
+
+  Instead, each projected expected-TD count becomes a Poisson
+  `P(≥1 TD) = 1 − e^−λ` and is scored against the binary outcome with a
+  reliability curve, Brier skill and log loss. See the **Touchdowns** tab.
 
 > Passing INT efficiency is **not** graded — the actuals file has no INT column.
 
@@ -81,10 +86,10 @@ and never produce a false comparison.
    (quartiles — are studs vs. low-projected players handled differently?), and
    **by position**. Magnitude bars and the position table carry 95% Wilson
    confidence intervals so apparent differences can be read as real or noise.
-4. **Touchdowns** — TDs are rare count events (0/1/2 per game). The other tabs
-   grade the projected TD **total** against the actual with the same band /
-   error machinery as every other count; this tab adds the rare-event frame
-   that a floor–median–ceiling band can't give them:
+4. **Touchdowns** — TDs are rare count events (0/1/2 per game), so the band /
+   error machinery the other tabs use is the wrong frame and they sit this one
+   out entirely. This is the **only** place TDs are judged, and it treats them
+   as a probability forecast:
    - **Expected vs. actual TDs** — player-weeks binned by projected TD count,
      comparing mean projected to mean observed (assumption-free; the binary
      noise averages out).

@@ -9,10 +9,16 @@
 //  - Volume stats (Pass Att, Rush Att, Targets) compared directly.
 //  - Efficiency stats compared as RATES (e.g. Yards/Target), never totals.
 //    Each split's rate = that split's total / that split's volume.
-//  - Touchdowns are compared as PURE COUNTS — never per attempt or per target.
-//    A TD rate is a tiny quotient of a rare event over a noisy denominator, so
-//    the rate frame mostly measured the denominator. The projected TD total is
-//    what the feed actually forecasts, so that is what we grade.
+//  - Touchdowns are NOT in the metric set at all — neither as per-attempt /
+//    per-target rates nor as raw counts. Both framings fail here: a TD is a
+//    near-binary event, and a floor–median–ceiling band cannot contain the
+//    modal outcome of zero (measured on 2025: the projected floor sits above
+//    zero in 92% of receiving rows while 85% of them score nothing, dragging
+//    the within-band rate to 9.6% against a 50% target — an artefact of the
+//    frame, not of the projection). TDs are emitted separately as TD_TYPES
+//    below and graded as a PROBABILITY forecast in the app: each projected
+//    expected-TD count becomes a Poisson P(>=1 TD), scored against the binary
+//    outcome with a reliability curve, Brier skill and log loss.
 //  - Stats are only emitted for a row when relevant to the player's position
 //    (QBs aren't graded on receiving; non-QBs aren't graded on passing).
 
@@ -96,7 +102,7 @@ const METRICS = [
     projVol: "Targets",
     actualVol: "Targets",
   },
-  // ---- Passing efficiency + TD count (QB only) ----
+  // ---- Passing efficiency (QB only) ----
   {
     key: "passYpa",
     label: "Pass Yards / Attempt",
@@ -121,23 +127,7 @@ const METRICS = [
     projVol: "PassAttempts",
     actualVol: "PassAtt",
   },
-  // Pure TD count, not a per-attempt rate. The volume fields stay the passing
-  // opportunity so the row is only graded when the QB actually dropped back,
-  // and the UI volume sliders keep working in the same units as the rest of
-  // the Passing group.
-  {
-    key: "passTD",
-    label: "Passing TDs",
-    group: "Passing",
-    kind: "volume",
-    unit: "count",
-    positions: ["QB"],
-    proj: "PassTDs",
-    actual: "PassTD",
-    projVol: "PassAttempts",
-    actualVol: "PassAtt",
-  },
-  // ---- Rushing efficiency + TD count ----
+  // ---- Rushing efficiency ----
   {
     key: "rushYpc",
     label: "Rush Yards / Attempt",
@@ -150,20 +140,7 @@ const METRICS = [
     projVol: "RushAttempts",
     actualVol: "Rushes",
   },
-  // Pure TD count (see passTD).
-  {
-    key: "rushTD",
-    label: "Rushing TDs",
-    group: "Rushing",
-    kind: "volume",
-    unit: "count",
-    positions: ["QB", "RB", "WR", "TE"],
-    proj: "RushTDs",
-    actual: "RushTD",
-    projVol: "RushAttempts",
-    actualVol: "Rushes",
-  },
-  // ---- Receiving efficiency + TD count ----
+  // ---- Receiving efficiency ----
   {
     key: "recYpt",
     label: "Rec Yards / Target",
@@ -185,19 +162,6 @@ const METRICS = [
     positions: ["RB", "WR", "TE"],
     proj: { numer: "RecCompletions", denom: "Targets" },
     actual: { numer: "Receptions", denom: "Targets" },
-    projVol: "Targets",
-    actualVol: "Targets",
-  },
-  // Pure TD count (see passTD).
-  {
-    key: "recTD",
-    label: "Receiving TDs",
-    group: "Receiving",
-    kind: "volume",
-    unit: "count",
-    positions: ["RB", "WR", "TE"],
-    proj: "RecTDs",
-    actual: "RecptTD",
     projVol: "Targets",
     actualVol: "Targets",
   },
@@ -256,9 +220,9 @@ const TD_TYPES = [
   },
 ];
 
-// A cell is "missing" when empty/undefined. Live-ingested projections leave
-// RecCompletions blank (the endpoints don't project receptions), so treat blank
-// as missing and let the caller skip that metric rather than reading it as 0.
+// A cell is "missing" when empty/undefined — e.g. Targets in snapshots taken
+// before the projection feeds carried a target count. Treat blank as missing
+// and let the caller skip that metric rather than reading it as a real 0.
 const isBlank = (v) => v === undefined || v === null || v === "";
 
 function readSplitValue(spec, row) {

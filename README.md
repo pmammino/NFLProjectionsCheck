@@ -116,6 +116,44 @@ and never produce a false comparison.
 Every tab carries a collapsible **plain-English explainer** describing what the
 view shows, how to read it, and what you can learn.
 
+## Calibration report (CLI)
+
+```bash
+npm run build:data && npm run calibration-report
+```
+
+The question the dashboard raises but doesn't answer: *the bands are off — by
+how much, and should I do anything about it?* The report answers it in three
+sections, and the third is the one that matters.
+
+1. **Where each line actually sits.** Share of actuals at or below
+   Floor/Median/Ceiling against the 25 / 50 / 75% they claim to be, with a
+   z-score and a `noise` / `suggestive` / `solid` verdict. Thresholds are
+   deliberately conservative — the report runs three thresholds across every
+   metric, so 2-sigma readings turn up by chance.
+2. **How far each line would have to move.** The multiplier putting a line
+   exactly on target, with a 95% bootstrap interval. An interval spanning 0% is
+   not an adjustment. It also counts **inversions** — rows where applying all
+   three multipliers would push a line past its neighbour, which any real
+   implementation has to clamp.
+3. **Whether that move survives data it wasn't fitted to.** Fit on the early
+   weeks, score on the later ones. This exists because section 2 is
+   self-fulfilling: a fitted multiplier hits 25/50/75 on its own data by
+   construction. Early in a season most corrections make held-out weeks
+   *worse*. Only ship the ones that improve here.
+
+Options: `--scope weekly|season`, `--metrics a,b`, `--split N` (weeks to fit
+on), `--boot N`, `--seed N`, `--json`. The bootstrap is seeded, so two runs on
+the same data give identical intervals and the output can be diffed.
+
+> **It never rewrites a projection**, by design. The dashboard reports the
+> upstream feed's calibration; a band corrected in the measurement layer would
+> report the correction instead. A multiplier that survives section 3 belongs
+> in the betting path — see the reasoning already written up in
+> `scripts/lib/calibration.mjs`, which found that for the low-volume case a
+> variance multiplier can't help at all, because the real distribution is
+> bimodal and widening a normal doesn't reconstruct a point mass.
+
 ## Weekly vs. Season-long scope
 
 A top-right **Weekly / Season-long** toggle switches the entire dashboard

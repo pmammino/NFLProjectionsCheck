@@ -163,7 +163,7 @@ async function ingestProjections(a) {
   ]);
 
   // TARGETS_SOURCE: the feeds now project targets, read straight off each
-  // record (see TARGET_FIELDS in lib/rotowire.mjs). This override stays for the
+  // record (see TARGET_FIELD in lib/rotowire.mjs). This override stays for the
   // case where a better targets source turns up or the feed drops the column:
   // build a Map keyed by RotoWire playerid (value: a number, or a per-split
   // { M, C, F }) and it wins over the feed value.
@@ -175,19 +175,39 @@ async function ingestProjections(a) {
     return;
   }
   // Targets drive the Targets volume metric plus every per-target receiving
-  // rate, so an empty column means the feed renamed the field (or dropped it)
-  // and a chunk of the dashboard goes quiet. Say so rather than silently
-  // shipping blanks.
-  const withTargets = rows.filter((r) => r.Targets !== "").length;
-  if (withTargets === 0) {
+  // rate, so a blank column means the feed renamed or dropped the field and a
+  // chunk of the dashboard goes quiet. Count PER SPLIT: Median comes from
+  // weekly-projections.php while Ceiling/Floor come from
+  // projections-ceil-floor-weekly.php, so one endpoint can carry targets while
+  // the other doesn't — and a cell needs all three splits to be graded at all,
+  // so a gap in C or F silently kills the metric even with a full Median.
+  const targetsBySplit = {};
+  for (const split of ["M", "C", "F"]) {
+    const of = rows.filter((r) => r.Split === split);
+    targetsBySplit[split] = { with: of.filter((r) => r.Targets !== "").length, of: of.length };
+  }
+  const empty = Object.entries(targetsBySplit).filter(([, v]) => v.with === 0 && v.of > 0);
+  const summary = Object.entries(targetsBySplit)
+    .map(([s, v]) => `${s} ${v.with}/${v.of}`)
+    .join(", ");
+  if (empty.length === 3) {
     console.warn(
-      `projections: no record carried a target projection — the feed field is ` +
-        `missing or renamed. Add its name to TARGET_FIELDS in ` +
+      `projections: NO split carried a target projection (${summary}) — the feed ` +
+        `field is missing or renamed. Update TARGET_FIELD in ` +
         `scripts/lib/rotowire.mjs (or supply targetsByPlayer); until then the ` +
         `Targets volume and per-target receiving rates are skipped.`
     );
+  } else if (empty.length > 0) {
+    console.warn(
+      `projections: targets present on some splits but NOT ${empty
+        .map(([s]) => s)
+        .join("/")} (${summary}). A metric needs all three splits, so the ` +
+        `target-denominated metrics stay skipped until every split has them. ` +
+        `The Ceiling/Floor endpoint differs from the Median one — check whether ` +
+        `it spells the field differently.`
+    );
   } else {
-    console.log(`  targets projected for ${withTargets}/${rows.length} rows.`);
+    console.log(`  targets projected per split: ${summary}.`);
   }
   // RotoWire returns a small (~top-10) preview to unauthenticated requests and
   // the full slate only to a logged-in session. A full week is hundreds of
@@ -294,7 +314,7 @@ async function backfillProjectionTargets(a) {
     if (r.filled === 0) {
       console.error(
         `  week ${week}: feed matched ${r.matched} rows but carried no targets on ` +
-          `any of them — the target field is missing or renamed (see TARGET_FIELDS).`
+          `any of them — the target field is missing or renamed (see TARGET_FIELD).`
       );
       failures++;
       continue;

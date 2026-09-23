@@ -336,13 +336,18 @@ projections and actuals join with no crosswalk):
 The three stat views are merged per player (a QB's passing + rushing, a back's
 rushing + receiving) into one actual row.
 
-The projection feed carries both receiving volumes: **receptions**
-(`offrecatt`) and **targets**, plus receiving yards and TDs. RotoWire has not
-been consistent about the target field's name across its tables, so it is read
-by probing the plausible spellings (`TARGET_FIELDS` in
-`scripts/lib/rotowire.mjs`) rather than one hard-coded key. If a week ingests
-with no targets at all, `scripts/ingest.mjs` warns loudly — add the feed's
-current spelling to that list.
+The projection feed carries both receiving volumes, and they are easy to
+conflate: **receptions** are `offrecatt`, **targets** are `offtargets`. Plus
+receiving yards and TDs. `TARGET_FIELD` in `scripts/lib/rotowire.mjs` names the
+one field read — deliberately a single confirmed key rather than a list of
+candidate spellings, since resolving guesses by order would silently read the
+wrong column if RotoWire ever adds a similarly-named field.
+
+`scripts/ingest.mjs` counts targets **per split** and warns if any split comes
+back empty. Median is served by `weekly-projections.php` while Ceiling and
+Floor come from `projections-ceil-floor-weekly.php`, so one endpoint can carry
+targets while the other doesn't — and a metric needs all three splits, so a gap
+in C or F disables the target metrics even with a complete Median.
 
 ### Snapshots & persistence
 

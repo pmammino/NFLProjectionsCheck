@@ -32,7 +32,7 @@ const MEDIAN_QB = {
   offrushyard: "59.63",
   offrushtd: "0.27",
   offrecatt: "0.00",
-  offrectarget: "0.00",
+  offtargets: "0.00",
   offrecyard: "0.00",
   offrectd: "0.00",
   fantasy: "22.17",
@@ -41,7 +41,8 @@ const CEIL_QB = { ...MEDIAN_QB, playerid: "14416", team: "PHI", offpassatt: "33.
 const FLOOR_QB = { ...MEDIAN_QB, offpassatt: "23.60", offpassyard: "173.01" };
 
 // A WR-style projection to exercise the receiving mapping: offrecatt ->
-// RecCompletions (receptions) and offrectarget -> Targets.
+// RecCompletions (receptions) and offtargets -> Targets. These are different
+// numbers on the same record and must not be conflated.
 const MEDIAN_WR = {
   playerid: "16919",
   player: "Zay Flowers",
@@ -52,20 +53,17 @@ const MEDIAN_WR = {
   offrushyard: "2.1",
   offrushtd: "0.00",
   offrecatt: "7.4",
-  offrectarget: "10.9",
+  offtargets: "10.9",
   offrecyard: "78.5",
   offrectd: "0.45",
 };
-// The same receiver from a feed that spells targets differently, and one from
-// a feed that carries no target projection at all.
-const MEDIAN_WR_ALT_TARGETS = (() => {
-  const { offrectarget, ...rest } = MEDIAN_WR;
-  return { ...rest, targets: "10.9" };
-})();
+// The same receiver from a feed carrying no target projection, and one whose
+// only target-ish field is a DIFFERENT name we must not guess at.
 const MEDIAN_WR_NO_TARGETS = (() => {
-  const { offrectarget, ...rest } = MEDIAN_WR;
+  const { offtargets, ...rest } = MEDIAN_WR;
   return rest;
 })();
+const MEDIAN_WR_WRONG_FIELD = { ...MEDIAN_WR_NO_TARGETS, offrectarget: "99.9", targets: "88.8" };
 
 const PASS_QB = {
   pid: "12483",
@@ -122,7 +120,7 @@ test("projection record maps every column with the right split", () => {
   assert.equal(row.RushAttempts, "9.38");
   assert.equal(row.RushYards, "59.63");
   assert.equal(row.RushTDs, "0.27");
-  // offrecatt -> RecCompletions (receptions), offrectarget -> Targets.
+  // offrecatt -> RecCompletions (receptions), offtargets -> Targets.
   assert.equal(row.RecCompletions, "0.00");
   assert.equal(row.RecYards, "0.00");
   assert.equal(row.RecTDs, "0.00");
@@ -132,19 +130,28 @@ test("projection record maps every column with the right split", () => {
 test("receiving volume splits into receptions and targets for a receiver", () => {
   const row = normalizeProjectionRecord(MEDIAN_WR, { season: 2025, week: 1, split: "M" });
   assert.equal(row.RecCompletions, "7.4"); // offrecatt == receptions
-  assert.equal(row.Targets, "10.9"); // offrectarget == targets
+  assert.equal(row.Targets, "10.9"); // offtargets == targets
   assert.equal(row.RecYards, "78.5");
   assert.equal(row.RecTDs, "0.45");
   assert.equal(row.Team, "BAL"); // lowercased source is upcased
 });
 
-test("Targets is read through the alternate feed spellings", () => {
-  const row = normalizeProjectionRecord(MEDIAN_WR_ALT_TARGETS, {
+test("Targets comes from offtargets only — no guessing at other field names", () => {
+  // Resolving a list of candidate spellings by order would happily read a
+  // similarly-named field that means something else. Only the confirmed one.
+  const row = normalizeProjectionRecord(MEDIAN_WR_WRONG_FIELD, {
     season: 2025,
     week: 1,
     split: "M",
   });
-  assert.equal(row.Targets, "10.9");
+  assert.equal(row.Targets, "");
+});
+
+test("offtargets (targets) is not confused with offrecatt (receptions)", () => {
+  const row = normalizeProjectionRecord(MEDIAN_WR, { season: 2025, week: 1, split: "M" });
+  assert.equal(row.Targets, "10.9"); // offtargets
+  assert.equal(row.RecCompletions, "7.4"); // offrecatt
+  assert.notEqual(row.Targets, row.RecCompletions);
 });
 
 test("Targets stays blank when the feed carries no target field", () => {

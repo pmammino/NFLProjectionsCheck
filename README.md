@@ -16,6 +16,18 @@ band ~50% of the time**.
 
 Per the project requirements, stats are split into:
 
+- **Yardage** (compared as raw totals): Pass Yards, Rush Yards, Rec Yards —
+  graded from **3 projected opportunities** (24 in season scope), below which
+  the bimodal point-mass-at-zero problem below applies. These are graded *as
+  well as* the per-attempt rates, not instead of them, because the two answer
+  different questions and the feed is far more confident about one than the
+  other. A rate's Floor-to-Ceiling span is 17–37% of its median; a total's is
+  roughly 100%. That makes the totals better calibrated (2026 within-band
+  61/41/45% for pass/rush/rec yards, against 27/33/32% for the matching rates)
+  and drawn from a larger sample, since a rate needs `MIN_EFF_VOLUME` on both
+  sides. **Don't read the rate rows against a 50% coverage target** — their
+  tightness is a design choice by the feed, not a miss. Use them to separate
+  efficiency from volume, and the totals to judge accuracy.
 - **Volume** (compared directly): Pass Attempts, Rush Attempts, Targets. Only
   graded when the **projected median is at least 1** (8 in season scope).
   Below about one expected event the band is degenerate — the floor sits above

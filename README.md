@@ -443,17 +443,30 @@ jittered backoff on 429s.
 > those metrics.
 >
 > **Repairing an older week —** `--only backfill-targets --week N`:
-> re-fetches that week and writes **only** its Targets column. Re-fetching a
-> past week is otherwise forbidden here (the endpoints are forward-looking, so
-> a late pull can replace a pre-game forecast with a post-game one and quietly
-> invalidate every calibration number built on it). This mode earns the
-> exception by proving the feed hasn't moved: every other column must still
-> match the frozen snapshot, and it refuses the write and prints the
-> disagreements if not. Rows the feed has dropped keep their blanks; rows the
-> feed has added are ignored, because a frozen snapshot must never grow after
-> the fact. Run it from the **Ingest weekly** workflow's *Run workflow* button
-> (choose `backfill-targets` and set the week), where the network and
-> `ROTOWIRE_COOKIE` are already in place — one week per run.
+> re-fetches that week and fills its Targets column. Where the feed has also
+> **revised** another column since the snapshot was frozen, the fetched value
+> wins and overwrites the frozen one.
+>
+> That overwrite is a deliberate trade. These endpoints are forward-looking, so
+> a value re-served for a past week may have been recomputed with information
+> that did not exist before kickoff, and those cells stop being strictly
+> pre-game. An earlier version refused the whole week on any such difference,
+> which in practice meant no targets at all: on 2026 week 1 the feed had moved
+> 50 values out of ~24,600 (0.2%), all small (`5.35 → 5.02`, `1.06 → 1.02`) and
+> none in the passing volume columns. Taking that drift to get the targets is
+> the better deal — and the pre-refresh snapshot stays recoverable from git
+> history.
+>
+> Every overwrite is reported: the run prints how many values moved, a
+> per-column tally and the first few examples. **Read that output** — it is the
+> only signal that a week's calibration baseline has shifted.
+>
+> Rows the feed has dropped keep their blanks; rows the feed has added are
+> ignored, because a snapshot of a finished week should not quietly gain or
+> lose players. A column the feed has stopped sending is left at its frozen
+> value rather than blanked. Run it from the **Ingest weekly** workflow's *Run
+> workflow* button (choose `backfill-targets` and set the week), where the
+> network and `ROTOWIRE_COOKIE` are already in place — one week per run.
 >
 > **Overriding the feed's targets:** `normalizeProjections(feeds, { season,
 > week, targetsByPlayer })` accepts an optional `Map` keyed by RotoWire

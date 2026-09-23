@@ -33,7 +33,7 @@ import {
   ROSTER_COLUMNS,
   normalizeProjections,
   buildRoster,
-  backfillTargets,
+  mergeFeedIntoSnapshot,
   mergeActuals,
   asRecords,
   toCsv,
@@ -255,9 +255,11 @@ function mergeRoster(path, roster) {
 }
 
 // Back-fill the Targets column on already-frozen snapshots for weeks captured
-// before the projection feeds carried a target count. Safe only because
-// backfillTargets refuses to touch a week whose other columns have moved — see
-// the note on that function. Never writes anything but the Targets column.
+// before the projection feeds carried a target count. Where the feed has also
+// revised another column, the fetched value is taken — see the note on
+// mergeFeedIntoSnapshot for why, and what that costs. Every overwrite is
+// reported here: rewriting a frozen forecast without saying so is how a
+// calibration baseline rots unnoticed.
 async function backfillProjectionTargets(a) {
   const startweek = a.startweek ?? a.week;
   const endweek = a.endweek ?? a.week;
@@ -287,25 +289,8 @@ async function backfillProjectionTargets(a) {
       fetchJson(urls.F),
     ]);
     const feedRows = normalizeProjections({ M, C, F }, { season: a.season, week });
-    const r = backfillTargets(existing, feedRows);
+    const r = mergeFeedIntoSnapshot(existing, feedRows);
 
-    // Any disagreement outside Targets means the endpoint is serving a revised
-    // (post-game) forecast, not the one frozen here. Writing it would silently
-    // corrupt the calibration baseline, so refuse and show what moved.
-    if (r.conflicts.length > 0) {
-      const cols = [...new Set(r.conflicts.map((c) => c.column))].join(", ");
-      console.error(
-        `  week ${week}: REFUSING to back-fill — the feed no longer matches the ` +
-          `frozen snapshot in ${r.conflicts.length} value(s) across [${cols}]. ` +
-          `The endpoint has revised this week, so its targets do not belong to ` +
-          `the pre-game forecast. Examples:`
-      );
-      for (const c of r.conflicts.slice(0, 5)) {
-        console.error(`    ${c.key} ${c.column}: frozen=${c.frozen} fetched=${c.fetched}`);
-      }
-      failures++;
-      continue;
-    }
     if (r.matched === 0) {
       console.error(`  week ${week}: feed matched none of the frozen rows — skipping.`);
       failures++;
@@ -320,10 +305,30 @@ async function backfillProjectionTargets(a) {
       continue;
     }
 
+    // Overwrites are the part worth seeing: these cells are no longer the
+    // strictly pre-game forecast, and they move this week's calibration.
+    if (r.revisions.length > 0) {
+      const byColumn = new Map();
+      for (const c of r.revisions) byColumn.set(c.column, (byColumn.get(c.column) || 0) + 1);
+      const cols = [...byColumn.entries()]
+        .sort((x, y) => y[1] - x[1])
+        .map(([col, n]) => `${col} x${n}`)
+        .join(", ");
+      console.warn(
+        `  week ${week}: the feed has REVISED ${r.revisions.length} value(s) in ` +
+          `${r.revised} of ${r.matched} rows — taking the fetched values, so those ` +
+          `cells are no longer strictly pre-game. By column: ${cols}. The ` +
+          `pre-refresh snapshot stays in git history. Examples:`
+      );
+      for (const c of r.revisions.slice(0, 5)) {
+        console.warn(`    ${c.key} ${c.column}: ${c.frozen} -> ${c.fetched}`);
+      }
+    }
+
     console.log(
-      `  week ${week}: verified ${r.matched} rows unchanged; filling ${r.filled} ` +
-        `targets (${r.missingFromFeed} rows absent from the feed keep blanks, ` +
-        `${r.newInFeed} new feed rows ignored).`
+      `  week ${week}: ${r.matched} rows matched, ${r.matched - r.revised} unchanged; ` +
+        `filling ${r.filled} targets (${r.missingFromFeed} rows absent from the feed ` +
+        `keep blanks, ${r.newInFeed} new feed rows ignored).`
     );
     writeCsvIfChanged(path, toCsv(PROJECTION_COLUMNS, r.rows), a);
   }
@@ -371,11 +376,12 @@ const HELP = `Ingest RotoWire projections + actuals into per-week snapshot CSVs.
                         upcoming/in-progress week, actuals the completed week.
   --only <mode>         projections | actuals | both | backfill-targets
                         (default: both). backfill-targets re-fetches an
-                        already-captured week and writes ONLY its Targets
-                        column, and only after verifying every other column
-                        still matches the frozen snapshot. For weeks captured
-                        before the feeds projected targets. Refuses the write
-                        if the endpoint has revised the week.
+                        already-captured week and fills its Targets column,
+                        for weeks captured before the feeds projected targets.
+                        Where the feed has since revised another column the
+                        fetched value overwrites the frozen one, so those
+                        cells are no longer strictly pre-game; every overwrite
+                        is printed. Pair with --dry-run to preview first.
   --startweek <n>       Actuals / back-fill range start (default: resolved week)
   --endweek <n>         Actuals / back-fill range end   (default: resolved week)
   --data-dir <path>     Output root (default: data)

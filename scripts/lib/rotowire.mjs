@@ -247,23 +247,32 @@ export function normalizeProjections(feeds, { season, week, targetsByPlayer }) {
   return rows;
 }
 
-// ---- Targets back-fill -------------------------------------------------------
-// Fill ONLY the Targets column on an already-frozen projection snapshot, from a
-// fresh fetch of that same week.
+// ---- Past-week refresh (targets back-fill) -----------------------------------
+// Merge a fresh fetch of an already-captured week into its frozen snapshot.
 //
-// Re-fetching a past week is normally forbidden. The projection endpoints are
-// forward-looking and serve only the current season, so a late pull can quietly
-// replace a pre-game forecast with a post-game one — and grading actuals
-// against that is not a calibration test, it is leakage. This is the one safe
-// exception, and it earns the exception by PROVING the feed has not moved:
-// every column except Targets must still match the frozen snapshot. If anything
-// else differs, the fetch is a different forecast and the caller must abort.
+// The point is filling the Targets column on weeks frozen before the feeds
+// projected targets. Where the feed has ALSO revised another column, the
+// fetched value wins and overwrites the frozen one.
 //
-// Returns { rows, matched, filled, missingFromFeed, newInFeed, conflicts }.
-// `rows` is the snapshot with Targets filled in, and is only safe to write when
-// `conflicts` is empty. Rows the feed no longer carries keep their blank
-// Targets; players the feed has added are ignored, since a frozen snapshot must
-// never grow new rows after the fact.
+// That overwrite is a deliberate trade. The projection endpoints are
+// forward-looking, so a value re-served for a past week may have been
+// recomputed with information that did not exist before kickoff, and those
+// cells stop being strictly pre-game. An earlier version of this refused the
+// whole week on any such difference, which in practice meant no targets at all:
+// on 2026 week 1 the feed had moved 50 values out of ~24,600 (0.2%), all small
+// (5.35 -> 5.02, 1.06 -> 1.02) and none in the passing volume columns. Taking
+// the drift to get the targets is the better deal, and the pre-refresh snapshot
+// stays recoverable from git history.
+//
+// Callers should still SHOW what was overwritten — silently rewriting a frozen
+// forecast is how a calibration baseline rots without anyone noticing.
+//
+// Rows the feed no longer carries are kept exactly as they are, and rows the
+// feed has added are ignored: a snapshot of a finished week should not quietly
+// gain or lose players afterwards. A column the feed has stopped sending is
+// left at its frozen value rather than blanked.
+//
+// Returns { rows, matched, filled, revised, revisions, missingFromFeed, newInFeed }.
 
 // Values are compared numerically when both sides parse, so a pure formatting
 // change ("3.0" vs "3.00") is not treated as a revised projection. Blank never
@@ -275,17 +284,18 @@ function sameProjectionValue(a, b) {
   return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
 }
 
-export function backfillTargets(existingRows, feedRows) {
+export function mergeFeedIntoSnapshot(existingRows, feedRows) {
   const rowKey = (r) => `${r.Split}|${r.PlayerID}`;
   const feedByKey = new Map();
   for (const r of feedRows) feedByKey.set(rowKey(r), r);
   const compared = PROJECTION_COLUMNS.filter((c) => c !== "Targets");
 
   const rows = [];
-  const conflicts = [];
+  const revisions = [];
   const seen = new Set();
   let matched = 0;
   let filled = 0;
+  let revised = 0;
   let missingFromFeed = 0;
 
   for (const row of existingRows) {
@@ -298,26 +308,34 @@ export function backfillTargets(existingRows, feedRows) {
     }
     seen.add(key);
     matched++;
+
+    const merged = { ...row };
+    let rowRevised = false;
     for (const col of compared) {
       const frozen = row[col] ?? "";
       const fetched = fresh[col] ?? "";
-      if (!sameProjectionValue(frozen, fetched)) {
-        conflicts.push({ key, column: col, frozen, fetched });
-      }
+      if (sameProjectionValue(frozen, fetched)) continue;
+      // A column the feed has stopped sending is not a revision — keep what we
+      // froze rather than trading a real number for a blank.
+      if (fetched === "") continue;
+      revisions.push({ key, column: col, frozen, fetched });
+      merged[col] = fetched;
+      rowRevised = true;
     }
+    if (rowRevised) revised++;
+
     const t = fresh.Targets;
     if (t !== undefined && t !== "") {
-      rows.push({ ...row, Targets: t });
+      merged.Targets = t;
       filled++;
-    } else {
-      rows.push(row);
     }
+    rows.push(merged);
   }
 
   let newInFeed = 0;
   for (const r of feedRows) if (!seen.has(rowKey(r))) newInFeed++;
 
-  return { rows, matched, filled, missingFromFeed, newInFeed, conflicts };
+  return { rows, matched, filled, revised, revisions, missingFromFeed, newInFeed };
 }
 
 // ---- Actuals -----------------------------------------------------------------

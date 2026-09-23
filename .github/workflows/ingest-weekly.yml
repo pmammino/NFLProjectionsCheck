@@ -16,11 +16,12 @@ name: Ingest weekly projections & actuals
 # button with an explicit week for backfills or anything that must be exact.
 #
 # The backfill-targets mode is a repair, not a capture: it re-fetches one past
-# week and writes ONLY that snapshot's Targets column, for weeks frozen before
-# the projection feeds carried targets. It verifies every other column still
-# matches the frozen snapshot first and refuses the write if the endpoint has
-# revised the week, so it cannot replace a pre-game forecast with a post-game
-# one. Requires an explicit week.
+# week and fills that snapshot's Targets column, for weeks frozen before the
+# projection feeds carried targets. Where the feed has also revised another
+# column since, the fetched value overwrites the frozen one — so those cells
+# stop being strictly pre-game. The run prints every overwrite (count, columns,
+# examples); read that output, and note the previous snapshot stays in git
+# history. Requires an explicit week.
 
 on:
   schedule:

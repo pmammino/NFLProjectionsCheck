@@ -8,7 +8,7 @@ import {
   normalizeProjectionRecord,
   normalizeProjections,
   buildRoster,
-  backfillTargets,
+  mergeFeedIntoSnapshot,
   ROSTER_COLUMNS,
   mergeActuals,
   asRecords,
@@ -404,63 +404,88 @@ const frozen = (over = {}) => ({
 });
 const refetched = (over = {}) => ({ ...frozen(), Targets: "10.9", ...over });
 
-test("backfillTargets fills Targets when every other column still matches", () => {
-  const r = backfillTargets([frozen()], [refetched()]);
-  assert.deepEqual(r.conflicts, []);
+test("mergeFeedIntoSnapshot fills Targets when every other column still matches", () => {
+  const r = mergeFeedIntoSnapshot([frozen()], [refetched()]);
+  assert.deepEqual(r.revisions, []);
   assert.equal(r.matched, 1);
   assert.equal(r.filled, 1);
+  assert.equal(r.revised, 0);
   assert.equal(r.rows[0].Targets, "10.9");
   // Nothing else moved.
   assert.equal(r.rows[0].RecYards, "78.50");
   assert.equal(r.rows[0].RushAttempts, "0.30");
 });
 
-test("backfillTargets refuses when the feed has revised another column", () => {
-  // RotoWire re-projected the week after the games — exactly what must not be
-  // written over a frozen pre-game forecast.
-  const r = backfillTargets([frozen()], [refetched({ RecYards: "91.20" })]);
-  assert.equal(r.conflicts.length, 1);
-  assert.equal(r.conflicts[0].column, "RecYards");
-  assert.equal(r.conflicts[0].frozen, "78.50");
-  assert.equal(r.conflicts[0].fetched, "91.20");
+test("mergeFeedIntoSnapshot takes the fetched value when the feed has revised a column", () => {
+  // RotoWire drifts a past week's numbers slightly. We accept the revision to
+  // get the targets, and report it — we do not refuse the whole week.
+  const r = mergeFeedIntoSnapshot([frozen()], [refetched({ RecYards: "91.20" })]);
+  assert.equal(r.revisions.length, 1);
+  assert.deepEqual(r.revisions[0], {
+    key: "M|16919", column: "RecYards", frozen: "78.50", fetched: "91.20",
+  });
+  assert.equal(r.revised, 1);
+  assert.equal(r.rows[0].RecYards, "91.20"); // overwritten
+  assert.equal(r.rows[0].Targets, "10.9"); // and still back-filled
 });
 
-test("backfillTargets treats pure reformatting as unchanged", () => {
-  const r = backfillTargets([frozen()], [refetched({ RecYards: "78.5", RushAttempts: "0.3" })]);
-  assert.deepEqual(r.conflicts, []);
+test("mergeFeedIntoSnapshot counts revised rows once however many columns moved", () => {
+  const r = mergeFeedIntoSnapshot(
+    [frozen()],
+    [refetched({ RecYards: "91.20", RushYards: "3.40", RushTDs: "0.11" })]
+  );
+  assert.equal(r.revisions.length, 3);
+  assert.equal(r.revised, 1);
+  assert.equal(r.matched, 1);
+});
+
+test("mergeFeedIntoSnapshot keeps a frozen value the feed has stopped sending", () => {
+  // A blank from the feed is a missing column, not a revision to nothing —
+  // never trade a real number for an empty one.
+  const r = mergeFeedIntoSnapshot([frozen()], [refetched({ RecYards: "" })]);
+  assert.deepEqual(r.revisions, []);
+  assert.equal(r.rows[0].RecYards, "78.50");
+  assert.equal(r.rows[0].Targets, "10.9");
+});
+
+test("mergeFeedIntoSnapshot treats pure reformatting as unchanged", () => {
+  const r = mergeFeedIntoSnapshot([frozen()], [refetched({ RecYards: "78.5", RushAttempts: "0.3" })]);
+  assert.deepEqual(r.revisions, []);
+  assert.equal(r.revised, 0);
   assert.equal(r.filled, 1);
 });
 
-test("backfillTargets never confuses a blank with a zero", () => {
-  const r = backfillTargets([frozen({ RecCompletions: "" })], [refetched()]);
-  assert.equal(r.conflicts.length, 1);
-  assert.equal(r.conflicts[0].column, "RecCompletions");
+test("mergeFeedIntoSnapshot never confuses a blank with a zero", () => {
+  // Frozen blank, feed says 0.00 — that is a real fill, not a no-op.
+  const r = mergeFeedIntoSnapshot([frozen({ RecCompletions: "" })], [refetched({ RecCompletions: "0.00" })]);
+  assert.equal(r.revisions.length, 1);
+  assert.equal(r.revisions[0].column, "RecCompletions");
+  assert.equal(r.rows[0].RecCompletions, "0.00");
 });
 
-test("backfillTargets keeps rows the feed no longer carries, and adds none", () => {
+test("mergeFeedIntoSnapshot keeps rows the feed no longer carries, and adds none", () => {
   const dropped = frozen({ PlayerID: "99999" });
   const added = refetched({ PlayerID: "55555" });
-  const r = backfillTargets([frozen(), dropped], [refetched(), added]);
-  assert.deepEqual(r.conflicts, []);
+  const r = mergeFeedIntoSnapshot([frozen(), dropped], [refetched(), added]);
+  assert.deepEqual(r.revisions, []);
   assert.equal(r.rows.length, 2); // never grows
   assert.equal(r.missingFromFeed, 1);
   assert.equal(r.newInFeed, 1);
   assert.equal(r.rows.find((x) => x.PlayerID === "99999").Targets, ""); // still blank
 });
 
-test("backfillTargets matches on split, not player alone", () => {
+test("mergeFeedIntoSnapshot matches on split, not player alone", () => {
   const m = frozen({ Split: "M" });
   const c = frozen({ Split: "C" });
-  const r = backfillTargets([m, c], [refetched({ Split: "M", Targets: "10.9" })]);
-  assert.deepEqual(r.conflicts, []);
+  const r = mergeFeedIntoSnapshot([m, c], [refetched({ Split: "M", Targets: "10.9" })]);
+  assert.deepEqual(r.revisions, []);
   assert.equal(r.filled, 1);
   assert.equal(r.rows.find((x) => x.Split === "M").Targets, "10.9");
   assert.equal(r.rows.find((x) => x.Split === "C").Targets, ""); // untouched
 });
 
-test("backfillTargets reports filled=0 when the feed carries no targets", () => {
-  const r = backfillTargets([frozen()], [refetched({ Targets: "" })]);
-  assert.deepEqual(r.conflicts, []);
+test("mergeFeedIntoSnapshot reports filled=0 when the feed carries no targets", () => {
+  const r = mergeFeedIntoSnapshot([frozen()], [refetched({ Targets: "" })]);
   assert.equal(r.matched, 1);
   assert.equal(r.filled, 0);
 });

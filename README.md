@@ -16,6 +16,18 @@ band ~50% of the time**.
 
 Per the project requirements, stats are split into:
 
+- **Yardage** (compared as raw totals): Pass Yards, Rush Yards, Rec Yards —
+  graded from **3 projected opportunities** (24 in season scope), below which
+  the bimodal point-mass-at-zero problem below applies. These are graded *as
+  well as* the per-attempt rates, not instead of them, because the two answer
+  different questions and the feed is far more confident about one than the
+  other. A rate's Floor-to-Ceiling span is 17–37% of its median; a total's is
+  roughly 100%. That makes the totals better calibrated (2026 within-band
+  61/41/45% for pass/rush/rec yards, against 27/33/32% for the matching rates)
+  and drawn from a larger sample, since a rate needs `MIN_EFF_VOLUME` on both
+  sides. **Don't read the rate rows against a 50% coverage target** — their
+  tightness is a design choice by the feed, not a miss. Use them to separate
+  efficiency from volume, and the totals to judge accuracy.
 - **Volume** (compared directly): Pass Attempts, Rush Attempts, Targets. Only
   graded when the **projected median is at least 1** (8 in season scope).
   Below about one expected event the band is degenerate — the floor sits above
@@ -116,6 +128,45 @@ and never produce a false comparison.
 Every tab carries a collapsible **plain-English explainer** describing what the
 view shows, how to read it, and what you can learn.
 
+## Calibration report (CLI)
+
+```bash
+npm run build:data && npm run calibration-report
+```
+
+The question the dashboard raises but doesn't answer: *the bands are off — by
+how much, and should I do anything about it?* The report answers it in three
+sections, and the third is the one that matters.
+
+1. **Where each line actually sits.** Share of actuals at or below
+   Floor/Median/Ceiling against the 25 / 50 / 75% they claim to be, with a
+   z-score and a `noise` / `suggestive` / `solid` verdict. Thresholds are
+   deliberately conservative — the report runs three thresholds across every
+   metric, so 2-sigma readings turn up by chance.
+2. **How far each line would have to move.** The multiplier putting a line
+   exactly on target, with a 95% bootstrap interval. An interval spanning 0% is
+   not an adjustment. It also counts **inversions** — rows where applying all
+   three multipliers would push a line past its neighbour, which any real
+   implementation has to clamp.
+3. **Whether that move survives data it wasn't fitted to.** Fit on the early
+   weeks, score on the later ones. This exists because section 2 is
+   self-fulfilling: a fitted multiplier hits 25/50/75 on its own data by
+   construction. Early in a season most corrections make held-out weeks
+   *worse*. Only ship the ones that improve here.
+
+Options: `--scope weekly|season`, `--metrics a,b`, `--split N` (weeks to fit
+on), `--boot N`, `--seed N`, `--fantasy`, `--json`. The bootstrap is seeded, so
+two runs on the same data give identical intervals and the output can be
+diffed.
+
+> **It never rewrites a projection**, by design. The dashboard reports the
+> upstream feed's calibration; a band corrected in the measurement layer would
+> report the correction instead. A multiplier that survives section 3 belongs
+> in the betting path — see the reasoning already written up in
+> `scripts/lib/calibration.mjs`, which found that for the low-volume case a
+> variance multiplier can't help at all, because the real distribution is
+> bimodal and widening a normal doesn't reconstruct a point mass.
+
 ## Weekly vs. Season-long scope
 
 A top-right **Weekly / Season-long** toggle switches the entire dashboard
@@ -144,7 +195,27 @@ All analysis tabs work in both scopes. Scope-specific differences:
   season (nearly every real player scores at least once).
 
 All views respond to filters: position, week range, team, minimum actual
-volume, and exclude-injury-suspect.
+volume, exclude-injury-suspect, and fantasy-relevant-only.
+
+### Fantasy-relevant only
+
+A checkbox restricting every view to players who were projected to matter:
+**all QB, top 50 RB / 60 WR / 40 TE**, ranked within each week (or within the
+season, in season scope). Thresholds live in `FANTASY_RANKS` in
+`scripts/build-data.mjs` and are published in the dataset, so the UI label and
+the CLI can't drift from the build.
+
+The rank is by **projected** PPR, never actual. Ranking on what a player
+actually scored would select the players who happened to have a good week —
+conditioning the sample on the very outcome being graded, which inflates every
+coverage number in the dashboard. Projected rank is information you had before
+kickoff, so filtering on it is legitimate. Standard PPR scoring, computed from
+the projected components rather than read from a feed column, so it works
+retroactively on every snapshot already committed.
+
+Players whose position wasn't known at build time are unranked and excluded;
+the filter is opt-in, so leaving out the unknown is the conservative side. The
+CLI report takes the same cut with `--fantasy`.
 
 ## Paper trading
 

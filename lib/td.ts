@@ -1,4 +1,5 @@
 import type { Position } from "./types";
+import { isFantasyRelevant, type FantasyRanks } from "./aggregate";
 import { wilson, type CI } from "./stats";
 
 export interface TDRow {
@@ -14,6 +15,7 @@ export interface TDRow {
   a: number; // actual TD count
   av: number; // actual opportunity volume (attempts / targets)
   pv: number; // projected median opportunity volume
+  pr: number | null; // positional rank by projected PPR
 }
 
 export interface TDFilters {
@@ -24,6 +26,8 @@ export interface TDFilters {
   minVolume: number;
   minProjVolume: number;
   excludeInjury: boolean;
+  fantasyOnly: boolean;
+  fantasyRanks: FantasyRanks;
 }
 
 export function filterTd(
@@ -40,6 +44,7 @@ export function filterTd(
     if (byWeek && f.excludeInjury && r.inj) return false;
     if (r.av < f.minVolume) return false;
     if (r.pv < f.minProjVolume) return false;
+    if (f.fantasyOnly && !isFantasyRelevant(r.pos, r.pr, f.fantasyRanks)) return false;
     return true;
   });
 }

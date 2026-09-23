@@ -346,6 +346,17 @@ export default function CoverageView({
         <span className="text-slate-400"> Slope</span> &lt;1 ⇒ projections too
         extreme; &gt;1 ⇒ too conservative.
       </p>
+      <p className="text-xs text-amber-300/80">
+        Note: the per-attempt rate rows (Pass Yards / Attempt, Rush Yards /
+        Attempt, Rec Yards / Target) have deliberately tight bands — their
+        Floor-to-Ceiling span is 17&ndash;37% of the median, against roughly
+        100% for the matching yardage totals. The feed is confident about
+        efficiency and uncertain about volume, so a rate covering well under
+        50% is mostly that design choice, not a failed projection. Read the{" "}
+        <b>Pass / Rush / Rec Yards</b> rows for the better-calibrated and
+        larger-sample view of the same thing, and use the rates to separate
+        efficiency from volume rather than to judge accuracy.
+      </p>
     </div>
   );
 }

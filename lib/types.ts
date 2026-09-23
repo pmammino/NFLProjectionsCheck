@@ -29,6 +29,10 @@ export interface Row {
   pos: Position;
   wk: number;
   inj: boolean; // in-game injury / low-usage suspect
+  // Positional rank by PROJECTED PPR within the week (season scope: within the
+  // season). 1 = the position's top projected scorer. Null when the player's
+  // position was unknown at build time and they could not be ranked.
+  pr: number | null;
   m: Record<string, MetricCell>;
 }
 
@@ -53,6 +57,7 @@ export interface TDRecord {
   a: number;
   av: number;
   pv: number;
+  pr: number | null; // positional rank by projected PPR — see Row.pr
 }
 
 export interface Dataset {
@@ -64,6 +69,9 @@ export interface Dataset {
     positions: Position[];
     minEffVolume: number;
     minVolRelevance: number;
+    // How deep each position counts as fantasy relevant, by projected-PPR
+    // rank. null = uncapped (QB: there are only ~32 starters).
+    fantasyRanks: Partial<Record<Position, number | null>>;
     metrics: MetricMeta[];
     tdTypes: TDTypeMeta[];
     counts: {
@@ -87,6 +95,7 @@ export interface SeasonData {
   tdTypes: TDTypeMeta[];
   minEffVolume: number;
   minVolRelevance: number;
+  fantasyRanks: Partial<Record<Position, number | null>>;
   teams: string[];
   counts: {
     actualPlayers: number;

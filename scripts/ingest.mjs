@@ -161,16 +161,32 @@ async function ingestProjections(a) {
     fetchJson(urls.F),
   ]);
 
-  // TARGETS_SOURCE: these feeds project receptions, not targets. When a targets
-  // source is located, fetch it here and build a Map keyed by RotoWire playerid
-  // (value: a number, or a per-split { M, C, F }); passing it below fills the
-  // Targets column and re-enables the target-denominated receiving metrics.
+  // TARGETS_SOURCE: the feeds now project targets, read straight off each
+  // record (see TARGET_FIELDS in lib/rotowire.mjs). This override stays for the
+  // case where a better targets source turns up or the feed drops the column:
+  // build a Map keyed by RotoWire playerid (value: a number, or a per-split
+  // { M, C, F }) and it wins over the feed value.
   const targetsByPlayer = undefined;
 
   const rows = normalizeProjections({ M, C, F }, { season: a.season, week, targetsByPlayer });
   if (rows.length === 0) {
     console.warn("projections: feeds returned 0 rows — skipping write.");
     return;
+  }
+  // Targets drive the Targets volume metric plus every per-target receiving
+  // rate, so an empty column means the feed renamed the field (or dropped it)
+  // and a chunk of the dashboard goes quiet. Say so rather than silently
+  // shipping blanks.
+  const withTargets = rows.filter((r) => r.Targets !== "").length;
+  if (withTargets === 0) {
+    console.warn(
+      `projections: no record carried a target projection — the feed field is ` +
+        `missing or renamed. Add its name to TARGET_FIELDS in ` +
+        `scripts/lib/rotowire.mjs (or supply targetsByPlayer); until then the ` +
+        `Targets volume and per-target receiving rates are skipped.`
+    );
+  } else {
+    console.log(`  targets projected for ${withTargets}/${rows.length} rows.`);
   }
   // RotoWire returns a small (~top-10) preview to unauthenticated requests and
   // the full slate only to a logged-in session. A full week is hundreds of

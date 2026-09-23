@@ -220,9 +220,13 @@ export default function CalibrationView({
         confidence interval half-width.
       </p>
       <p className="text-xs text-amber-300/80">
-        Note: the TD <i>rate</i> rows (Pass/Rush/Rec TD per attempt or target)
-        are unreliable here — touchdowns are essentially a 0/1 outcome per game,
-        so a continuous rate band is the wrong frame. See the{" "}
+        Note: touchdowns are deliberately absent from this table. A TD is a
+        near-binary event — most player-games are zero — and no
+        floor&ndash;ceiling band can contain that outcome, so any within-band
+        figure here would measure the frame rather than the projection. TDs are
+        graded as a <i>probability</i> forecast instead: each projected expected
+        TD count becomes a P(&ge;1 TD) and is scored against what happened. See
+        the{" "}
         <b>Touchdowns</b> tab for a proper rare-event treatment (expected-vs-actual
         calibration, scoring probability, Brier &amp; log loss).
       </p>

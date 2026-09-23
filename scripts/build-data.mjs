@@ -9,6 +9,16 @@
 //  - Volume stats (Pass Att, Rush Att, Targets) compared directly.
 //  - Efficiency stats compared as RATES (e.g. Yards/Target), never totals.
 //    Each split's rate = that split's total / that split's volume.
+//  - Touchdowns are NOT in the metric set at all — neither as per-attempt /
+//    per-target rates nor as raw counts. Both framings fail here: a TD is a
+//    near-binary event, and a floor–median–ceiling band cannot contain the
+//    modal outcome of zero (measured on 2025: the projected floor sits above
+//    zero in 92% of receiving rows while 85% of them score nothing, dragging
+//    the within-band rate to 9.6% against a 50% target — an artefact of the
+//    frame, not of the projection). TDs are emitted separately as TD_TYPES
+//    below and graded as a PROBABILITY forecast in the app: each projected
+//    expected-TD count becomes a Poisson P(>=1 TD), scored against the binary
+//    outcome with a reliability curve, Brier skill and log loss.
 //  - Stats are only emitted for a row when relevant to the player's position
 //    (QBs aren't graded on receiving; non-QBs aren't graded on passing).
 
@@ -117,18 +127,6 @@ const METRICS = [
     projVol: "PassAttempts",
     actualVol: "PassAtt",
   },
-  {
-    key: "passTdRate",
-    label: "Pass TD / Attempt",
-    group: "Passing",
-    kind: "efficiency",
-    unit: "rate",
-    positions: ["QB"],
-    proj: { numer: "PassTDs", denom: "PassAttempts" },
-    actual: { numer: "PassTD", denom: "PassAtt" },
-    projVol: "PassAttempts",
-    actualVol: "PassAtt",
-  },
   // ---- Rushing efficiency ----
   {
     key: "rushYpc",
@@ -139,18 +137,6 @@ const METRICS = [
     positions: ["QB", "RB", "WR", "TE"],
     proj: { numer: "RushYards", denom: "RushAttempts" },
     actual: { numer: "RushYards", denom: "Rushes" },
-    projVol: "RushAttempts",
-    actualVol: "Rushes",
-  },
-  {
-    key: "rushTdRate",
-    label: "Rush TD / Attempt",
-    group: "Rushing",
-    kind: "efficiency",
-    unit: "rate",
-    positions: ["QB", "RB", "WR", "TE"],
-    proj: { numer: "RushTDs", denom: "RushAttempts" },
-    actual: { numer: "RushTD", denom: "Rushes" },
     projVol: "RushAttempts",
     actualVol: "Rushes",
   },
@@ -176,18 +162,6 @@ const METRICS = [
     positions: ["RB", "WR", "TE"],
     proj: { numer: "RecCompletions", denom: "Targets" },
     actual: { numer: "Receptions", denom: "Targets" },
-    projVol: "Targets",
-    actualVol: "Targets",
-  },
-  {
-    key: "recTdRate",
-    label: "Rec TD / Target",
-    group: "Receiving",
-    kind: "efficiency",
-    unit: "rate",
-    positions: ["RB", "WR", "TE"],
-    proj: { numer: "RecTDs", denom: "Targets" },
-    actual: { numer: "RecptTD", denom: "Targets" },
     projVol: "Targets",
     actualVol: "Targets",
   },
@@ -246,9 +220,9 @@ const TD_TYPES = [
   },
 ];
 
-// A cell is "missing" when empty/undefined. Live-ingested projections leave
-// RecCompletions blank (the endpoints don't project receptions), so treat blank
-// as missing and let the caller skip that metric rather than reading it as 0.
+// A cell is "missing" when empty/undefined — e.g. Targets in snapshots taken
+// before the projection feeds carried a target count. Treat blank as missing
+// and let the caller skip that metric rather than reading it as a real 0.
 const isBlank = (v) => v === undefined || v === null || v === "";
 
 function readSplitValue(spec, row) {
@@ -446,7 +420,7 @@ const ACTUAL_NUM_COLS = [
 const SEASON_COMPLETE_WEEKS = 18;
 
 // Sum each column across rows; a column with no non-blank value stays blank so
-// unprojected fields (e.g. Targets) remain "missing" and skip, not read as 0.
+// unprojected fields remain "missing" and skip, rather than reading as 0.
 function aggregateSum(rows, columns) {
   const out = {};
   for (const col of columns) {

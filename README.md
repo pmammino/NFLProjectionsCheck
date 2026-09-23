@@ -19,9 +19,21 @@ Per the project requirements, stats are split into:
 - **Volume** (compared directly): Pass Attempts, Rush Attempts, Targets.
 - **Efficiency** (compared as *rates*, never totals): each split's rate =
   that split's total / that split's volume.
-  - Passing: Yards/Att, Completion %, Pass TD/Att
-  - Rushing: Yards/Att, Rush TD/Att
-  - Receiving: Yards/Target, Catch Rate, Rec TD/Target
+  - Passing: Yards/Att, Completion %
+  - Rushing: Yards/Att
+  - Receiving: Yards/Target, Catch Rate
+- **Touchdowns** (compared as a *probability*): **not** graded in the metric
+  table above — neither as per-attempt/per-target rates nor as raw counts.
+  Both framings fail. A TD is a near-binary event and a floor–median–ceiling
+  band cannot contain the modal outcome of zero, so a within-band number
+  measures the frame rather than the projection. Measured on 2025: the
+  projected floor sits above zero in 92% of receiving rows while 85% of them
+  score nothing, which drags receiving-TD band coverage to **9.6%** against a
+  50% target — an artefact, not a finding.
+
+  Instead, each projected expected-TD count becomes a Poisson
+  `P(≥1 TD) = 1 − e^−λ` and is scored against the binary outcome with a
+  reliability curve, Brier skill and log loss. See the **Touchdowns** tab.
 
 > Passing INT efficiency is **not** graded — the actuals file has no INT column.
 
@@ -74,8 +86,10 @@ and never produce a false comparison.
    (quartiles — are studs vs. low-projected players handled differently?), and
    **by position**. Magnitude bars and the position table carry 95% Wilson
    confidence intervals so apparent differences can be read as real or noise.
-4. **Touchdowns** — TDs are rare count events (0/1/2 per game), so a continuous
-   rate band is the wrong frame. This tab treats them as a rare-event forecast:
+4. **Touchdowns** — TDs are rare count events (0/1/2 per game), so the band /
+   error machinery the other tabs use is the wrong frame and they sit this one
+   out entirely. This is the **only** place TDs are judged, and it treats them
+   as a probability forecast:
    - **Expected vs. actual TDs** — player-weeks binned by projected TD count,
      comparing mean projected to mean observed (assumption-free; the binary
      noise averages out).
@@ -312,9 +326,13 @@ projections and actuals join with no crosswalk):
 The three stat views are merged per player (a QB's passing + rushing, a back's
 rushing + receiving) into one actual row.
 
-The projection feed's receiving volume is **receptions** (`offrecatt`), plus
-receiving yards and TDs. It does **not** project a target count, so the Targets
-column is left blank until a separate targets source is supplied (see below).
+The projection feed carries both receiving volumes: **receptions**
+(`offrecatt`) and **targets**, plus receiving yards and TDs. RotoWire has not
+been consistent about the target field's name across its tables, so it is read
+by probing the plausible spellings (`TARGET_FIELDS` in
+`scripts/lib/rotowire.mjs`) rather than one hard-coded key. If a week ingests
+with no targets at all, `scripts/ingest.mjs` warns loudly — add the feed's
+current spelling to that list.
 
 ### Snapshots & persistence
 
@@ -403,18 +421,20 @@ jittered backoff on 429s.
 > games and the change guard keeps rows stable; strict per-game freezing would
 > require a game-schedule source.
 
-> **Caveat — projected targets:** these endpoints project receptions, not
-> targets, so the **target-denominated** metrics (Targets volume, Rec
-> Yds/Target, Catch Rate, Rec TD/Target) are skipped for ingested weeks until a
-> separate targets source is wired in. Projected receptions/yards/TDs and all
-> passing & rushing metrics run normally.
+> **Note — projected targets:** the endpoints now project targets, so the
+> Targets column is filled from the feed and the target-denominated metrics
+> (Targets volume, Rec Yds/Target, Catch Rate) run for ingested weeks. Weeks
+> snapshotted *before* the feed carried targets keep a blank column, and those
+> metrics stay skipped for them — snapshots are the durable record and are
+> never back-filled, so the gap closes going forward, not retroactively.
 >
-> **Wiring a targets source:** `normalizeProjections(feeds, { season, week,
-> targetsByPlayer })` accepts an optional `Map` keyed by RotoWire `playerid`
-> whose value is either a single number (applied to every split) or a per-split
-> object `{ M, C, F }`. Supplying it fills the Targets column and re-enables all
-> four receiving metrics — no other changes needed. Fetch that source in
-> `scripts/ingest.mjs` and pass the map through (search for `TARGETS_SOURCE`).
+> **Overriding the feed's targets:** `normalizeProjections(feeds, { season,
+> week, targetsByPlayer })` accepts an optional `Map` keyed by RotoWire
+> `playerid` whose value is either a single number (applied to every split) or
+> a per-split object `{ M, C, F }`. It takes precedence over the feed value and
+> anything absent from it falls back to the feed, so it can patch a partial
+> feed or replace it wholesale. Fetch that source in `scripts/ingest.mjs` and
+> pass the map through (search for `TARGETS_SOURCE`).
 
 ## Data join
 

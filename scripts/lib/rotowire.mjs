@@ -18,13 +18,15 @@
 //     offpassyard, offpasscomp, offpassatt, offpasstd, offpassint, passpct,
 //     offrushatt, offrushyard, offrushtd,
 //     offrecatt, offrecyard, offrectd,      <- offrecatt == receptions
+//     offrectarget,                         <- projected TARGETS (see below)
 //     fantasy, ppr, custpts
-//   Note: the projection feed's receiving volume is RECEPTIONS (offrecatt) plus
-//   yards and TDs. It does NOT project a target count, so the target-denominated
-//   metrics (Targets volume, Rec Yds/Target, Catch Rate, Rec TD/Target) can't be
-//   derived from these endpoints alone. The Targets column is emitted blank and
-//   the dashboard skips those metrics until a separate targets source is merged
-//   into it (see TARGETS_SOURCE below). Projected receptions/yards/TDs ARE here.
+//   Receiving volume comes in two flavours: RECEPTIONS (offrecatt) and TARGETS.
+//   The feeds now carry a projected target count, so the target-denominated
+//   metrics (Targets volume, Rec Yds/Target, Catch Rate) are derived straight
+//   from these endpoints. RotoWire has not been consistent about the target
+//   field's name across its tables, so it is read through TARGET_FIELDS below
+//   rather than one hard-coded key; an out-of-band source can still override it
+//   via `targetsByPlayer` (see TARGETS_SOURCE).
 //
 // Player stats — player-stats.php?view=passing|rushing|receiving, keyed by
 //   `pid` (same RotoWire id space as `playerid`, so projections and actuals
@@ -122,12 +124,39 @@ const numOr0 = (row, key) => {
   return v === "" ? "0" : v;
 };
 
-// TARGETS_SOURCE: the projection endpoints don't project targets, so Targets is
-// blank by default. When a separate targets source is located, pass a lookup to
-// normalizeProjections via `targetsByPlayer` to fill the column and re-enable
-// the target-denominated metrics. The lookup is a Map keyed by playerid whose
-// value is either a single number (used for every split) or a per-split object
-// like { M, C, F }. Anything missing stays blank.
+// Candidate names for the projected target count on a projection record, tried
+// in order. The projection feeds now carry targets, but the column name differs
+// between RotoWire's tables (and has changed before), so probe the plausible
+// spellings instead of pinning one. The first field actually present on the
+// record wins; if none is, the column falls back to `targetsByPlayer` and then
+// to blank, which the dashboard reads as "not projected" and skips.
+export const TARGET_FIELDS = [
+  "offrectarget",
+  "offrectargets",
+  "offrectar",
+  "offrectgt",
+  "offtarget",
+  "offtargets",
+  "targets",
+  "target",
+];
+
+// Read the projected targets straight off a feed record. Returns "" when the
+// record carries none of the known target fields.
+export function readFeedTargets(rec) {
+  for (const field of TARGET_FIELDS) {
+    const v = pick(rec, field);
+    if (v !== "") return v;
+  }
+  return "";
+}
+
+// TARGETS_SOURCE: an optional out-of-band override for the Targets column,
+// used when the feed's own target projection is missing or needs replacing.
+// Pass a lookup to normalizeProjections via `targetsByPlayer`: a Map keyed by
+// playerid whose value is either a single number (used for every split) or a
+// per-split object like { M, C, F }. It takes precedence over the feed value;
+// anything missing from it falls back to the feed.
 function resolveTargets(lookup, playerId, code) {
   if (!lookup) return "";
   const v = lookup.get(playerId);
@@ -154,8 +183,10 @@ export function normalizeProjectionRecord(rec, { season, week, split, targetsByP
     PlayerID: playerId,
     PassAttempts: numOr0(rec, "offpassatt"),
     RushAttempts: numOr0(rec, "offrushatt"),
-    // Targets aren't in these feeds; filled only from an external source.
-    Targets: resolveTargets(targetsByPlayer, playerId, code),
+    // Projected targets: the feed's own value, unless an out-of-band source
+    // overrides it (see TARGETS_SOURCE).
+    Targets:
+      resolveTargets(targetsByPlayer, playerId, code) || readFeedTargets(rec),
     PassCompletions: numOr0(rec, "offpasscomp"),
     PassYards: numOr0(rec, "offpassyard"),
     PassTDs: numOr0(rec, "offpasstd"),
@@ -170,7 +201,7 @@ export function normalizeProjectionRecord(rec, { season, week, split, targetsByP
 
 // Combine the three split feeds for a single week into weekly_projections rows.
 // `feeds` = { M: [...], C: [...], F: [...] } (each an array of raw records).
-// `targetsByPlayer` (optional) fills the Targets column — see TARGETS_SOURCE.
+// `targetsByPlayer` (optional) overrides the Targets column — see TARGETS_SOURCE.
 // ---- data/players/{season}.csv ----------------------------------------------
 // The name -> RotoWire-id crosswalk that the OpticOdds join needs.
 //

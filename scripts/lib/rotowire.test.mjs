@@ -31,6 +31,7 @@ const MEDIAN_QB = {
   offrushyard: "59.63",
   offrushtd: "0.27",
   offrecatt: "0.00",
+  offrectarget: "0.00",
   offrecyard: "0.00",
   offrectd: "0.00",
   fantasy: "22.17",
@@ -38,7 +39,8 @@ const MEDIAN_QB = {
 const CEIL_QB = { ...MEDIAN_QB, playerid: "14416", team: "PHI", offpassatt: "33.07" };
 const FLOOR_QB = { ...MEDIAN_QB, offpassatt: "23.60", offpassyard: "173.01" };
 
-// A WR-style projection to exercise the receiving mapping (offrecatt -> Targets).
+// A WR-style projection to exercise the receiving mapping: offrecatt ->
+// RecCompletions (receptions) and offrectarget -> Targets.
 const MEDIAN_WR = {
   playerid: "16919",
   player: "Zay Flowers",
@@ -49,9 +51,20 @@ const MEDIAN_WR = {
   offrushyard: "2.1",
   offrushtd: "0.00",
   offrecatt: "7.4",
+  offrectarget: "10.9",
   offrecyard: "78.5",
   offrectd: "0.45",
 };
+// The same receiver from a feed that spells targets differently, and one from
+// a feed that carries no target projection at all.
+const MEDIAN_WR_ALT_TARGETS = (() => {
+  const { offrectarget, ...rest } = MEDIAN_WR;
+  return { ...rest, targets: "10.9" };
+})();
+const MEDIAN_WR_NO_TARGETS = (() => {
+  const { offrectarget, ...rest } = MEDIAN_WR;
+  return rest;
+})();
 
 const PASS_QB = {
   pid: "12483",
@@ -108,23 +121,41 @@ test("projection record maps every column with the right split", () => {
   assert.equal(row.RushAttempts, "9.38");
   assert.equal(row.RushYards, "59.63");
   assert.equal(row.RushTDs, "0.27");
-  // offrecatt -> RecCompletions (receptions); targets aren't in these feeds.
+  // offrecatt -> RecCompletions (receptions), offrectarget -> Targets.
   assert.equal(row.RecCompletions, "0.00");
   assert.equal(row.RecYards, "0.00");
   assert.equal(row.RecTDs, "0.00");
-  assert.equal(row.Targets, "");
+  assert.equal(row.Targets, "0.00");
 });
 
-test("offrecatt maps to RecCompletions (receptions) for a receiver", () => {
+test("receiving volume splits into receptions and targets for a receiver", () => {
   const row = normalizeProjectionRecord(MEDIAN_WR, { season: 2025, week: 1, split: "M" });
-  assert.equal(row.RecCompletions, "7.4");
+  assert.equal(row.RecCompletions, "7.4"); // offrecatt == receptions
+  assert.equal(row.Targets, "10.9"); // offrectarget == targets
   assert.equal(row.RecYards, "78.5");
   assert.equal(row.RecTDs, "0.45");
-  assert.equal(row.Targets, ""); // pending a separate targets source
   assert.equal(row.Team, "BAL"); // lowercased source is upcased
 });
 
-test("targetsByPlayer fills Targets (number = all splits, object = per-split)", () => {
+test("Targets is read through the alternate feed spellings", () => {
+  const row = normalizeProjectionRecord(MEDIAN_WR_ALT_TARGETS, {
+    season: 2025,
+    week: 1,
+    split: "M",
+  });
+  assert.equal(row.Targets, "10.9");
+});
+
+test("Targets stays blank when the feed carries no target field", () => {
+  const row = normalizeProjectionRecord(MEDIAN_WR_NO_TARGETS, {
+    season: 2025,
+    week: 1,
+    split: "M",
+  });
+  assert.equal(row.Targets, "");
+});
+
+test("targetsByPlayer overrides Targets (number = all splits, object = per-split)", () => {
   const flat = new Map([["16919", 8.2]]);
   assert.equal(
     normalizeProjectionRecord(MEDIAN_WR, { season: 2025, week: 1, split: "M", targetsByPlayer: flat }).Targets,
@@ -135,9 +166,19 @@ test("targetsByPlayer fills Targets (number = all splits, object = per-split)", 
     normalizeProjectionRecord(MEDIAN_WR, { season: 2025, week: 1, split: "C", targetsByPlayer: perSplit }).Targets,
     "11"
   );
-  // Player absent from the lookup stays blank.
+  // Player absent from the lookup falls back to the feed's own projection.
   assert.equal(
     normalizeProjectionRecord(MEDIAN_QB, { season: 2025, week: 1, split: "M", targetsByPlayer: flat }).Targets,
+    "0.00"
+  );
+  // …and to blank when the feed has none either.
+  assert.equal(
+    normalizeProjectionRecord(MEDIAN_WR_NO_TARGETS, {
+      season: 2025,
+      week: 1,
+      split: "M",
+      targetsByPlayer: new Map(),
+    }).Targets,
     ""
   );
 });
@@ -225,17 +266,26 @@ test("mergeActuals merges a pass-catching RB across rushing+receiving", () => {
 });
 
 // ---- CSV ---------------------------------------------------------------------
-test("toCsv emits the exact legacy header order with a blank Targets column", () => {
-  const rows = normalizeProjections({ M: [MEDIAN_QB], C: [CEIL_QB], F: [FLOOR_QB] }, {
+test("toCsv emits the exact legacy header order, Targets included", () => {
+  const rows = normalizeProjections({ M: [MEDIAN_WR], C: [MEDIAN_WR], F: [MEDIAN_WR] }, {
     season: 2025,
     week: 1,
   });
   const csv = toCsv(PROJECTION_COLUMNS, rows);
   const lines = csv.trim().split("\n");
   assert.equal(lines[0], PROJECTION_COLUMNS.join(","));
-  // Full 17-column width preserved even though Targets is blank.
   assert.equal(lines[1].split(",").length, PROJECTION_COLUMNS.length);
-  // Targets is column 8 (index 7) and is blank.
+  // Targets is column 8 (index 7) and carries the feed's projection.
+  assert.equal(lines[1].split(",")[7], "10.9");
+});
+
+test("toCsv keeps the full column width when a feed omits targets", () => {
+  const rows = normalizeProjections(
+    { M: [MEDIAN_WR_NO_TARGETS], C: [MEDIAN_WR_NO_TARGETS], F: [MEDIAN_WR_NO_TARGETS] },
+    { season: 2025, week: 1 }
+  );
+  const lines = toCsv(PROJECTION_COLUMNS, rows).trim().split("\n");
+  assert.equal(lines[1].split(",").length, PROJECTION_COLUMNS.length);
   assert.equal(lines[1].split(",")[7], "");
 });
 

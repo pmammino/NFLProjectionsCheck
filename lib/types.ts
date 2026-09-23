@@ -63,6 +63,7 @@ export interface Dataset {
     teams: string[];
     positions: Position[];
     minEffVolume: number;
+    minVolRelevance: number;
     metrics: MetricMeta[];
     tdTypes: TDTypeMeta[];
     counts: {
@@ -85,6 +86,7 @@ export interface SeasonData {
   metrics: MetricMeta[];
   tdTypes: TDTypeMeta[];
   minEffVolume: number;
+  minVolRelevance: number;
   teams: string[];
   counts: {
     actualPlayers: number;

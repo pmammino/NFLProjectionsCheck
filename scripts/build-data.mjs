@@ -171,6 +171,23 @@ const METRICS = [
 // 1-carry-for-20-yards style noise). Applied to BOTH projected & actual volume.
 const MIN_EFF_VOLUME = 3;
 
+// Minimum PROJECTED volume for a COUNT metric to be gradeable at all.
+//
+// Below roughly one expected event the floor-median-ceiling band is degenerate:
+// the floor sits above zero while zero is the modal outcome, so no integer can
+// land inside it and the row scores as a miss whichever way it falls. Measured
+// on 2025, rows with a projected median under 1 are 0.0% within-band when the
+// actual is zero and 1.5% when it isn't — the band is reporting its own shape,
+// not the projection. Grading wide receivers on a median of 0.12 carries this
+// way dragged Rush Attempts to 15.2% overall (WR 1.0% over 1,351 rows, TE 0.5%
+// over 209); gating them out puts it at 32.0%, with QB and RB barely moving.
+//
+// The gate looks ONLY at the projected volume, never the actual. The previous
+// rule ("projected nothing AND recorded nothing") conditioned the sample on the
+// outcome, keeping a player's breakout week while dropping his quiet one, which
+// biases every coverage number built on top of it.
+const MIN_VOL_RELEVANCE = 1;
+
 // Primary volume field per position, used for the in-game injury proxy.
 const PRIMARY_VOL = {
   QB: { proj: "PassAttempts", actual: "PassAtt", expect: 15 },
@@ -297,6 +314,9 @@ const SEASON_TD_TYPES = TD_TYPES.map((t) => ({
 
 // Season volumes are full-year totals, so the efficiency noise floor is higher.
 const SEASON_MIN_EFF_VOLUME = 25;
+// The count-metric floor scales the same way (3 -> 25 is ~8.3x, so 1 -> 8).
+// The season Rush Attempts curve has flattened by there (~60% within band).
+const SEASON_MIN_VOL_RELEVANCE = 8;
 
 // Legacy season dataset: full-season projection + actual CSVs (2025). Used only
 // on the legacy fallback path (no live snapshots), where it's a complete season.
@@ -336,7 +356,7 @@ function buildSeasonFromLegacyCsv(teamByPid) {
         if (actualVol < SEASON_MIN_EFF_VOLUME || projMedVol < SEASON_MIN_EFF_VOLUME)
           continue;
       } else {
-        if (projMedVol <= 0 && actualVol <= 0) continue;
+        if (projMedVol < SEASON_MIN_VOL_RELEVANCE) continue;
       }
 
       const f = readSplitValue(m.proj, p.F);
@@ -490,7 +510,7 @@ function buildSeasonFromWeekly(projRows, actualRows) {
       if (m.kind === "efficiency") {
         if (actualVol < SEASON_MIN_EFF_VOLUME || projMedVol < SEASON_MIN_EFF_VOLUME) continue;
       } else {
-        if (projMedVol <= 0 && actualVol <= 0) continue;
+        if (projMedVol < SEASON_MIN_VOL_RELEVANCE) continue;
       }
       const f = readSplitValue(m.proj, projS.F);
       const med = readSplitValue(m.proj, projS.M);
@@ -652,8 +672,9 @@ function main() {
         // Need meaningful volume on both sides for a fair rate comparison.
         if (actualVol < MIN_EFF_VOLUME || projMedVol < MIN_EFF_VOLUME) continue;
       } else {
-        // Volume: relevant if there was expected usage OR actual usage.
-        if (projMedVol <= 0 && actualVol <= 0) continue;
+        // Count: gradeable only when a real forecast was made. See
+        // MIN_VOL_RELEVANCE — never gate on the actual, that biases coverage.
+        if (projMedVol < MIN_VOL_RELEVANCE) continue;
       }
 
       const f = readSplitValue(m.proj, p.F);
@@ -774,6 +795,7 @@ function main() {
       teams,
       positions: ["QB", "RB", "WR", "TE"],
       minEffVolume: MIN_EFF_VOLUME,
+      minVolRelevance: MIN_VOL_RELEVANCE,
       metrics: metricMeta,
       tdTypes: tdTypeMeta,
       counts: {
@@ -795,6 +817,7 @@ function main() {
         minOpp: SEASON_TD_MIN_OPP[t.key],
       })),
       minEffVolume: SEASON_MIN_EFF_VOLUME,
+      minVolRelevance: SEASON_MIN_VOL_RELEVANCE,
       teams: [...new Set(season.rows.map((r) => r.team))].filter(Boolean).sort(),
       counts: season.counts,
       rows: season.rows,

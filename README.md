@@ -16,7 +16,17 @@ band ~50% of the time**.
 
 Per the project requirements, stats are split into:
 
-- **Volume** (compared directly): Pass Attempts, Rush Attempts, Targets.
+- **Volume** (compared directly): Pass Attempts, Rush Attempts, Targets. Only
+  graded when the **projected median is at least 1** (8 in season scope).
+  Below about one expected event the band is degenerate — the floor sits above
+  zero while zero is the modal outcome, so no integer can land inside it and
+  the row is a miss whichever way it falls. On 2025, rows under that line were
+  0.0% within-band when the actual was zero and 1.5% when it wasn't. Grading
+  wide receivers on a median of 0.12 carries held Rush Attempts at 15.2%
+  (WR 1.0% over 1,351 rows); with the floor it reads 32.1%, and Targets moves
+  from 38.9% to 48.6% — a CI of [46.8, 50.4] that contains the 50% target.
+  The floor looks only at the *projected* volume, never the actual: gating on
+  the outcome would condition the sample on the thing being measured.
 - **Efficiency** (compared as *rates*, never totals): each split's rate =
   that split's total / that split's volume.
   - Passing: Yards/Att, Completion %
@@ -326,13 +336,18 @@ projections and actuals join with no crosswalk):
 The three stat views are merged per player (a QB's passing + rushing, a back's
 rushing + receiving) into one actual row.
 
-The projection feed carries both receiving volumes: **receptions**
-(`offrecatt`) and **targets**, plus receiving yards and TDs. RotoWire has not
-been consistent about the target field's name across its tables, so it is read
-by probing the plausible spellings (`TARGET_FIELDS` in
-`scripts/lib/rotowire.mjs`) rather than one hard-coded key. If a week ingests
-with no targets at all, `scripts/ingest.mjs` warns loudly — add the feed's
-current spelling to that list.
+The projection feed carries both receiving volumes, and they are easy to
+conflate: **receptions** are `offrecatt`, **targets** are `offtargets`. Plus
+receiving yards and TDs. `TARGET_FIELD` in `scripts/lib/rotowire.mjs` names the
+one field read — deliberately a single confirmed key rather than a list of
+candidate spellings, since resolving guesses by order would silently read the
+wrong column if RotoWire ever adds a similarly-named field.
+
+`scripts/ingest.mjs` counts targets **per split** and warns if any split comes
+back empty. Median is served by `weekly-projections.php` while Ceiling and
+Floor come from `projections-ceil-floor-weekly.php`, so one endpoint can carry
+targets while the other doesn't — and a metric needs all three splits, so a gap
+in C or F disables the target metrics even with a complete Median.
 
 ### Snapshots & persistence
 
@@ -424,9 +439,21 @@ jittered backoff on 429s.
 > **Note — projected targets:** the endpoints now project targets, so the
 > Targets column is filled from the feed and the target-denominated metrics
 > (Targets volume, Rec Yds/Target, Catch Rate) run for ingested weeks. Weeks
-> snapshotted *before* the feed carried targets keep a blank column, and those
-> metrics stay skipped for them — snapshots are the durable record and are
-> never back-filled, so the gap closes going forward, not retroactively.
+> snapshotted *before* the feed carried targets keep a blank column and skip
+> those metrics.
+>
+> **Repairing an older week —** `--only backfill-targets --week N`:
+> re-fetches that week and writes **only** its Targets column. Re-fetching a
+> past week is otherwise forbidden here (the endpoints are forward-looking, so
+> a late pull can replace a pre-game forecast with a post-game one and quietly
+> invalidate every calibration number built on it). This mode earns the
+> exception by proving the feed hasn't moved: every other column must still
+> match the frozen snapshot, and it refuses the write and prints the
+> disagreements if not. Rows the feed has dropped keep their blanks; rows the
+> feed has added are ignored, because a frozen snapshot must never grow after
+> the fact. Run it from the **Ingest weekly** workflow's *Run workflow* button
+> (choose `backfill-targets` and set the week), where the network and
+> `ROTOWIRE_COOKIE` are already in place — one week per run.
 >
 > **Overriding the feed's targets:** `normalizeProjections(feeds, { season,
 > week, targetsByPlayer })` accepts an optional `Map` keyed by RotoWire

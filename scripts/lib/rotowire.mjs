@@ -18,15 +18,13 @@
 //     offpassyard, offpasscomp, offpassatt, offpasstd, offpassint, passpct,
 //     offrushatt, offrushyard, offrushtd,
 //     offrecatt, offrecyard, offrectd,      <- offrecatt == receptions
-//     offrectarget,                         <- projected TARGETS (see below)
+//     offtargets,                           <- projected TARGETS
 //     fantasy, ppr, custpts
-//   Receiving volume comes in two flavours: RECEPTIONS (offrecatt) and TARGETS.
-//   The feeds now carry a projected target count, so the target-denominated
-//   metrics (Targets volume, Rec Yds/Target, Catch Rate) are derived straight
-//   from these endpoints. RotoWire has not been consistent about the target
-//   field's name across its tables, so it is read through TARGET_FIELDS below
-//   rather than one hard-coded key; an out-of-band source can still override it
-//   via `targetsByPlayer` (see TARGETS_SOURCE).
+//   Receiving volume comes in two flavours: RECEPTIONS (offrecatt) and TARGETS
+//   (offtargets) — easy to conflate, and they are different numbers. The feeds
+//   now carry both, so the target-denominated metrics (Targets volume, Rec
+//   Yds/Target, Catch Rate) come straight from these endpoints. An out-of-band
+//   source can still override targets via `targetsByPlayer` (TARGETS_SOURCE).
 //
 // Player stats — player-stats.php?view=passing|rushing|receiving, keyed by
 //   `pid` (same RotoWire id space as `playerid`, so projections and actuals
@@ -124,31 +122,22 @@ const numOr0 = (row, key) => {
   return v === "" ? "0" : v;
 };
 
-// Candidate names for the projected target count on a projection record, tried
-// in order. The projection feeds now carry targets, but the column name differs
-// between RotoWire's tables (and has changed before), so probe the plausible
-// spellings instead of pinning one. The first field actually present on the
-// record wins; if none is, the column falls back to `targetsByPlayer` and then
-// to blank, which the dashboard reads as "not projected" and skips.
-export const TARGET_FIELDS = [
-  "offrectarget",
-  "offrectargets",
-  "offrectar",
-  "offrectgt",
-  "offtarget",
-  "offtargets",
-  "targets",
-  "target",
-];
+// The projected target count on a projection record. Confirmed against the
+// live feeds — this is the one field read, deliberately not a list of guesses:
+// resolving a set of candidate spellings by order silently reads the wrong
+// column the day RotoWire adds a different field that happens to match an
+// earlier guess. If the feed renames this, ingest says so loudly (it counts
+// targets per split and warns when a split comes back empty) and the fix is to
+// change this one string.
+//
+// Note it is `offtargets`, NOT `offrecatt` — that one is projected receptions.
+export const TARGET_FIELD = "offtargets";
 
 // Read the projected targets straight off a feed record. Returns "" when the
-// record carries none of the known target fields.
+// record does not carry the field, which the dashboard reads as "not
+// projected" and skips (rather than treating it as a real zero).
 export function readFeedTargets(rec) {
-  for (const field of TARGET_FIELDS) {
-    const v = pick(rec, field);
-    if (v !== "") return v;
-  }
-  return "";
+  return pick(rec, TARGET_FIELD);
 }
 
 // TARGETS_SOURCE: an optional out-of-band override for the Targets column,
@@ -256,6 +245,79 @@ export function normalizeProjections(feeds, { season, week, targetsByPlayer }) {
     }
   }
   return rows;
+}
+
+// ---- Targets back-fill -------------------------------------------------------
+// Fill ONLY the Targets column on an already-frozen projection snapshot, from a
+// fresh fetch of that same week.
+//
+// Re-fetching a past week is normally forbidden. The projection endpoints are
+// forward-looking and serve only the current season, so a late pull can quietly
+// replace a pre-game forecast with a post-game one — and grading actuals
+// against that is not a calibration test, it is leakage. This is the one safe
+// exception, and it earns the exception by PROVING the feed has not moved:
+// every column except Targets must still match the frozen snapshot. If anything
+// else differs, the fetch is a different forecast and the caller must abort.
+//
+// Returns { rows, matched, filled, missingFromFeed, newInFeed, conflicts }.
+// `rows` is the snapshot with Targets filled in, and is only safe to write when
+// `conflicts` is empty. Rows the feed no longer carries keep their blank
+// Targets; players the feed has added are ignored, since a frozen snapshot must
+// never grow new rows after the fact.
+
+// Values are compared numerically when both sides parse, so a pure formatting
+// change ("3.0" vs "3.00") is not treated as a revised projection. Blank never
+// equals a number: "" parses to NaN and falls through to the string compare.
+function sameProjectionValue(a, b) {
+  if (a === b) return true;
+  const na = parseFloat(a);
+  const nb = parseFloat(b);
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+}
+
+export function backfillTargets(existingRows, feedRows) {
+  const rowKey = (r) => `${r.Split}|${r.PlayerID}`;
+  const feedByKey = new Map();
+  for (const r of feedRows) feedByKey.set(rowKey(r), r);
+  const compared = PROJECTION_COLUMNS.filter((c) => c !== "Targets");
+
+  const rows = [];
+  const conflicts = [];
+  const seen = new Set();
+  let matched = 0;
+  let filled = 0;
+  let missingFromFeed = 0;
+
+  for (const row of existingRows) {
+    const key = rowKey(row);
+    const fresh = feedByKey.get(key);
+    if (!fresh) {
+      missingFromFeed++;
+      rows.push(row);
+      continue;
+    }
+    seen.add(key);
+    matched++;
+    for (const col of compared) {
+      const frozen = row[col] ?? "";
+      const fetched = fresh[col] ?? "";
+      if (!sameProjectionValue(frozen, fetched)) {
+        conflicts.push({ key, column: col, frozen, fetched });
+      }
+    }
+    const t = fresh.Targets;
+    if (t !== undefined && t !== "") {
+      rows.push({ ...row, Targets: t });
+      filled++;
+    } else {
+      rows.push(row);
+    }
+  }
+
+  let newInFeed = 0;
+  for (const r of feedRows) if (!seen.has(rowKey(r))) newInFeed++;
+
+  return { rows, matched, filled, missingFromFeed, newInFeed, conflicts };
 }
 
 // ---- Actuals -----------------------------------------------------------------

@@ -258,6 +258,79 @@ export function normalizeProjections(feeds, { season, week, targetsByPlayer }) {
   return rows;
 }
 
+// ---- Targets back-fill -------------------------------------------------------
+// Fill ONLY the Targets column on an already-frozen projection snapshot, from a
+// fresh fetch of that same week.
+//
+// Re-fetching a past week is normally forbidden. The projection endpoints are
+// forward-looking and serve only the current season, so a late pull can quietly
+// replace a pre-game forecast with a post-game one — and grading actuals
+// against that is not a calibration test, it is leakage. This is the one safe
+// exception, and it earns the exception by PROVING the feed has not moved:
+// every column except Targets must still match the frozen snapshot. If anything
+// else differs, the fetch is a different forecast and the caller must abort.
+//
+// Returns { rows, matched, filled, missingFromFeed, newInFeed, conflicts }.
+// `rows` is the snapshot with Targets filled in, and is only safe to write when
+// `conflicts` is empty. Rows the feed no longer carries keep their blank
+// Targets; players the feed has added are ignored, since a frozen snapshot must
+// never grow new rows after the fact.
+
+// Values are compared numerically when both sides parse, so a pure formatting
+// change ("3.0" vs "3.00") is not treated as a revised projection. Blank never
+// equals a number: "" parses to NaN and falls through to the string compare.
+function sameProjectionValue(a, b) {
+  if (a === b) return true;
+  const na = parseFloat(a);
+  const nb = parseFloat(b);
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+}
+
+export function backfillTargets(existingRows, feedRows) {
+  const rowKey = (r) => `${r.Split}|${r.PlayerID}`;
+  const feedByKey = new Map();
+  for (const r of feedRows) feedByKey.set(rowKey(r), r);
+  const compared = PROJECTION_COLUMNS.filter((c) => c !== "Targets");
+
+  const rows = [];
+  const conflicts = [];
+  const seen = new Set();
+  let matched = 0;
+  let filled = 0;
+  let missingFromFeed = 0;
+
+  for (const row of existingRows) {
+    const key = rowKey(row);
+    const fresh = feedByKey.get(key);
+    if (!fresh) {
+      missingFromFeed++;
+      rows.push(row);
+      continue;
+    }
+    seen.add(key);
+    matched++;
+    for (const col of compared) {
+      const frozen = row[col] ?? "";
+      const fetched = fresh[col] ?? "";
+      if (!sameProjectionValue(frozen, fetched)) {
+        conflicts.push({ key, column: col, frozen, fetched });
+      }
+    }
+    const t = fresh.Targets;
+    if (t !== undefined && t !== "") {
+      rows.push({ ...row, Targets: t });
+      filled++;
+    } else {
+      rows.push(row);
+    }
+  }
+
+  let newInFeed = 0;
+  for (const r of feedRows) if (!seen.has(rowKey(r))) newInFeed++;
+
+  return { rows, matched, filled, missingFromFeed, newInFeed, conflicts };
+}
+
 // ---- Actuals -----------------------------------------------------------------
 // Merge the passing / rushing / receiving stat feeds into one actual_games row
 // per player. A player can appear in several feeds (a QB in passing + rushing,

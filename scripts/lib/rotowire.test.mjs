@@ -8,6 +8,7 @@ import {
   normalizeProjectionRecord,
   normalizeProjections,
   buildRoster,
+  backfillTargets,
   ROSTER_COLUMNS,
   mergeActuals,
   asRecords,
@@ -382,4 +383,77 @@ test("buildRoster accepts an array of feeds as well as a split map", () => {
   assert.equal(buildRoster([ROSTER_FEED]).length, 2);
   assert.equal(buildRoster([]).length, 0);
   assert.equal(buildRoster({}).length, 0);
+});
+
+// ---- Targets back-fill -------------------------------------------------------
+// A frozen snapshot row (blank Targets) and the same row as the feed now
+// serves it, with a target count added.
+const frozen = (over = {}) => ({
+  Season: "2026", GameWeek: "1", Split: "M", Team: "BAL", PlayerID: "16919",
+  PassAttempts: "0.00", RushAttempts: "0.30", Targets: "",
+  PassCompletions: "0.00", PassYards: "0.00", PassTDs: "0.00", PassInts: "0.00",
+  RushYards: "2.10", RushTDs: "0.00", RecCompletions: "7.40", RecYards: "78.50",
+  RecTDs: "0.45", ...over,
+});
+const refetched = (over = {}) => ({ ...frozen(), Targets: "10.9", ...over });
+
+test("backfillTargets fills Targets when every other column still matches", () => {
+  const r = backfillTargets([frozen()], [refetched()]);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.matched, 1);
+  assert.equal(r.filled, 1);
+  assert.equal(r.rows[0].Targets, "10.9");
+  // Nothing else moved.
+  assert.equal(r.rows[0].RecYards, "78.50");
+  assert.equal(r.rows[0].RushAttempts, "0.30");
+});
+
+test("backfillTargets refuses when the feed has revised another column", () => {
+  // RotoWire re-projected the week after the games — exactly what must not be
+  // written over a frozen pre-game forecast.
+  const r = backfillTargets([frozen()], [refetched({ RecYards: "91.20" })]);
+  assert.equal(r.conflicts.length, 1);
+  assert.equal(r.conflicts[0].column, "RecYards");
+  assert.equal(r.conflicts[0].frozen, "78.50");
+  assert.equal(r.conflicts[0].fetched, "91.20");
+});
+
+test("backfillTargets treats pure reformatting as unchanged", () => {
+  const r = backfillTargets([frozen()], [refetched({ RecYards: "78.5", RushAttempts: "0.3" })]);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.filled, 1);
+});
+
+test("backfillTargets never confuses a blank with a zero", () => {
+  const r = backfillTargets([frozen({ RecCompletions: "" })], [refetched()]);
+  assert.equal(r.conflicts.length, 1);
+  assert.equal(r.conflicts[0].column, "RecCompletions");
+});
+
+test("backfillTargets keeps rows the feed no longer carries, and adds none", () => {
+  const dropped = frozen({ PlayerID: "99999" });
+  const added = refetched({ PlayerID: "55555" });
+  const r = backfillTargets([frozen(), dropped], [refetched(), added]);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.rows.length, 2); // never grows
+  assert.equal(r.missingFromFeed, 1);
+  assert.equal(r.newInFeed, 1);
+  assert.equal(r.rows.find((x) => x.PlayerID === "99999").Targets, ""); // still blank
+});
+
+test("backfillTargets matches on split, not player alone", () => {
+  const m = frozen({ Split: "M" });
+  const c = frozen({ Split: "C" });
+  const r = backfillTargets([m, c], [refetched({ Split: "M", Targets: "10.9" })]);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.filled, 1);
+  assert.equal(r.rows.find((x) => x.Split === "M").Targets, "10.9");
+  assert.equal(r.rows.find((x) => x.Split === "C").Targets, ""); // untouched
+});
+
+test("backfillTargets reports filled=0 when the feed carries no targets", () => {
+  const r = backfillTargets([frozen()], [refetched({ Targets: "" })]);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.matched, 1);
+  assert.equal(r.filled, 0);
 });

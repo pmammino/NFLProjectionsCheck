@@ -33,6 +33,7 @@ import {
   ROSTER_COLUMNS,
   normalizeProjections,
   buildRoster,
+  backfillTargets,
   mergeActuals,
   asRecords,
   toCsv,
@@ -233,6 +234,82 @@ function mergeRoster(path, roster) {
   return [...byId.values()].sort((a, b) => Number(a.PlayerID) - Number(b.PlayerID));
 }
 
+// Back-fill the Targets column on already-frozen snapshots for weeks captured
+// before the projection feeds carried a target count. Safe only because
+// backfillTargets refuses to touch a week whose other columns have moved — see
+// the note on that function. Never writes anything but the Targets column.
+async function backfillProjectionTargets(a) {
+  const startweek = a.startweek ?? a.week;
+  const endweek = a.endweek ?? a.week;
+  if (!Number.isFinite(startweek) || !Number.isFinite(endweek)) {
+    throw new Error("--only backfill-targets needs --week (or --startweek/--endweek)");
+  }
+
+  let failures = 0;
+  for (let week = startweek; week <= endweek; week++) {
+    const path = projPath(a.dataDir, a.season, week);
+    if (!existsSync(path)) {
+      console.warn(`  week ${week}: no snapshot at ${path} — nothing to back-fill.`);
+      continue;
+    }
+    const existing = readCsv(path);
+    const blanks = existing.filter((r) => !r.Targets).length;
+    if (blanks === 0) {
+      console.log(`  week ${week}: every row already has targets — skipping.`);
+      continue;
+    }
+
+    console.log(`  week ${week}: re-fetching to back-fill ${blanks} blank targets…`);
+    const urls = projectionUrls(week);
+    const [M, C, F] = await Promise.all([
+      fetchJson(urls.M),
+      fetchJson(urls.C),
+      fetchJson(urls.F),
+    ]);
+    const feedRows = normalizeProjections({ M, C, F }, { season: a.season, week });
+    const r = backfillTargets(existing, feedRows);
+
+    // Any disagreement outside Targets means the endpoint is serving a revised
+    // (post-game) forecast, not the one frozen here. Writing it would silently
+    // corrupt the calibration baseline, so refuse and show what moved.
+    if (r.conflicts.length > 0) {
+      const cols = [...new Set(r.conflicts.map((c) => c.column))].join(", ");
+      console.error(
+        `  week ${week}: REFUSING to back-fill — the feed no longer matches the ` +
+          `frozen snapshot in ${r.conflicts.length} value(s) across [${cols}]. ` +
+          `The endpoint has revised this week, so its targets do not belong to ` +
+          `the pre-game forecast. Examples:`
+      );
+      for (const c of r.conflicts.slice(0, 5)) {
+        console.error(`    ${c.key} ${c.column}: frozen=${c.frozen} fetched=${c.fetched}`);
+      }
+      failures++;
+      continue;
+    }
+    if (r.matched === 0) {
+      console.error(`  week ${week}: feed matched none of the frozen rows — skipping.`);
+      failures++;
+      continue;
+    }
+    if (r.filled === 0) {
+      console.error(
+        `  week ${week}: feed matched ${r.matched} rows but carried no targets on ` +
+          `any of them — the target field is missing or renamed (see TARGET_FIELDS).`
+      );
+      failures++;
+      continue;
+    }
+
+    console.log(
+      `  week ${week}: verified ${r.matched} rows unchanged; filling ${r.filled} ` +
+        `targets (${r.missingFromFeed} rows absent from the feed keep blanks, ` +
+        `${r.newInFeed} new feed rows ignored).`
+    );
+    writeCsvIfChanged(path, toCsv(PROJECTION_COLUMNS, r.rows), a);
+  }
+  if (failures > 0) throw new Error(`${failures} week(s) could not be back-filled`);
+}
+
 async function ingestActuals(a) {
   const week = a.week ?? currentNflWeek(a.season, a.now);
   const startweek = a.startweek ?? week;
@@ -272,9 +349,15 @@ const HELP = `Ingest RotoWire projections + actuals into per-week snapshot CSVs.
   --season <year>       Season to ingest (default: current NFL season by date)
   --week <n>            NFL week number. Default by date: projections use the
                         upcoming/in-progress week, actuals the completed week.
-  --only <mode>         projections | actuals | both  (default: both)
-  --startweek <n>       Actuals range start (default: resolved week)
-  --endweek <n>         Actuals range end   (default: resolved week)
+  --only <mode>         projections | actuals | both | backfill-targets
+                        (default: both). backfill-targets re-fetches an
+                        already-captured week and writes ONLY its Targets
+                        column, and only after verifying every other column
+                        still matches the frozen snapshot. For weeks captured
+                        before the feeds projected targets. Refuses the write
+                        if the endpoint has revised the week.
+  --startweek <n>       Actuals / back-fill range start (default: resolved week)
+  --endweek <n>         Actuals / back-fill range end   (default: resolved week)
   --data-dir <path>     Output root (default: data)
   --force               Bypass the rollover guard (allow a smaller projection
                         set to replace a larger one)
@@ -301,14 +384,29 @@ async function main() {
   if (a.week !== undefined && (!Number.isFinite(a.week) || a.week < 1)) {
     throw new Error(`Invalid week: ${a.week}`);
   }
-  if (!["projections", "actuals", "both"].includes(a.only)) {
-    throw new Error(`--only must be projections|actuals|both, got "${a.only}"`);
+  if (!["projections", "actuals", "both", "backfill-targets"].includes(a.only)) {
+    throw new Error(
+      `--only must be projections|actuals|both|backfill-targets, got "${a.only}"`
+    );
   }
 
   console.log(
     `Ingesting season=${a.season} week=${a.week ?? "auto"} only=${a.only}` +
       (a.dryRun ? " (dry-run)" : "")
   );
+
+  // A back-fill is a repair of past weeks, not part of the normal capture, so
+  // it runs alone and never alongside a fresh ingest.
+  if (a.only === "backfill-targets") {
+    try {
+      await backfillProjectionTargets(a);
+    } catch (err) {
+      console.error("backfill-targets failed:", err.message);
+      process.exitCode = 1;
+    }
+    console.log("Done.");
+    return;
+  }
 
   // Run each artifact independently so a fetch error in one (or an empty feed)
   // never blocks the other — the workflow commits whatever was written.

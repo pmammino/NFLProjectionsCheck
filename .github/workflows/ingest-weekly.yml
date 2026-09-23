@@ -14,6 +14,13 @@ name: Ingest weekly projections & actuals
 #
 # Auto week/season resolution is a date heuristic; use the manual "Run workflow"
 # button with an explicit week for backfills or anything that must be exact.
+#
+# The backfill-targets mode is a repair, not a capture: it re-fetches one past
+# week and writes ONLY that snapshot's Targets column, for weeks frozen before
+# the projection feeds carried targets. It verifies every other column still
+# matches the frozen snapshot first and refuses the write if the endpoint has
+# revised the week, so it cannot replace a pre-game forecast with a post-game
+# one. Requires an explicit week.
 
 on:
   schedule:
@@ -30,11 +37,11 @@ on:
         description: "NFL week number. Blank = auto by date."
         required: false
       only:
-        description: "What to ingest"
+        description: "What to ingest (backfill-targets repairs ONE past week's Targets column — set week)"
         required: false
         default: "both"
         type: choice
-        options: [both, projections, actuals]
+        options: [both, projections, actuals, backfill-targets]
       force:
         description: "Bypass the rollover guard (allow a smaller set to replace a larger one)"
         required: false

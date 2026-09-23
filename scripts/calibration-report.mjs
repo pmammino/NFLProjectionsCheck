@@ -12,6 +12,7 @@
 //                                       [--metrics targets,rushAtt]
 //                                       [--split N]   (fit on first N weeks)
 //                                       [--boot N] [--seed N] [--json]
+//                                       [--fantasy]   (relevant players only)
 //                                       [--data public/data/dashboard.json]
 //
 // Reads the artifact `npm run build:data` produces, so the numbers match what
@@ -20,7 +21,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { analyze, LINES } from "./lib/calibration-report.mjs";
+import { analyze, filterFantasyRows, LINES } from "./lib/calibration-report.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -38,6 +39,7 @@ function parseArgs(argv) {
       case "--boot": a.boot = Number(next()); break;
       case "--seed": a.seed = Number(next()); break;
       case "--data": a.data = next(); break;
+      case "--fantasy": a.fantasy = true; break;
       case "--json": a.json = true; break;
       case "-h": case "--help": a.help = true; break;
       default: throw new Error(`Unknown argument: ${t}`);
@@ -66,6 +68,8 @@ const HELP = `Quantile-calibration report over the built dashboard dataset.
   --boot <n>         bootstrap resamples for the intervals (default: 4000)
   --seed <n>         PRNG seed; intervals are reproducible (default: 42)
   --data <path>      dashboard.json to read (default: public/data/dashboard.json)
+  --fantasy          grade only fantasy-relevant players (all QB, top 50 RB /
+                     60 WR / 40 TE by PROJECTED PPR — never actual points)
   --json             emit the raw analysis as JSON instead of a table
   -h, --help         show this help
 
@@ -185,7 +189,18 @@ function run() {
     return;
   }
 
-  const reports = analyze(rows, metrics, {
+  const ranks = (a.scope === "season" ? ds.season.fantasyRanks : ds.meta.fantasyRanks) ?? {};
+  const graded = a.fantasy ? filterFantasyRows(rows, ranks) : rows;
+  if (a.fantasy && graded.length === 0) {
+    console.error(
+      "No fantasy-relevant rows. This dataset predates the projected-PPR ranks — " +
+        "rebuild with `npm run build:data`."
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const reports = analyze(graded, metrics, {
     only: a.metrics,
     samples: a.boot,
     seed: a.seed,
@@ -208,6 +223,15 @@ function run() {
     console.log(`Weeks present: ${(ds.meta?.weeks ?? []).join(", ") || "none"}`);
   }
   console.log(`Bootstrap: ${a.boot} resamples, seed ${a.seed} (reproducible).`);
+  if (a.fantasy) {
+    const label = Object.entries(ranks)
+      .map(([p, cap]) => (cap == null ? `all ${p}` : `top ${cap} ${p}`))
+      .join(", ");
+    console.log(
+      `Fantasy-relevant only: ${label} by projected PPR ` +
+        `(${graded.length} of ${rows.length} player-weeks).`
+    );
+  }
   coverageTable(reports);
   fitTable(reports);
   holdoutTable(reports);

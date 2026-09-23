@@ -1,7 +1,7 @@
 "use client";
 
 import type { Position } from "@/lib/types";
-import type { Filters } from "@/lib/aggregate";
+import type { Filters, FantasyRanks } from "@/lib/aggregate";
 
 const POSITIONS: Position[] = ["QB", "RB", "WR", "TE"];
 
@@ -155,6 +155,32 @@ export default function FilterBar({
           Exclude low-usage / injury-suspect games
         </label>
       )}
+
+      <label
+        className="flex cursor-pointer items-center gap-2 text-sm text-slate-300"
+        title={fantasyRanksLabel(filters.fantasyRanks)}
+      >
+        <input
+          type="checkbox"
+          checked={filters.fantasyOnly}
+          onChange={(e) => update({ fantasyOnly: e.target.checked })}
+          className="h-4 w-4 accent-brand-red"
+        />
+        Fantasy-relevant players only
+        <span className="text-xs text-slate-500">
+          ({fantasyRanksLabel(filters.fantasyRanks)})
+        </span>
+      </label>
     </div>
   );
+}
+
+// "all QB, top 50 RB / 60 WR / 40 TE" — reads the thresholds out of the
+// dataset rather than restating them, so the label can't drift from the build.
+function fantasyRanksLabel(ranks: FantasyRanks): string {
+  const order: Position[] = ["QB", "RB", "WR", "TE"];
+  const parts = order
+    .filter((p) => p in ranks)
+    .map((p) => (ranks[p] == null ? `all ${p}` : `top ${ranks[p]} ${p}`));
+  return parts.length ? parts.join(" / ") + ", by projected PPR" : "by projected PPR";
 }

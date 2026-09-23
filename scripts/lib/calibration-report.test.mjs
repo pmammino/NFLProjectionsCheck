@@ -16,6 +16,8 @@ import {
   holdout,
   cellsByMetric,
   analyze,
+  isFantasyRelevant,
+  filterFantasyRows,
 } from "./calibration-report.mjs";
 
 // A perfectly calibrated set: actuals 1..100 against floor 25 / median 50 /
@@ -237,4 +239,42 @@ test("analyze reports each metric and honours the --metrics filter", () => {
 test("analyze can skip the holdout (season scope has no weeks)", () => {
   const [r] = analyze(ROWS, META, { ...FAST, holdout: false });
   assert.equal(r.holdout, null);
+});
+
+// ---- Fantasy relevance ---------------------------------------------------
+const RANKS = { QB: null, RB: 50, WR: 60, TE: 40 };
+
+test("isFantasyRelevant applies the per-position cap", () => {
+  assert.equal(isFantasyRelevant("WR", 60, RANKS), true); // on the line
+  assert.equal(isFantasyRelevant("WR", 61, RANKS), false);
+  assert.equal(isFantasyRelevant("TE", 40, RANKS), true);
+  assert.equal(isFantasyRelevant("TE", 41, RANKS), false);
+  assert.equal(isFantasyRelevant("RB", 50, RANKS), true);
+});
+
+test("isFantasyRelevant treats a null cap as uncapped", () => {
+  assert.equal(isFantasyRelevant("QB", 1, RANKS), true);
+  assert.equal(isFantasyRelevant("QB", 97, RANKS), true);
+});
+
+test("isFantasyRelevant excludes unranked rows", () => {
+  // No rank means the position was unknown at build time. The filter is
+  // opt-in, so the conservative side is to leave those out.
+  assert.equal(isFantasyRelevant("WR", null, RANKS), false);
+  assert.equal(isFantasyRelevant("WR", undefined, RANKS), false);
+  // A position with no entry at all is uncapped, not excluded.
+  assert.equal(isFantasyRelevant("K", 200, RANKS), true);
+  assert.equal(isFantasyRelevant("WR", 5, undefined), true);
+});
+
+test("filterFantasyRows keeps only the relevant rows", () => {
+  const rows = [
+    { pos: "WR", pr: 1 },
+    { pos: "WR", pr: 61 },
+    { pos: "QB", pr: 40 },
+    { pos: "TE", pr: null },
+    { pos: "RB", pr: 50 },
+  ];
+  const kept = filterFantasyRows(rows, RANKS);
+  assert.deepEqual(kept, [{ pos: "WR", pr: 1 }, { pos: "QB", pr: 40 }, { pos: "RB", pr: 50 }]);
 });

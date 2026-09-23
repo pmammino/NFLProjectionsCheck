@@ -8,6 +8,31 @@ export interface Filters {
   minVolume: number; // min actual volume
   minProjVolume: number; // min projected (median) volume
   excludeInjury: boolean;
+  // Restrict grading to players who were projected to matter. See
+  // isFantasyRelevant — the cut is on PROJECTED rank, never actual points.
+  fantasyOnly: boolean;
+  fantasyRanks: FantasyRanks;
+}
+
+export type FantasyRanks = Partial<Record<Position, number | null>>;
+
+// Whether a row clears its position's fantasy-relevance cut.
+//
+// The rank is by PROJECTED PPR, so this filter uses only information that
+// existed before kickoff. Ranking by actual points would select the players
+// who happened to have a good week — conditioning the sample on the very
+// outcome being graded, which inflates every coverage number downstream.
+//
+// An unranked row (position unknown at build time) is treated as NOT relevant:
+// the filter is opt-in, so excluding the unknown is the conservative side.
+export function isFantasyRelevant(
+  pos: Position,
+  pr: number | null | undefined,
+  ranks: FantasyRanks
+): boolean {
+  if (pr === null || pr === undefined) return false;
+  const cap = ranks[pos];
+  return cap === null || cap === undefined ? true : pr <= cap;
 }
 
 // A cell qualifies when both its actual and projected volume clear the gates.
@@ -27,6 +52,7 @@ export function filterRows(rows: Row[], f: Filters, byWeek = true): Row[] {
     if (!f.positions.has(r.pos)) return false;
     if (f.teams.size > 0 && !f.teams.has(r.team)) return false;
     if (byWeek && f.excludeInjury && r.inj) return false;
+    if (f.fantasyOnly && !isFantasyRelevant(r.pos, r.pr, f.fantasyRanks)) return false;
     return true;
   });
 }

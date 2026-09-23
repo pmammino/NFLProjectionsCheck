@@ -79,6 +79,25 @@ export function wilson(k, n, z = 1.96) {
   return { lo: Math.max(0, c - h), hi: Math.min(1, c + h) };
 }
 
+// ---- Fantasy relevance ---------------------------------------------------
+// Mirrors isFantasyRelevant in lib/aggregate.ts. Duplicated rather than shared
+// because the app is TypeScript and these scripts are plain ESM with no build
+// step between them — wilson() is already split the same way.
+//
+// The rank is by PROJECTED PPR (see build-data.mjs), so the cut uses only what
+// was known before kickoff. Ranking on actual points would select the players
+// who happened to have a good week and inflate every number here. An unranked
+// row counts as not relevant, since the filter is opt-in.
+export function isFantasyRelevant(pos, pr, ranks) {
+  if (pr === null || pr === undefined) return false;
+  const cap = ranks?.[pos];
+  return cap === null || cap === undefined ? true : pr <= cap;
+}
+
+export function filterFantasyRows(rows, ranks) {
+  return rows.filter((r) => isFantasyRelevant(r.pos, r.pr, ranks));
+}
+
 // ---- 1. Coverage --------------------------------------------------------
 // Share of actuals at or below each band line, against the 25/50/75 it should
 // be. `cells` are MetricCell objects: { f, m, c, a, ... }.

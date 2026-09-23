@@ -57,6 +57,8 @@ export default function Dashboard() {
           minVolume: 0,
           minProjVolume: 0,
           excludeInjury: false,
+          fantasyOnly: false,
+          fantasyRanks: data.meta.fantasyRanks ?? {},
         });
       })
       .catch((e) => setErr(String(e)));

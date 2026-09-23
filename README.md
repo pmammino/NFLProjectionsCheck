@@ -155,8 +155,9 @@ sections, and the third is the one that matters.
    *worse*. Only ship the ones that improve here.
 
 Options: `--scope weekly|season`, `--metrics a,b`, `--split N` (weeks to fit
-on), `--boot N`, `--seed N`, `--json`. The bootstrap is seeded, so two runs on
-the same data give identical intervals and the output can be diffed.
+on), `--boot N`, `--seed N`, `--fantasy`, `--json`. The bootstrap is seeded, so
+two runs on the same data give identical intervals and the output can be
+diffed.
 
 > **It never rewrites a projection**, by design. The dashboard reports the
 > upstream feed's calibration; a band corrected in the measurement layer would
@@ -194,7 +195,27 @@ All analysis tabs work in both scopes. Scope-specific differences:
   season (nearly every real player scores at least once).
 
 All views respond to filters: position, week range, team, minimum actual
-volume, and exclude-injury-suspect.
+volume, exclude-injury-suspect, and fantasy-relevant-only.
+
+### Fantasy-relevant only
+
+A checkbox restricting every view to players who were projected to matter:
+**all QB, top 50 RB / 60 WR / 40 TE**, ranked within each week (or within the
+season, in season scope). Thresholds live in `FANTASY_RANKS` in
+`scripts/build-data.mjs` and are published in the dataset, so the UI label and
+the CLI can't drift from the build.
+
+The rank is by **projected** PPR, never actual. Ranking on what a player
+actually scored would select the players who happened to have a good week —
+conditioning the sample on the very outcome being graded, which inflates every
+coverage number in the dashboard. Projected rank is information you had before
+kickoff, so filtering on it is legitimate. Standard PPR scoring, computed from
+the projected components rather than read from a feed column, so it works
+retroactively on every snapshot already committed.
+
+Players whose position wasn't known at build time are unranked and excluded;
+the filter is opt-in, so leaving out the unknown is the conservative side. The
+CLI report takes the same cut with `--fantasy`.
 
 ## Paper trading
 

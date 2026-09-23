@@ -253,6 +253,59 @@ const MIN_VOL_RELEVANCE = 1;
 // literal zero 22% of the time and cover only 30% of the band; from 3 targets
 // up that settles to 5% zeros and 44% coverage.
 
+// ---- Fantasy relevance ---------------------------------------------------
+// Standard PPR scoring, used only to RANK players — never graded. The point is
+// to answer "how well are the projections doing on players anyone actually
+// cares about", since the tail of a 500-player slate is mostly third-string
+// bodies whose bands are noise either way.
+//
+// Ranked on the PROJECTED median, never the actual. Ranking by what a player
+// actually scored would pick the players who happened to have a good week,
+// which conditions the sample on the outcome being measured and would inflate
+// every coverage number in the dashboard. Projected rank is information you
+// had before kickoff, so filtering on it is legitimate.
+const PPR = {
+  PassYards: 0.04, // 1 per 25
+  PassTDs: 4,
+  PassInts: -2,
+  RushYards: 0.1,
+  RushTDs: 6,
+  RecCompletions: 1, // reception
+  RecYards: 0.1,
+  RecTDs: 6,
+};
+
+function pprPoints(row) {
+  let pts = 0;
+  for (const [col, weight] of Object.entries(PPR)) pts += num(row[col]) * weight;
+  return pts;
+}
+
+// How deep each position stays "fantasy relevant". QB is uncapped: there are
+// only ~32 starters and the metric-level volume gates already drop the
+// clipboard holders, so a rank cut would be doing nothing a gate isn't.
+const FANTASY_RANKS = { QB: null, RB: 50, WR: 60, TE: 40 };
+
+// Rank every projected player within their position, per grouping key (a week
+// for the weekly set, one bucket for season totals). `medianByKey` maps
+// key -> [{ pid, ppr }]. Returns pid|key -> 1-based positional rank.
+function rankByPpr(entries, posByPid) {
+  const byGroup = new Map();
+  for (const e of entries) {
+    const pos = posByPid.get(e.pid);
+    if (!pos) continue; // no position, cannot rank into a positional pool
+    const g = `${e.key}|${pos}`;
+    if (!byGroup.has(g)) byGroup.set(g, []);
+    byGroup.get(g).push(e);
+  }
+  const ranks = new Map();
+  for (const list of byGroup.values()) {
+    list.sort((a, b) => b.ppr - a.ppr);
+    list.forEach((e, i) => ranks.set(`${e.pid}|${e.key}`, i + 1));
+  }
+  return ranks;
+}
+
 // Primary volume field per position, used for the in-game injury proxy.
 const PRIMARY_VOL = {
   QB: { proj: "PassAttempts", actual: "PassAtt", expect: 15 },
@@ -399,6 +452,15 @@ function buildSeasonFromLegacyCsv(teamByPid) {
     e[r.Split] = r;
   }
 
+  const legacyPos = new Map();
+  for (const a of actualRows) if (a.position) legacyPos.set(a.PlayerID, a.position);
+  const legacyEntries = [];
+  for (const [pid, e] of proj) {
+    if (!e.M) continue;
+    legacyEntries.push({ pid, key: "season", ppr: pprPoints(e.M) });
+  }
+  const legacyRank = rankByPpr(legacyEntries, legacyPos);
+
   const out = [];
   const td = [];
   let matched = 0;
@@ -464,11 +526,15 @@ function buildSeasonFromLegacyCsv(teamByPid) {
         a: actualTD,
         av: round(actualVol, 1),
         pv: round(num(p.M[t.projVol]), 1),
+        pr: legacyRank.get(`${pid}|season`) ?? null,
       });
     }
 
     if (Object.keys(metricsOut).length === 0) continue;
-    out.push({ pid, team, pos, wk: 0, inj: false, m: metricsOut });
+    out.push({
+      pid, team, pos, wk: 0, inj: false, m: metricsOut,
+      pr: legacyRank.get(`${pid}|season`) ?? null,
+    });
   }
 
   return {
@@ -548,6 +614,16 @@ function buildSeasonFromWeekly(projRows, actualRows) {
   }
   const weeksWithActuals = new Set(actualRows.map((a) => a.Week)).size;
 
+  // Season-scope relevance ranks on season-total projected PPR, one pool.
+  const seasonPos = new Map();
+  for (const [pid, ag] of actByPid) if (ag.pos) seasonPos.set(pid, ag.pos);
+  const seasonEntries = [];
+  for (const [pid, p] of projByPid) {
+    if (!p.M.length) continue;
+    seasonEntries.push({ pid, key: "season", ppr: pprPoints(aggregateSum(p.M, PROJ_NUM_COLS)) });
+  }
+  const seasonRank = rankByPpr(seasonEntries, seasonPos);
+
   const out = [];
   const td = [];
   let matched = 0;
@@ -608,11 +684,15 @@ function buildSeasonFromWeekly(projRows, actualRows) {
         a: actualTD,
         av: round(actualVol, 1),
         pv: round(num(projS.M[t.projVol]), 1),
+        pr: seasonRank.get(`${pid}|season`) ?? null,
       });
     }
 
     if (Object.keys(metricsOut).length === 0) continue;
-    out.push({ pid, team, pos, wk: 0, inj: false, m: metricsOut });
+    out.push({
+      pid, team, pos, wk: 0, inj: false, m: metricsOut,
+      pr: seasonRank.get(`${pid}|season`) ?? null,
+    });
   }
 
   const available =
@@ -634,6 +714,20 @@ function buildSeasonFromWeekly(projRows, actualRows) {
       tdRows: td.length,
     },
   };
+}
+
+// Positions from the committed roster crosswalk (data/players/{season}.csv),
+// which ingest writes. The projection snapshot carries no position, so without
+// this a player who never recorded a stat cannot be ranked into a positional
+// pool. Absent on the legacy path, where the actuals supply positions instead.
+function rosterPositions(season) {
+  const out = new Map();
+  const path = join(ROOT, "data", "players", `${season}.csv`);
+  if (!existsSync(path)) return out;
+  for (const row of parseCsv(path)) {
+    if (row.PlayerID && row.Pos) out.set(row.PlayerID, row.Pos.toUpperCase());
+  }
+  return out;
 }
 
 // Collect per-week snapshot CSVs written by scripts/ingest.mjs.
@@ -709,6 +803,21 @@ function main() {
     e[r.Split] = r;
     if (upperTeam && !teamByPid.has(r.PlayerID)) teamByPid.set(r.PlayerID, upperTeam);
   }
+
+  // Fantasy-relevance ranking. Positions come from the actuals (and the
+  // roster file when one exists), since the projection snapshot carries none.
+  const posByPid = new Map();
+  for (const a of actualRows) if (a.position) posByPid.set(a.ID, a.position);
+  for (const [pid, pos] of rosterPositions(weekly.season)) {
+    if (!posByPid.has(pid)) posByPid.set(pid, pos);
+  }
+  const rankEntries = [];
+  for (const [key, e] of proj) {
+    if (!e.M) continue;
+    const [pid, week] = key.split("|");
+    rankEntries.push({ pid, key: week, ppr: pprPoints(e.M) });
+  }
+  const pprRank = rankByPpr(rankEntries, posByPid);
 
   const out = [];
   const td = [];
@@ -807,12 +916,16 @@ function main() {
         a: actualTD, // actual TD count
         av: round(actualVol, 1), // actual opportunity volume
         pv: round(num(p.M[t.projVol]), 1), // projected median opportunity volume
+        pr: pprRank.get(`${pid}|${week}`) ?? null,
       });
     }
 
     if (Object.keys(metricsOut).length === 0) continue;
 
-    out.push({ pid, team, pos, wk: Number(week), inj, m: metricsOut });
+    out.push({
+      pid, team, pos, wk: Number(week), inj, m: metricsOut,
+      pr: pprRank.get(`${pid}|${week}`) ?? null,
+    });
   }
 
   const weeks = [...new Set(out.map((r) => r.wk))].sort((x, y) => x - y);
@@ -861,6 +974,7 @@ function main() {
       positions: ["QB", "RB", "WR", "TE"],
       minEffVolume: MIN_EFF_VOLUME,
       minVolRelevance: MIN_VOL_RELEVANCE,
+      fantasyRanks: FANTASY_RANKS,
       metrics: metricMeta,
       tdTypes: tdTypeMeta,
       counts: {
@@ -883,6 +997,7 @@ function main() {
       })),
       minEffVolume: SEASON_MIN_EFF_VOLUME,
       minVolRelevance: SEASON_MIN_VOL_RELEVANCE,
+      fantasyRanks: FANTASY_RANKS,
       teams: [...new Set(season.rows.map((r) => r.team))].filter(Boolean).sort(),
       counts: season.counts,
       rows: season.rows,

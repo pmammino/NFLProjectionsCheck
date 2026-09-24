@@ -227,6 +227,8 @@ const METRICS = [
 
 // Minimum volume for an efficiency rate to be considered meaningful (avoids
 // 1-carry-for-20-yards style noise). Applied to BOTH projected & actual volume.
+const SPLITS = ["F", "M", "C"];
+
 const MIN_EFF_VOLUME = 3;
 
 // Minimum PROJECTED volume for a COUNT metric to be gradeable at all.
@@ -730,6 +732,167 @@ function rosterPositions(season) {
   return out;
 }
 
+// ---- Team-level aggregation ----------------------------------------------
+// Offence-wide totals per team-week: the projections summed across every
+// player on the roster, against the actuals summed the same way.
+//
+// Two things are easy to get wrong here, both verified against 2026:
+//
+//  1. COMBINED TDs MUST NOT SUM ALL THREE COLUMNS. A passing TD and the
+//     receiving TD that caught it are the same touchdown. Across all 64
+//     team-weeks, summed PassTD and summed RecptTD are identical to the unit,
+//     so team offensive TDs = PassTD + RushTD. Adding RecTD as well would
+//     inflate every team's total by its entire passing game.
+//
+//  2. A TEAM BAND IS OUR CONSTRUCTION, NOT THE FEED'S. The feed publishes a
+//     band per player and none for a team. Summing the player floors assumes
+//     every player simultaneously has his worst game, which is far too wide;
+//     adding variances assumes they are independent, which is too narrow when
+//     one player dominates. Measured within-band, against a 50% target:
+//
+//            summed quantiles   added variances
+//       TD         53.1%             29.7%
+//       passAtt    64.1%             62.5%
+//       rushAtt    70.3%             45.3%
+//
+//     Neither wins everywhere, so the bands here are the straightforward
+//     summed quantiles and coverage is reported as a flagged secondary. The
+//     primary read at team level is point accuracy of the median, which IS
+//     well defined: a sum of medians is a fair estimate of the median of the
+//     sum, no correlation assumption required.
+//
+//  3. PASS RATE HAS NO BAND AT ALL. It is a ratio, and the ceiling split
+//     raises pass and rush attempts together, so the ratio of the ceilings is
+//     not the ceiling of the ratio. The "floor" rate came out ABOVE the
+//     "ceiling" rate in 61 of 64 team-weeks. It is emitted unbanded
+//     (banded: false) and graded on the median alone.
+//
+//  4. THE TWO SIDES ARE NOT THE SAME ROSTER. The projection feed covers more
+//     players than the actuals do — a median of 16 per team-week against 10
+//     in 2026, and 30 against 13 in the legacy 2025 CSVs. The extra names are
+//     bench players projected near zero, so the effect on attempts and TDs is
+//     small (2026 mean error: -0.31 pass attempts, +0.33 rush), but it is a
+//     systematic tilt and it is much larger on the legacy path. Treat the
+//     legacy team totals with suspicion: there the projections run +6.5 pass
+//     attempts and +6.2 rush attempts under actual, which is too big to be
+//     bench noise and too big to be a real forecast error of that vintage
+//     without further digging.
+const TEAM_METRICS = [
+  {
+    key: "teamTD",
+    label: "Total TDs",
+    group: "Scoring",
+    kind: "volume",
+    unit: "count",
+    banded: true,
+    proj: (t) => t.PassTDs + t.RushTDs, // NOT + RecTDs — see note 1
+    actual: (t) => t.PassTD + t.RushTD,
+  },
+  {
+    key: "teamPassAtt",
+    label: "Pass Attempts",
+    group: "Passing",
+    kind: "volume",
+    unit: "count",
+    banded: true,
+    proj: (t) => t.PassAttempts,
+    actual: (t) => t.PassAtt,
+  },
+  {
+    key: "teamRushAtt",
+    label: "Rush Attempts",
+    group: "Rushing",
+    kind: "volume",
+    unit: "count",
+    banded: true,
+    proj: (t) => t.RushAttempts,
+    actual: (t) => t.Rushes,
+  },
+  {
+    key: "passRate",
+    label: "Pass Rate",
+    group: "Passing",
+    kind: "rate",
+    unit: "pct",
+    banded: false, // see note 3
+    proj: (t) =>
+      t.PassAttempts + t.RushAttempts > 0
+        ? t.PassAttempts / (t.PassAttempts + t.RushAttempts)
+        : null,
+    actual: (t) => (t.PassAtt + t.Rushes > 0 ? t.PassAtt / (t.PassAtt + t.Rushes) : null),
+  },
+];
+
+const TEAM_PROJ_COLS = ["PassAttempts", "RushAttempts", "PassTDs", "RushTDs", "RecTDs"];
+const TEAM_ACTUAL_COLS = ["PassAtt", "Rushes", "PassTD", "RushTD", "RecptTD"];
+
+function sumInto(target, row, columns) {
+  for (const col of columns) target[col] = (target[col] || 0) + num(row[col]);
+  return target;
+}
+
+function buildTeams(projRows, actualRows) {
+  // team|week -> { F, M, C } summed projections
+  const proj = new Map();
+  for (const r of projRows) {
+    const team = (r.Team || "").toUpperCase();
+    if (!team || !SPLITS.includes(r.Split)) continue;
+    const key = `${team}|${r.GameWeek}`;
+    let e = proj.get(key);
+    if (!e) {
+      e = { F: {}, M: {}, C: {}, players: 0 };
+      proj.set(key, e);
+    }
+    sumInto(e[r.Split], r, TEAM_PROJ_COLS);
+    if (r.Split === "M") e.players++;
+  }
+  // team|week -> summed actuals
+  const act = new Map();
+  for (const a of actualRows) {
+    const team = (a.NFLTeamID || "").toUpperCase();
+    if (!team) continue;
+    const key = `${team}|${a.Week}`;
+    if (!act.has(key)) act.set(key, {});
+    sumInto(act.get(key), a, TEAM_ACTUAL_COLS);
+  }
+
+  const rows = [];
+  for (const [key, actuals] of act) {
+    const p = proj.get(key);
+    if (!p) continue;
+    const [team, week] = key.split("|");
+    const metricsOut = {};
+    for (const m of TEAM_METRICS) {
+      const med = m.proj(p.M);
+      const actual = m.actual(actuals);
+      if (med === null || actual === null) continue;
+      // An unbanded metric collapses to its median; nothing downstream should
+      // read coverage off it, which meta.banded=false signals.
+      const f = m.banded ? m.proj(p.F) : med;
+      const c = m.banded ? m.proj(p.C) : med;
+      if (f === null || c === null) continue;
+      const lo = Math.min(f, c);
+      const hi = Math.max(f, c);
+      const err = actual - med;
+      metricsOut[m.key] = {
+        f: round(f, 4),
+        m: round(med, 4),
+        c: round(c, 4),
+        a: round(actual, 4),
+        in: m.banded ? actual >= lo && actual <= hi : false,
+        err: round(err, 4),
+        pe: med !== 0 ? round(err / Math.abs(med), 4) : null,
+        av: round(actual, 1),
+        pv: round(med, 1),
+      };
+    }
+    if (Object.keys(metricsOut).length === 0) continue;
+    rows.push({ team, wk: Number(week), players: p.players, m: metricsOut });
+  }
+  rows.sort((a, b) => a.wk - b.wk || a.team.localeCompare(b.team));
+  return rows;
+}
+
 // Collect per-week snapshot CSVs written by scripts/ingest.mjs.
 // Layout: data/<kind>/<season>/week-NN.csv   (kind = projections | actuals)
 function listSnapshotSeasons(dataDir, kind) {
@@ -964,6 +1127,16 @@ function main() {
     minOpp: t.minOpp,
   }));
 
+  const teamRows = buildTeams(projRows, actualRows);
+  const teamMetricMeta = TEAM_METRICS.map((m) => ({
+    key: m.key,
+    label: m.label,
+    group: m.group,
+    kind: m.kind,
+    unit: m.unit,
+    banded: m.banded,
+  }));
+
   const payload = {
     meta: {
       generatedAt: new Date().toISOString(),
@@ -987,6 +1160,16 @@ function main() {
     },
     rows: out,
     td,
+    team: {
+      // Offence-wide totals per team-week. `banded: false` on a metric means
+      // its Floor/Ceiling collapse to the median and coverage is meaningless
+      // for it — see the TEAM_METRICS notes.
+      metrics: teamMetricMeta,
+      teams: [...new Set(teamRows.map((r) => r.team))].sort(),
+      weeks: [...new Set(teamRows.map((r) => r.wk))].sort((x, y) => x - y),
+      counts: { teamWeeks: teamRows.length },
+      rows: teamRows,
+    },
     season: {
       // Season metrics/TD types share keys+labels with the weekly set.
       available: seasonAvailable,
@@ -1012,6 +1195,7 @@ function main() {
   const kb = (readFileSync(outPath).length / 1024).toFixed(0);
   console.log(
     `build-data: source=${weekly.source}; weekly ${out.length} rows / ${td.length} TD (${matched} matched); ` +
+      `team ${teamRows.length} team-weeks; ` +
       `season ${seasonAvailable ? `${season.rows.length} rows / ${season.td.length} TD` : "hidden (season not complete)"} -> ${outPath} (${kb} KB)`
   );
 }

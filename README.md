@@ -167,6 +167,54 @@ diffed.
 > variance multiplier can't help at all, because the real distribution is
 > bimodal and widening a normal doesn't reconstruct a point mass.
 
+## Team-level analysis
+
+```bash
+npm run build:data && npm run calibration-report -- --scope team
+```
+
+Offence-wide totals per team-week: the projections summed across the whole
+roster against the actuals summed the same way. Four metrics — **Total TDs**,
+**Pass Attempts**, **Rush Attempts**, and **Pass Rate** (pass ÷ (pass + rush)).
+
+Three things here are easy to get wrong, and all three are verified against
+2026 rather than assumed:
+
+- **Combined TDs are `PassTD + RushTD`, never all three columns.** A passing
+  TD and the receiving TD that caught it are the same touchdown — summed
+  `PassTD` and summed `RecptTD` are identical in all 64 team-weeks. Adding
+  `RecTD` too would inflate every team by its entire passing game.
+- **Pass Rate has no band.** It's a ratio, and the ceiling split raises pass
+  *and* rush attempts, so the ratio of the ceilings isn't the ceiling of the
+  ratio. The "floor" rate came out *above* the "ceiling" rate in 61 of 64
+  team-weeks. It ships `banded: false` and is graded on the median alone; the
+  report omits it from every band section rather than printing a meaningless
+  number.
+- **A team band is our construction, not the feed's.** The feed publishes a
+  band per player and none for a team. Summing player floors assumes everyone
+  has his worst game simultaneously (too wide); adding variances assumes
+  independence (too narrow when one player dominates). Neither wins
+  everywhere — measured within-band against a 50% target:
+
+  | | summed quantiles | added variances |
+  |---|---|---|
+  | Total TDs | 53.1% | 29.7% |
+  | Pass Attempts | 64.1% | 62.5% |
+  | Rush Attempts | 70.3% | 45.3% |
+
+  So the bands are the straightforward summed quantiles, and **point accuracy
+  of the median is the primary read** — that one is well defined, since a sum
+  of medians is a fair estimate of the median of the sum with no correlation
+  assumption. Coverage is reported as a flagged secondary.
+
+> **Caveat — the two sides aren't the same roster.** The projection feed covers
+> more players than the actuals do: a median of 16 per team-week against 10 in
+> 2026, and 30 against 13 in the legacy CSVs. The extras are bench players
+> projected near zero, so the 2026 tilt is small (mean error −0.31 pass
+> attempts, +0.33 rush). On the legacy path it is not: projections run ~6.5
+> pass attempts and ~6.2 rush attempts under actual, too large for bench noise.
+> Treat legacy team totals as unverified.
+
 ## Weekly vs. Season-long scope
 
 A top-right **Weekly / Season-long** toggle switches the entire dashboard

@@ -6,6 +6,7 @@ PlayerID,Name,Team,Pos
 7355,Andy Dalton,PHI,QB
 7357,Tyrod Taylor,GB,QB
 8057,Kirk Cousins,LV,QB
+8065,Case Keenum,CHI,QB
 8627,Keenan Allen,IND,WR
 8743,Geno Smith,NYJ,QB
 8781,Zach Ertz,PHI,TE
@@ -79,6 +80,8 @@ PlayerID,Name,Team,Pos
 12809,Tyler Conklin,DET,TE
 12858,Ian Thomas,LV,TE
 12860,Dallas Goedert,PHI,TE
+12934,Marquez Valdes-Scantling,LAC,WR
+13418,KhaDarel Hodge,SF,WR
 13424,DK Metcalf,PIT,WR
 13426,Noah Fant,NO,TE
 13427,Justice Hill,BAL,RB

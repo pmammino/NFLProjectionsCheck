@@ -1,7 +1,7 @@
 Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
-2026,3,disciplined,17795,MarShawn Lloyd,GB,RB,vs ATL,rushYds,DraftKings,49.5,over,347,,0.2237,0.2237,,1,0.4432,0.2195,0.2195,15%+,1,1,100,pending,,,,,,,,,opticodds,2026-09-22T17:47:03.773Z
-2026,3,disciplined,16741,Chris Brooks,GB,RB,vs ATL,rushYds,DraftKings,19.5,over,124,,0.4464,0.4464,,1,0.6573,0.2108,0.2108,15%+,1,1,100,pending,,,,,,,,,opticodds,2026-09-22T17:47:03.773Z
-2026,3,disciplined,12561,Lamar Jackson,BAL,QB,at DAL,rushAtt,DraftKings,9.5,over,556,,0.1524,0.1524,,1,0.3473,0.1948,0.1948,15%+,1,1,100,pending,,,,,,,,,opticodds,2026-09-22T17:47:03.773Z
-2026,3,disciplined,15947,Jake Ferguson,DAL,TE,vs BAL,recYds,DraftKings,24.5,over,-130,,0.5652,0.5652,,1,0.7558,0.1906,0.1906,15%+,1,1,100,pending,,,,,,,,,opticodds,2026-09-22T17:47:03.773Z
-2026,3,disciplined,12483,Josh Allen,BUF,QB,vs LAC,passTD,DraftKings,1.5,under,124,-159,0.4464,0.4210,0.0603,0,0.5884,0.1420,0.1674,10-15%,1,1,100,pending,,,,,,,,,opticodds,2026-09-22T17:47:03.773Z
-2026,3,disciplined,16899,Quentin Johnston,LAC,WR,at BUF,recYds,DraftKings,24.5,over,-223,,0.6904,0.6904,,1,0.8165,0.1261,0.1261,10-15%,1,1,100,pending,,,,,,,,,opticodds,2026-09-22T17:47:03.773Z
+2026,3,disciplined,17795,MarShawn Lloyd,GB,RB,vs ATL,rushYds,DraftKings,49.5,over,347,,0.2237,0.2237,,1,0.4432,0.2195,0.2195,15%+,1,1,100,pending,,,line-moved,,,700,59.5,toward,opticodds,2026-09-22T17:47:03.773Z
+2026,3,disciplined,16741,Chris Brooks,GB,RB,vs ATL,rushYds,DraftKings,19.5,over,124,,0.4464,0.4464,,1,0.6573,0.2108,0.2108,15%+,1,1,100,pending,,,line-moved,,,-204,9.5,against,opticodds,2026-09-22T17:47:03.773Z
+2026,3,disciplined,12561,Lamar Jackson,BAL,QB,at DAL,rushAtt,DraftKings,9.5,over,556,,0.1524,0.1524,,1,0.3473,0.1948,0.1948,15%+,1,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
+2026,3,disciplined,15947,Jake Ferguson,DAL,TE,vs BAL,recYds,DraftKings,24.5,over,-130,,0.5652,0.5652,,1,0.7558,0.1906,0.1906,15%+,1,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
+2026,3,disciplined,12483,Josh Allen,BUF,QB,vs LAC,passTD,DraftKings,1.5,under,124,-159,0.4464,0.4210,0.0603,0,0.5884,0.1420,0.1674,10-15%,1,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
+2026,3,disciplined,16899,Quentin Johnston,LAC,WR,at BUF,recYds,DraftKings,24.5,over,-223,,0.6904,0.6904,,1,0.8165,0.1261,0.1261,10-15%,1,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z

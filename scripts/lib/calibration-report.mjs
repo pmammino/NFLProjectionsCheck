@@ -247,6 +247,65 @@ export function holdout(byWeek, opts = {}) {
   };
 }
 
+// ---- Point accuracy ------------------------------------------------------
+// How close the MEDIAN came, independent of any band. This is the primary read
+// at team level, where the band is our own construction rather than something
+// the feed published, and the only valid read for an unbanded metric.
+function rankVector(xs) {
+  const idx = xs.map((v, i) => [v, i]);
+  idx.sort((a, b) => a[0] - b[0]);
+  const r = new Array(xs.length).fill(0);
+  let i = 0;
+  while (i < idx.length) {
+    let j = i;
+    while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++;
+    const avg = (i + j) / 2 + 1;
+    for (let k = i; k <= j; k++) r[idx[k][1]] = avg;
+    i = j + 1;
+  }
+  return r;
+}
+
+function pearson(x, y) {
+  const n = x.length;
+  if (n < 2) return NaN;
+  let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+  for (let i = 0; i < n; i++) {
+    sx += x[i]; sy += y[i]; sxx += x[i] * x[i]; syy += y[i] * y[i]; sxy += x[i] * y[i];
+  }
+  const cov = sxy - (sx * sy) / n;
+  const vx = sxx - (sx * sx) / n;
+  const vy = syy - (sy * sy) / n;
+  const d = Math.sqrt(vx * vy);
+  return d === 0 ? NaN : cov / d;
+}
+
+export function pointAccuracy(cells) {
+  const n = cells.length;
+  if (n === 0) return null;
+  let absErr = 0, sqErr = 0, sumAbsActual = 0, signed = 0;
+  const pctErrors = [];
+  for (const c of cells) {
+    const e = c.a - c.m;
+    absErr += Math.abs(e);
+    sqErr += e * e;
+    signed += e;
+    sumAbsActual += Math.abs(c.a);
+    if (c.m !== 0) pctErrors.push(e / Math.abs(c.m));
+  }
+  pctErrors.sort((a, b) => a - b);
+  return {
+    n,
+    meanErr: signed / n, // + = under-projected
+    mae: absErr / n,
+    rmse: Math.sqrt(sqErr / n),
+    // WAPE is robust where an actual can be zero, unlike a mean of ratios.
+    wape: sumAbsActual > 0 ? absErr / sumAbsActual : NaN,
+    medianPctBias: pctErrors.length ? quantileSorted(pctErrors, 0.5) : null,
+    spearman: pearson(rankVector(cells.map((c) => c.m)), rankVector(cells.map((c) => c.a))),
+  };
+}
+
 // ---- Assembly ------------------------------------------------------------
 // Group a dataset's rows into per-metric cell lists, and per-metric-per-week
 // for the holdout.
@@ -269,14 +328,20 @@ export function cellsByMetric(rows, metrics) {
 
 // One metric's full report.
 export function analyzeMetric({ meta, cells, byWeek }, opts = {}) {
+  // An unbanded metric (meta.banded === false) has no Floor/Ceiling worth
+  // reading — they collapse to the median — so every band-derived section is
+  // skipped rather than reported as a meaningless number.
+  const banded = meta.banded !== false;
   return {
     key: meta.key,
     label: meta.label,
     group: meta.group,
     kind: meta.kind,
-    coverage: coverage(cells),
-    fit: fitMultipliers(cells, opts),
-    holdout: opts.holdout === false ? null : holdout(byWeek, opts),
+    banded,
+    point: pointAccuracy(cells),
+    coverage: banded ? coverage(cells) : null,
+    fit: banded ? fitMultipliers(cells, opts) : null,
+    holdout: banded && opts.holdout !== false ? holdout(byWeek, opts) : null,
   };
 }
 

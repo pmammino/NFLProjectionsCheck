@@ -45,8 +45,8 @@ function parseArgs(argv) {
       default: throw new Error(`Unknown argument: ${t}`);
     }
   }
-  if (!["weekly", "season"].includes(a.scope)) {
-    throw new Error(`--scope must be weekly|season, got "${a.scope}"`);
+  if (!["weekly", "season", "team"].includes(a.scope)) {
+    throw new Error(`--scope must be weekly|season|team, got "${a.scope}"`);
   }
   for (const [flag, v] of [["--boot", a.boot], ["--seed", a.seed]]) {
     if (!Number.isFinite(v) || v < 0) throw new Error(`${flag} must be a number, got "${v}"`);
@@ -61,7 +61,8 @@ const HELP = `Quantile-calibration report over the built dashboard dataset.
 
   node scripts/calibration-report.mjs [options]
 
-  --scope <s>        weekly | season   (default: weekly)
+  --scope <s>        weekly | season | team   (default: weekly)
+                     team = offence-wide totals per team-week
   --metrics <list>   comma-separated metric keys (default: all)
   --split <n>        holdout: fit on the first n weeks, test on the rest
                      (default: first half)
@@ -80,6 +81,33 @@ const pct = (x, d = 1) => (Number.isFinite(x) ? (x * 100).toFixed(d) + "%" : "n/
 const signedPct = (k, d = 0) =>
   Number.isFinite(k) ? `${k >= 1 ? "+" : ""}${((k - 1) * 100).toFixed(d)}%` : "n/a";
 
+function pointTable(reports, scope) {
+  console.log("\n0. HOW CLOSE THE MEDIAN CAME");
+  if (scope === "team") {
+    console.log("   The primary read at team level. A team band is our own construction");
+    console.log("   (the feed publishes one per player, none for a team), but a sum of");
+    console.log("   medians is a fair estimate of the median of the sum.\n");
+  } else {
+    console.log("   Point accuracy of the median, independent of the band.\n");
+  }
+  console.log("   metric           N    mean err     MAE     WAPE   med %bias   rank corr");
+  for (const r of reports) {
+    const p = r.point;
+    if (!p) continue;
+    const f = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : "n/a");
+    console.log(
+      `   ${r.key.padEnd(14)} ${String(p.n).padStart(4)} ` +
+        `${f(p.meanErr).padStart(10)} ${f(p.mae).padStart(7)} ` +
+        `${(Number.isFinite(p.wape) ? (100 * p.wape).toFixed(1) + "%" : "n/a").padStart(8)} ` +
+        `${(p.medianPctBias === null ? "n/a" : (100 * p.medianPctBias).toFixed(1) + "%").padStart(11)} ` +
+        `${f(p.spearman).padStart(11)}`
+    );
+  }
+  console.log("\n   mean err: + = actual came in ABOVE the projection (under-projected).");
+  console.log("   WAPE: total absolute miss as a share of total actual. rank corr:");
+  console.log("   did the projections order the field correctly (1.0 = perfectly)?");
+}
+
 function coverageTable(reports) {
   console.log("\n1. WHERE EACH BAND LINE ACTUALLY SITS");
   console.log("   Floor/Median/Ceiling are the 25th/50th/75th percentiles, so the");
@@ -87,6 +115,7 @@ function coverageTable(reports) {
   console.log(
     "   metric        N     P<=F   (vs 25%)      P<=M   (vs 50%)      P<=C   (vs 75%)     within"
   );
+  const unbanded = reports.filter((r) => !r.banded).map((r) => r.key);
   for (const r of reports) {
     const c = r.coverage;
     if (!c) continue;
@@ -103,6 +132,12 @@ function coverageTable(reports) {
   }
   console.log("\n   ** = |z| >= 2.5 (solid)    * = |z| >= 1.5 (suggestive)    blank = noise");
   console.log("   within = share landing inside the band; should be 50%.");
+  if (unbanded.length) {
+    console.log(
+      `   Omitted as unbanded: ${unbanded.join(", ")} — a ratio's Floor/Ceiling do ` +
+        `not\n   order (the ceiling split raises both sides), so there is no band to score.`
+    );
+  }
 }
 
 function fitTable(reports) {
@@ -112,6 +147,7 @@ function fitTable(reports) {
   console.log("   metric        Floor              Median             Ceiling            inverts");
   for (const r of reports) {
     const f = r.fit;
+    if (!f) continue; // unbanded — nothing to move
     const cell = (line) => {
       const m = f[line];
       if (!m) return "n/a".padEnd(18);
@@ -174,10 +210,17 @@ function run() {
   }
 
   const ds = JSON.parse(readFileSync(a.data, "utf8"));
-  const source = a.scope === "season" ? ds.season : ds;
-  const metrics = a.scope === "season" ? ds.season.metrics : ds.meta.metrics;
-  const rows = a.scope === "season" ? ds.season.rows : ds.rows;
+  const pick = { weekly: ds, season: ds.season, team: ds.team }[a.scope];
+  const metrics = a.scope === "weekly" ? ds.meta.metrics : pick?.metrics;
+  const rows = a.scope === "weekly" ? ds.rows : pick?.rows;
 
+  if (a.scope === "team" && !ds.team) {
+    console.error(
+      "This dataset has no team section — rebuild with `npm run build:data`."
+    );
+    process.exitCode = 1;
+    return;
+  }
   if (a.scope === "season" && !ds.season?.available) {
     console.error("Season scope is not available in this dataset (season incomplete).");
     process.exitCode = 1;
@@ -189,6 +232,10 @@ function run() {
     return;
   }
 
+  // Team rows are whole offences; a fantasy cut on them is meaningless.
+  if (a.fantasy && a.scope === "team") {
+    throw new Error("--fantasy does not apply to --scope team (rows are whole offences)");
+  }
   const ranks = (a.scope === "season" ? ds.season.fantasyRanks : ds.meta.fantasyRanks) ?? {};
   const graded = a.fantasy ? filterFantasyRows(rows, ranks) : rows;
   if (a.fantasy && graded.length === 0) {
@@ -222,6 +269,12 @@ function run() {
   if (a.scope === "weekly") {
     console.log(`Weeks present: ${(ds.meta?.weeks ?? []).join(", ") || "none"}`);
   }
+  if (a.scope === "team") {
+    console.log(
+      `${ds.team.counts.teamWeeks} team-weeks across ${ds.team.teams.length} teams, ` +
+        `weeks ${ds.team.weeks.join(", ")}.`
+    );
+  }
   console.log(`Bootstrap: ${a.boot} resamples, seed ${a.seed} (reproducible).`);
   if (a.fantasy) {
     const label = Object.entries(ranks)
@@ -232,6 +285,7 @@ function run() {
         `(${graded.length} of ${rows.length} player-weeks).`
     );
   }
+  pointTable(reports, a.scope);
   coverageTable(reports);
   fitTable(reports);
   holdoutTable(reports);

@@ -18,6 +18,8 @@ import {
   analyze,
   isFantasyRelevant,
   filterFantasyRows,
+  pointAccuracy,
+  analyzeMetric,
 } from "./calibration-report.mjs";
 
 // A perfectly calibrated set: actuals 1..100 against floor 25 / median 50 /
@@ -277,4 +279,79 @@ test("filterFantasyRows keeps only the relevant rows", () => {
   ];
   const kept = filterFantasyRows(rows, RANKS);
   assert.deepEqual(kept, [{ pos: "WR", pr: 1 }, { pos: "QB", pr: 40 }, { pos: "RB", pr: 50 }]);
+});
+
+// ---- Point accuracy ------------------------------------------------------
+test("pointAccuracy measures the median, not the band", () => {
+  // Every actual is exactly 2 above its median, whatever the band does.
+  const cells = [10, 20, 30, 40].map((m) => ({ f: 0, m, c: 999, a: m + 2 }));
+  const p = pointAccuracy(cells);
+  assert.equal(p.n, 4);
+  assert.equal(p.meanErr, 2); // + = under-projected
+  assert.equal(p.mae, 2);
+  assert.equal(p.rmse, 2);
+  assert.equal(p.spearman, 1); // order preserved perfectly
+  // WAPE = total miss / total actual = 8 / (12+22+32+42)
+  assert.ok(Math.abs(p.wape - 8 / 108) < 1e-12);
+});
+
+test("pointAccuracy signs the error the stated way", () => {
+  const under = pointAccuracy([{ f: 0, m: 10, c: 20, a: 15 }]);
+  assert.ok(under.meanErr > 0, "actual above projection reads positive");
+  const over = pointAccuracy([{ f: 0, m: 10, c: 20, a: 5 }]);
+  assert.ok(over.meanErr < 0);
+});
+
+test("pointAccuracy survives zero actuals and zero medians", () => {
+  // WAPE exists because a mean of ratios blows up here.
+  const p = pointAccuracy([
+    { f: 0, m: 0, c: 0, a: 0 },
+    { f: 0, m: 4, c: 8, a: 0 },
+  ]);
+  assert.equal(p.n, 2);
+  assert.ok(Number.isNaN(p.wape) || Number.isFinite(p.wape));
+  // The m===0 row contributes no percentage error rather than an Infinity.
+  assert.equal(p.medianPctBias, -1);
+});
+
+test("pointAccuracy detects inverted ordering", () => {
+  const cells = [
+    { f: 0, m: 10, c: 20, a: 4 },
+    { f: 0, m: 20, c: 30, a: 3 },
+    { f: 0, m: 30, c: 40, a: 2 },
+    { f: 0, m: 40, c: 50, a: 1 },
+  ];
+  assert.equal(pointAccuracy(cells).spearman, -1);
+  assert.equal(pointAccuracy([]), null);
+});
+
+// ---- Unbanded metrics ----------------------------------------------------
+test("analyzeMetric skips every band section for an unbanded metric", () => {
+  // A ratio whose Floor/Ceiling do not order — scoring its band would be
+  // reporting a number with no meaning, so the sections are omitted.
+  const entry = {
+    meta: { key: "passRate", label: "Pass Rate", group: "Passing", kind: "rate", banded: false },
+    cells: [{ f: 0.6, m: 0.6, c: 0.6, a: 0.55 }],
+    byWeek: new Map([[1, [{ f: 0.6, m: 0.6, c: 0.6, a: 0.55 }]]]),
+  };
+  const r = analyzeMetric(entry, FAST);
+  assert.equal(r.banded, false);
+  assert.equal(r.coverage, null);
+  assert.equal(r.fit, null);
+  assert.equal(r.holdout, null);
+  assert.ok(r.point, "point accuracy is still reported — it is the only valid read");
+  assert.ok(Math.abs(r.point.meanErr - -0.05) < 1e-9);
+});
+
+test("analyzeMetric keeps the band sections when banded is absent or true", () => {
+  const cells = perfect();
+  const byWeek = new Map([[1, cells.slice(0, 50)], [2, cells.slice(50)]]);
+  for (const meta of [
+    { key: "a", label: "A", group: "G", kind: "volume" },
+    { key: "a", label: "A", group: "G", kind: "volume", banded: true },
+  ]) {
+    const r = analyzeMetric({ meta, cells, byWeek }, FAST);
+    assert.equal(r.banded, true);
+    assert.ok(r.coverage && r.fit && r.holdout && r.point);
+  }
 });

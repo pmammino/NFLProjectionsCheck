@@ -1,6 +1,6 @@
 Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
-2026,3,shopper,17795,MarShawn Lloyd,GB,RB,vs ATL,rushYds,BetRivers,49.5,over,380,,0.2083,0.2083,,1,0.4432,0.2349,0.2349,15%+,1,1,100,pending,,,line-moved,,,-245,19.5,against,opticodds,2026-09-22T17:47:03.773Z
-2026,3,shopper,16741,Chris Brooks,GB,RB,vs ATL,rushYds,BetRivers,29.5,over,310,,0.2439,0.2439,,1,0.4589,0.2150,0.2150,15%+,1,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
+2026,3,shopper,17795,MarShawn Lloyd,GB,RB,vs ATL,rushYds,BetRivers,49.5,over,380,,0.2083,0.2083,,1,0.4432,0.2349,0.2349,15%+,1,1,100,lost,11,-1,line-moved,,,-245,19.5,against,opticodds,2026-09-22T17:47:03.773Z
+2026,3,shopper,16741,Chris Brooks,GB,RB,vs ATL,rushYds,BetRivers,29.5,over,310,,0.2439,0.2439,,1,0.4589,0.2150,0.2150,15%+,1,1,100,lost,0,-1,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
 2026,3,shopper,12561,Lamar Jackson,BAL,QB,at DAL,rushYds,FanDuel,49.5,over,204,,0.3289,0.3289,,1,0.5419,0.2129,0.2129,15%+,1,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
 2026,3,shopper,15947,Jake Ferguson,DAL,TE,vs BAL,recYds,DraftKings,24.5,over,-130,,0.5652,0.5652,,1,0.7558,0.1906,0.1906,15%+,1,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
 2026,3,shopper,18445,Omarion Hampton,LAC,RB,at BUF,receptions,BetRivers,1.5,over,-143,,0.5885,0.5885,,1,0.7500,0.1615,0.1615,15%+,1,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z

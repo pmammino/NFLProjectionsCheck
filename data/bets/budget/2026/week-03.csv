@@ -3,5 +3,5 @@ Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,Opposite
 2026,3,budget,16741,Chris Brooks,GB,RB,vs ATL,rushYds,BetRivers,29.5,over,310,,0.2439,0.2439,,1,0.4589,0.2150,0.2150,15%+,3.685,1,100,lost,0,-3.685,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
 2026,3,budget,12561,Lamar Jackson,BAL,QB,at DAL,rushYds,FanDuel,49.5,over,204,,0.3289,0.3289,,1,0.5419,0.2129,0.2129,15%+,3.649,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
 2026,3,budget,15947,Jake Ferguson,DAL,TE,vs BAL,recYds,DraftKings,24.5,over,-130,,0.5652,0.5652,,1,0.7558,0.1906,0.1906,15%+,3.2668,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
-2026,3,budget,18445,Omarion Hampton,LAC,RB,at BUF,receptions,BetRivers,1.5,over,-143,,0.5885,0.5885,,1,0.7500,0.1615,0.1615,15%+,2.768,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
-2026,3,budget,12483,Josh Allen,BUF,QB,vs LAC,int,BetRivers,1.5,over,540,,0.1563,0.1563,,1,0.3083,0.1520,0.1520,15%+,2.6052,1,100,pending,,,not-found,,,,,,opticodds,2026-09-22T17:47:03.773Z
+2026,3,budget,18445,Omarion Hampton,LAC,RB,at BUF,receptions,BetRivers,1.5,over,-143,,0.5885,0.5885,,1,0.7500,0.1615,0.1615,15%+,2.768,1,100,pending,,,line-moved,,,220,2.5,toward,opticodds,2026-09-22T17:47:03.773Z
+2026,3,budget,12483,Josh Allen,BUF,QB,vs LAC,int,BetRivers,1.5,over,540,,0.1563,0.1563,,1,0.3083,0.1520,0.1520,15%+,2.6052,1,100,pending,,,matched,0.0038,0.0240,525,1.5,same,opticodds,2026-09-22T17:47:03.773Z

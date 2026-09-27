@@ -32,6 +32,7 @@ PlayerID,Name,Team,Pos
 10854,Tyler Higbee,LAR,TE
 10856,Carson Wentz,MIN,QB
 10919,Jacoby Brissett,ARI,QB
+10988,Sterling Shepard,NYJ,WR
 10994,Chris Moore,BAL,WR
 11008,Dak Prescott,DAL,QB
 11163,Demarcus Robinson,SF,WR
@@ -58,6 +59,7 @@ PlayerID,Name,Team,Pos
 11897,Eric Saubert,SEA,TE
 12061,Tim Patrick,NYJ,WR
 12196,Mo Alie-Cox,IND,TE
+12216,David Moore,CAR,WR
 12316,Johnny Mundt,PHI,TE
 12389,Robert Tonyan,PIT,TE
 12477,DJ Moore,BUF,WR
@@ -81,6 +83,7 @@ PlayerID,Name,Team,Pos
 12858,Ian Thomas,LV,TE
 12860,Dallas Goedert,PHI,TE
 12934,Marquez Valdes-Scantling,LAC,WR
+13286,Tanner Hudson,CIN,TE
 13418,KhaDarel Hodge,SF,WR
 13424,DK Metcalf,PIT,WR
 13426,Noah Fant,NO,TE
@@ -142,6 +145,7 @@ PlayerID,Name,Team,Pos
 14630,Juwan Johnson,NO,TE
 14636,Devin Duvernay,ARI,WR
 14657,Rico Dowdle,PIT,RB
+14750,Nick Westbrook-Ikhine,IND,WR
 15183,Ja'Marr Chase,CIN,WR
 15198,Trey Lance,LAC,QB
 15200,Nico Collins,HOU,WR
@@ -152,6 +156,7 @@ PlayerID,Name,Team,Pos
 15245,Kylen Granson,TEN,TE
 15265,Kyle Pitts,ATL,TE
 15267,Pat Freiermuth,PIT,TE
+15273,Michael Carter,TEN,RB
 15274,Dyami Brown,WAS,WR
 15280,Elijah Moore,PHI,WR
 15289,John Bates,WAS,TE
@@ -249,6 +254,7 @@ PlayerID,Name,Team,Pos
 16690,Parker Washington,JAX,WR
 16694,Tre Tucker,LV,WR
 16697,Dalton Kincaid,BUF,TE
+16701,Lew Nichols,PIT,RB
 16705,Tank Bigsby,PHI,RB
 16716,Aidan O'Connell,LV,QB
 16720,Payne Durham,TB,TE
@@ -373,6 +379,7 @@ PlayerID,Name,Team,Pos
 17976,Jalen Coker,CAR,WR
 17977,Isaiah Williams,NYJ,WR
 18160,Colson Yankoff,WAS,TE
+18251,Hayden Rucci,LAC,TE
 18300,British Brooks,HOU,RB
 18307,Kameron Johnson,TB,WR
 18443,DJ Giddens,IND,RB
@@ -530,4 +537,5 @@ PlayerID,Name,Team,Pos
 19607,Kaelon Black,SF,RB
 19608,Carsen Ryan,CLE,TE
 19631,Cyrus Allen,KC,WR
+19668,Malik McClain,NYJ,WR
 19681,Seydou Traore,MIA,TE

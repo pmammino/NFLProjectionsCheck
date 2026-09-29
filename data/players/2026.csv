@@ -93,6 +93,7 @@ PlayerID,Name,Team,Pos
 13438,Jarrett Stidham,DEN,QB
 13449,Devin Singletary,NYG,RB
 13466,Dawson Knox,BUF,TE
+13469,Greg Dortch,BUF,WR
 13484,Travis Homer,PIT,RB
 13491,Daniel Jones,IND,QB
 13502,Hollywood Brown,PHI,WR
@@ -271,6 +272,7 @@ PlayerID,Name,Team,Pos
 16807,Bryce Young,CAR,QB
 16808,Jahmyr Gibbs,DET,RB
 16810,Keaton Mitchell,LAC,RB
+16834,Mitchell Tinsley,CIN,WR
 16847,Jared Wayne,HOU,WR
 16849,Marvin Mims,DEN,WR
 16855,Luke Schoonmaker,DAL,TE
@@ -331,7 +333,7 @@ PlayerID,Name,Team,Pos
 17684,Ja'Lynn Polk,NO,WR
 17687,Xavier Worthy,KC,WR
 17688,Jordan Whittington,LAR,WR
-17689,J.J. McCarthy,MIN,QB
+17689,J.J. McCarthy,NYG,QB
 17690,Blake Corum,LAR,RB
 17692,Jayden Daniels,WAS,QB
 17693,Brock Bowers,LV,TE

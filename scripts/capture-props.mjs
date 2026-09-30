@@ -75,6 +75,9 @@
 //                                  [--kelly-fraction 0.25] [--kelly-cap 0.03]
 //                                  [--devig-method multiplicative]
 //                                  [--edge-basis ev|novig]
+//                                  [--price-model projection|blend]
+//                                  [--price-model-set retail|sharp|all]
+//                                  [--price-model-file data/pricing/…/model.json]
 //                                  [--sides both|over|under]
 //                                  [--books "DraftKings,FanDuel"] (default: lib/books.mjs)
 //                                  [--all-books] [--include-offshore]
@@ -108,6 +111,8 @@ import { DEFAULT_BOOKS, resolveBookIds } from "./lib/books.mjs";
 import { readCsv, toCsv } from "./lib/csv.mjs";
 import { seasonForDate, projectionWeek } from "./lib/schedule.mjs";
 import { edgeBucket } from "./lib/edge.mjs";
+import { consensusProb, estimateHoldByStat, MARKET_SET_NAMES } from "./lib/consensus.mjs";
+import { predict as predictPrice } from "./lib/pricing.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -136,6 +141,7 @@ export const PROPS_COLUMNS = [
   "ModelEdge", // OurProb - FairProb : disagreement with the market's true belief
   "EdgeBasis", // which of the two the --min-edge filter was applied to
   "DevigMethod",
+  "PriceModel", // which model produced OurProb: projection | blend
   "LineSource", // live | closing | opening — see historicalToMarkets
   "FixtureID",
   "CapturedAt",
@@ -151,6 +157,11 @@ function parseArgs(argv) {
     devigMethod: DEFAULT_DEVIG_METHOD,
     edgeBasis: "ev",
     sides: "both",
+    // The projection-only price stays the default. Switching the live ledger
+    // onto a fitted model is a decision for the report to earn, not one to
+    // inherit by upgrading.
+    priceModel: "projection",
+    priceModelSet: "retail",
     historical: false,
     dryRun: false,
   };
@@ -164,6 +175,9 @@ function parseArgs(argv) {
       case "--kelly-fraction": a.kellyFraction = Number(next()); break;
       case "--kelly-cap": a.kellyCap = Number(next()); break;
       case "--devig-method": a.devigMethod = next(); break;
+      case "--price-model": a.priceModel = next(); break;
+      case "--price-model-set": a.priceModelSet = next(); break;
+      case "--price-model-file": a.priceModelFile = next(); break;
       case "--edge-basis": a.edgeBasis = next(); break;
       case "--sides": a.sides = next(); break;
       case "--books": a.books = next().split(",").map((s) => s.trim()).filter(Boolean); break;
@@ -188,6 +202,12 @@ function parseArgs(argv) {
   }
   if (!["ev", "novig"].includes(a.edgeBasis)) {
     throw new Error("--edge-basis must be one of: ev, novig");
+  }
+  if (!["projection", "blend"].includes(a.priceModel)) {
+    throw new Error("--price-model must be one of: projection, blend");
+  }
+  if (!MARKET_SET_NAMES.includes(a.priceModelSet)) {
+    throw new Error(`--price-model-set must be one of: ${MARKET_SET_NAMES.join(", ")}`);
   }
   return a;
 }
@@ -256,6 +276,91 @@ export function ourProbability({ line, statKey }, splits) {
   const m = sumCols(splits.M, statDef.projCols);
   const c = sumCols(splits.C, statDef.projCols);
   return probOverContinuous(line, f, m, c);
+}
+
+// ---------------------------------------------------------------------------
+// Optional second pricing pass: the fitted blend
+// ---------------------------------------------------------------------------
+// priceMarket sees one book at a time and so can only ever produce the
+// projection-only price. The blend needs the whole market — a consensus is
+// not a property of any single quote — so it runs here, over every candidate,
+// exactly as the disagreement cap does.
+//
+// Two invariants this maintains and a naive implementation would not:
+//
+//  1. THE TWO SIDES STAY COHERENT. Only the Over is blended; the Under is set
+//     to its complement. Blending each side independently would produce a
+//     pair that does not sum to 1, which is not a probability and would show
+//     up as free arbitrage against ourselves.
+//
+//  2. A MARKET WITH NO CONSENSUS KEEPS ITS PROJECTION PRICE rather than being
+//     dropped or silently defaulted to the book. The blend is an improvement
+//     where it applies, not a precondition for pricing, and `PriceModel`
+//     records per row which one was used so a ledger stays auditable.
+//
+// Returns the number of candidates actually re-priced.
+export function repriceWithBlend(priced, fit, { marketSet = "retail", devigMethod } = {}) {
+  if (!fit) return 0;
+  const holdByStat = estimateHoldByStat(priced.map((p) => ({ stat: p.statKey, hold: p.hold })));
+
+  const groups = new Map();
+  for (const p of priced) {
+    const key = [p.rotowirePlayerId, p.statKey, p.line].join("|");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+
+  let changed = 0;
+  for (const group of groups.values()) {
+    // One quote per candidate, stated from the market's point of view so the
+    // consensus does not care which side each row was written from.
+    const quotes = group.map((p) => ({
+      book: p.sportsbook,
+      overOdds: p.side === "over" ? p.odds : p.oppositeOdds,
+      underOdds: p.side === "over" ? p.oppositeOdds : p.odds,
+    }));
+    const stat = group[0].statKey;
+    const cons = consensusProb(quotes, { side: "over", setName: marketSet, holdByStat, stat, method: devigMethod });
+    if (!cons) continue;
+
+    const over = group.find((p) => p.side === "over");
+    const projOver = over ? over.ourProb : 1 - group[0].ourProb;
+    const blended = predictPrice(fit, { stat, pProj: projOver, pMarket: cons.prob });
+    if (blended === null) continue;
+
+    for (const p of group) {
+      p.ourProb = p.side === "under" ? 1 - blended : blended;
+      p.edge = p.ourProb - p.impliedProb;
+      p.modelEdge = p.ourProb - p.fairProb;
+      p.priceModel = "blend";
+      changed++;
+    }
+  }
+  return changed;
+}
+
+// Load the fit written by `price-model.mjs --write`.
+//
+// Fails loudly rather than falling back to the projection price: a run asked
+// for the blend, and quietly giving it something else would put rows in a
+// ledger labelled with a model that never ran.
+function loadPriceModel(a) {
+  const path = a.priceModelFile ?? join(a.dataDir, "pricing", String(a.season), "model.json");
+  if (!existsSync(path)) {
+    throw new Error(
+      `--price-model blend needs a fitted model at ${path}.\n` +
+        `    Run: node scripts/price-model.mjs --season ${a.season} --write`
+    );
+  }
+  const payload = JSON.parse(readFileSync(path, "utf8"));
+  const set = payload.sets?.[a.priceModelSet];
+  if (!set?.fit) {
+    throw new Error(
+      `${path} carries no fit for market set "${a.priceModelSet}" ` +
+        `(has: ${Object.keys(payload.sets ?? {}).join(", ") || "none"}).`
+    );
+  }
+  return { ...set.fit, trainedOnWeeks: set.trainedOnWeeks };
 }
 
 const csvRowCount = (csv) => Math.max(0, csv.trim().split("\n").length - 1);
@@ -710,6 +815,38 @@ async function main() {
     }
   }
 
+  // Optional: re-price off the fitted blend, now that every book's price for
+  // a market is in hand and a consensus can be formed. Runs BEFORE the
+  // disagreement cap on purpose — the cap is a judgement about the price we
+  // are actually going to bet, so it has to see the final number.
+  if (a.priceModel === "blend") {
+    const fit = loadPriceModel(a);
+    const changed = repriceWithBlend(priced, fit, { marketSet: a.priceModelSet, devigMethod: a.devigMethod });
+    const [tilt, mktWeight, disagreeWeight] = fit.global;
+    console.log(
+      `  re-priced ${changed} of ${priced.length} candidates off the fitted blend ` +
+        `(set "${a.priceModelSet}", trained on weeks ${fit.trainedOnWeeks?.join(", ") || "?"}).`
+    );
+    console.log(
+      `    weights: tilt a=${tilt.toFixed(3)}, market c=${mktWeight.toFixed(3)}, ` +
+        `disagreement b=${disagreeWeight.toFixed(3)}`
+    );
+    // The intercept is the dangerous one. It moves EVERY price in the same
+    // direction, so a tilt fitted on a sample that over-represents overs
+    // silently turns the whole board into over bets. On the 2026 captures
+    // that is exactly what it is doing — the actuals feed omits players who
+    // recorded nothing, which are the under wins — so it is called out here
+    // rather than left to be discovered in a ledger.
+    if (Math.abs(tilt) > 0.1) {
+      console.warn(
+        `    WARNING: a global tilt of ${tilt.toFixed(3)} shifts every price toward ` +
+          `${tilt > 0 ? "overs" : "unders"}.\n` +
+          `    Check the dataset section of \`npm run price-model\` for how much of that\n` +
+          `    is a selection effect before trusting a ledger built on it.`
+      );
+    }
+  }
+
   // The market-disagreement cap, now that every book's price is in hand.
   // The support floor already ran inside priceMarket, so nothing here can be
   // a market we declined to price.
@@ -756,6 +893,7 @@ async function main() {
     ModelEdge: p.modelEdge.toFixed(4),
     EdgeBasis: a.edgeBasis,
     DevigMethod: p.oneSided ? "none" : a.devigMethod,
+    PriceModel: p.priceModel ?? "projection",
     LineSource: p.lineSource ?? "live",
     FixtureID: p.fixtureId,
     CapturedAt: capturedAt,
@@ -946,6 +1084,18 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                                    market. Always larger, so it selects many
                                    more bets — most of them not +EV. For
                                    research, not for a live ledger.
+  --price-model <m>        projection | blend (default: projection)
+                           projection = OurProb from the Floor/Median/Ceiling
+                                   distribution alone; the long-standing
+                                   behaviour and still the default.
+                           blend = re-price off the fitted model written by
+                                   price-model.mjs --write, which combines
+                                   the projection with the multi-book
+                                   consensus. Only turn this on once the
+                                   report shows the blend beating the market
+                                   out of sample; see README.
+  --price-model-set <s>    which fitted market set to price off (default: retail)
+  --price-model-file <p>   fit to load (default: data/pricing/{season}/model.json)
   --sides <s>              both | over | under (default: both)
   --books <a,b,c>          Sportsbooks to price against. Names are resolved
                            against the live list, so "hardrock" finds whatever

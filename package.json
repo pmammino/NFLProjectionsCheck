@@ -6,6 +6,7 @@
     "build:data": "node scripts/build-data.mjs",
     "build:betting": "node scripts/build-betting-data.mjs",
     "calibration-report": "node scripts/calibration-report.mjs",
+    "price-model": "node scripts/price-model.mjs",
     "ingest": "node scripts/ingest.mjs",
     "capture-props": "node scripts/capture-props.mjs",
     "capture-closing": "node scripts/capture-props.mjs --closing",

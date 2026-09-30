@@ -52,6 +52,9 @@ export const LEDGER_COLUMNS = [
   "Book", "Line", "Side", "Odds", "OppositeOdds",
   "ImpliedProb", "FairProb", "Hold", "OneSided",
   "OurProb", "Edge", "ModelEdge", "EdgeBucket",
+  // Which model produced OurProb (projection | blend). A ledger that cannot
+  // say how its bets were priced cannot be re-read months later.
+  "PriceModel",
   "StakeUnits", "ScaledBy", "BankrollBefore",
   "Status", "Actual", "PnlUnits",
   // Closing Line Value — null until a closing snapshot exists for the week.
@@ -123,6 +126,9 @@ function toEdge(row) {
     // no fair price to disagree with, so it equals the raw edge by definition.
     modelEdge: num(row.ModelEdge) ?? num(row.Edge),
     maxStake: num(row.MaxStake),
+    // Which model produced OurProb. Absent on every row captured before the
+    // blend existed, and those were all priced off the projection alone.
+    priceModel: row.PriceModel || "projection",
     source: row.Source || (row.OneSided === undefined ? "rotowire" : "opticodds"),
     capturedAt: row.CapturedAt || "",
   };
@@ -259,6 +265,7 @@ function runPersona(a, persona, season, weeks) {
         Hold: fixed(bet.hold), OneSided: bet.oneSided ? 1 : 0,
         OurProb: fixed(bet.ourProb), Edge: fixed(bet.edge), ModelEdge: fixed(bet.modelEdge),
         EdgeBucket: edgeBucket(persona.edgeBasis === "novig" ? bet.modelEdge : bet.edge),
+        PriceModel: bet.priceModel,
         StakeUnits: bet.stakeUnits, ScaledBy: bet.scaledBy,
         BankrollBefore: round4(bankrollBefore),
         Status: status, Actual: actual, PnlUnits: pnlUnits,

@@ -81,7 +81,8 @@
 //                                  [--sides both|over|under]
 //                                  [--books "DraftKings,FanDuel"] (default: lib/books.mjs)
 //                                  [--all-books] [--include-offshore]
-//                                  [--historical]   closing lines for a played week
+//                                  [--historical] [--at opening|closing|T-48h]
+//                                  [--slot main|thursday|…]
 //                                  [--data-dir data] [--dry-run]
 //
 // Env: OPTICODDS_API_KEY (required).
@@ -103,7 +104,9 @@ import { OpticOddsClient } from "./lib/opticodds.mjs";
 import {
   normalizeOddsPayloads,
   flattenHistoricalPayloads,
-  historicalLineValue,
+  parseAtSpec,
+  atSpecLabel,
+  historicalPriceAt,
   pairOdds,
 } from "./lib/optic-normalize.mjs";
 import { buildPlayerIndex, matchPlayer, canonicalTeam } from "./lib/crosswalk.mjs";
@@ -111,6 +114,7 @@ import { DEFAULT_BOOKS, resolveBookIds } from "./lib/books.mjs";
 import { readCsv, toCsv } from "./lib/csv.mjs";
 import { seasonForDate, projectionWeek } from "./lib/schedule.mjs";
 import { edgeBucket } from "./lib/edge.mjs";
+import { SLOT_MAIN, slotDir, assertValidSlot } from "./lib/slots.mjs";
 import { consensusProb, estimateHoldByStat, MARKET_SET_NAMES } from "./lib/consensus.mjs";
 import { predict as predictPrice } from "./lib/pricing.mjs";
 
@@ -142,6 +146,7 @@ export const PROPS_COLUMNS = [
   "EdgeBasis", // which of the two the --min-edge filter was applied to
   "DevigMethod",
   "PriceModel", // which model produced OurProb: projection | blend
+  "Slot", // which capture of the week this is: main (the Tuesday drop) or a later one
   "LineSource", // live | closing | opening — see historicalToMarkets
   "FixtureID",
   "CapturedAt",
@@ -163,6 +168,7 @@ function parseArgs(argv) {
     priceModel: "projection",
     priceModelSet: "retail",
     historical: false,
+    slot: SLOT_MAIN,
     dryRun: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -182,6 +188,8 @@ function parseArgs(argv) {
       case "--sides": a.sides = next(); break;
       case "--books": a.books = next().split(",").map((s) => s.trim()).filter(Boolean); break;
       case "--historical": a.historical = true; break;
+      case "--at": a.at = next(); break;
+      case "--slot": a.slot = next(); a.slotExplicit = true; break;
       case "--use-opening": a.useOpening = true; break;
       case "--allow-empty": a.allowEmpty = true; break;
       case "--include-offshore": a.includeOffshore = true; break;
@@ -209,6 +217,24 @@ function parseArgs(argv) {
   if (!MARKET_SET_NAMES.includes(a.priceModelSet)) {
     throw new Error(`--price-model-set must be one of: ${MARKET_SET_NAMES.join(", ")}`);
   }
+
+  // --at reconstructs a moment from the price history, so it only means
+  // anything on a historical pull. Silently ignoring it on a live one would
+  // write a file labelled as a reconstruction that is really just "now".
+  if (a.at !== undefined && !a.historical) {
+    throw new Error("--at only applies to --historical (it reconstructs a past moment).");
+  }
+  if (a.historical) {
+    a.atSpec = parseAtSpec(a.at ?? (a.useOpening ? "opening" : "closing"));
+    if (a.at !== undefined && a.useOpening) {
+      throw new Error("--use-opening and --at are two ways to say the same thing; pass one.");
+    }
+    // A reconstruction defaults into its own slot. Overwriting the Tuesday
+    // drop with a backfill would destroy the only record of what was actually
+    // published, which no later run can rebuild. Pass --slot main to mean it.
+    if (!a.slotExplicit) a.slot = atSpecLabel(a.atSpec);
+  }
+  assertValidSlot(a.slot);
   return a;
 }
 
@@ -219,8 +245,12 @@ const selectionEdge = (cand, basis) => (basis === "novig" ? cand.modelEdge : can
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const projPath = (dir, season, week) => join(ROOT, dir, "projections", String(season), `week-${pad2(week)}.csv`);
-const propsPath = (dir, season, week) => join(ROOT, dir, "props", String(season), `week-${pad2(week)}.csv`);
-const edgesPath = (dir, season, week) => join(ROOT, dir, "edges", String(season), `week-${pad2(week)}.csv`);
+// Slot-aware output paths. See lib/slots.mjs for what a slot is and why the
+// Tuesday drop keeps the original filenames.
+const propsPath = (dir, season, week, slot) =>
+  join(ROOT, dir, "props", String(season), slotDir(slot), `week-${pad2(week)}.csv`);
+const edgesPath = (dir, season, week, slot) =>
+  join(ROOT, dir, "edges", String(season), slotDir(slot), `week-${pad2(week)}.csv`);
 const closingPath = (dir, season, week) => join(ROOT, dir, "closing", String(season), `week-${pad2(week)}.csv`);
 const rosterPath = (dir, season) => join(ROOT, dir, "players", `${season}.csv`);
 
@@ -605,7 +635,7 @@ async function fetchWeekOdds(client, a, fixtures) {
 
   if (a.historical) {
     console.log(
-      `  fetching ${a.useOpening ? "OPENING" : "CLOSING"} lines (historical) for ` +
+      `  fetching historical odds as of ${atSpecLabel(a.atSpec)} for ` +
         `${fixtureIds.length} fixtures — one request per fixture per 5 books, so this is slow…`
     );
     const payloads = await client.getHistoricalOdds({ fixtureIds, sportsbooks, markets, onProgress });
@@ -630,9 +660,13 @@ function historicalToMarkets(payloads, a) {
   const collapsed = [];
   let noPrice = 0;
   const bySource = { closing: 0, opening: 0, fallback: 0, timeseries: 0 };
+  const atLabel = atSpecLabel(a.atSpec);
   for (const rec of records) {
-    const lv = historicalLineValue(rec, { prefer: a.useOpening ? "opening" : "closing" });
+    const lv = historicalPriceAt(rec, a.atSpec);
     if (!lv) {
+      // On an offset this is usually not an error: an odd the book had not
+      // posted by that hour is ABSENT from the board then, which is the fact
+      // the timing question turns on. It is counted, not warned about.
       noPrice++;
       continue;
     }
@@ -643,7 +677,14 @@ function historicalToMarkets(payloads, a) {
     // is not the same instrument as one captured live near close, and mixing
     // them unlabelled would quietly flatter the backtest — opening lines are
     // softer, before the book has absorbed sharp action.
-    const lineSource = lv.source === "fallback" ? (a.useOpening ? "closing" : "opening") : lv.source;
+    // Record WHICH moment this price is from. On an offset that is the offset
+    // itself, so a row backfilled at T-48h can never be read as a live one.
+    const lineSource =
+      a.atSpec.kind === "opening" || a.atSpec.kind === "closing"
+        ? lv.source === "fallback"
+          ? a.atSpec.kind === "opening" ? "closing" : "opening"
+          : lv.source
+        : atLabel;
     collapsed.push({ ...rec, price: lv.price, points: lv.points ?? rec.points, lineSource });
   }
 
@@ -767,7 +808,7 @@ async function main() {
     `  ${markets.length} distinct markets after pairing ` +
       `(${markets.filter((m) => m.oneSided).length} one-sided).`
   );
-  reportDiagnostics(diagnostics, a.useOpening);
+  reportDiagnostics(diagnostics, a.atSpec ?? null);
 
   // Join each market to a RotoWire player, then price it.
   const capturedAt = now.toISOString();
@@ -894,6 +935,7 @@ async function main() {
     EdgeBasis: a.edgeBasis,
     DevigMethod: p.oneSided ? "none" : a.devigMethod,
     PriceModel: p.priceModel ?? "projection",
+    Slot: a.slot,
     LineSource: p.lineSource ?? "live",
     FixtureID: p.fixtureId,
     CapturedAt: capturedAt,
@@ -917,7 +959,7 @@ async function main() {
     return;
   }
 
-  writeCsvIfChanged(propsPath(a.dataDir, a.season, a.week), toCsv(PROPS_COLUMNS, propsRows), a);
+  writeCsvIfChanged(propsPath(a.dataDir, a.season, a.week, a.slot), toCsv(PROPS_COLUMNS, propsRows), a);
 
   // ---- data/edges: the published signal ----
   //
@@ -934,20 +976,31 @@ async function main() {
       `${(a.minEdge * 100).toFixed(1)}% bar, across ` +
       `${new Set(edgeRows.map((r) => `${r.PlayerID}|${r.Stat}`)).size} player-stats.`
   );
-  writeCsvIfChanged(edgesPath(a.dataDir, a.season, a.week), toCsv(PROPS_COLUMNS, edgeRows), a);
+  writeCsvIfChanged(edgesPath(a.dataDir, a.season, a.week, a.slot), toCsv(PROPS_COLUMNS, edgeRows), a);
 
   reportBetComposition(edgeRows);
 
   console.log(`Done. ${client.requestCount} OpticOdds requests.`);
 }
 
-function reportDiagnostics(d, a_useOpening = false) {
+function reportDiagnostics(d, atSpec = null) {
+  const a_useOpening = atSpec?.kind === "opening";
   if (!d) return;
   if (d.noSide) console.warn(`  ${d.noSide} records had no identifiable side — skipped.`);
   if (d.missingPrice) console.warn(`  ${d.missingPrice} records had no usable price/line — skipped.`);
   if (d.missingPlayer) console.warn(`  ${d.missingPlayer} records had no player — skipped.`);
   if (d.teamEntries) console.log(`  ${d.teamEntries} team entries (D/ST etc.) in player markets — skipped.`);
-  if (d.noHistoricalPrice) console.warn(`  ${d.noHistoricalPrice} historical odds carried neither a closing nor an opening price — skipped.`);
+  if (d.noHistoricalPrice) {
+    if (atSpec && atSpec.kind !== "opening" && atSpec.kind !== "closing") {
+      console.warn(
+        `  ${d.noHistoricalPrice} odds had no price as of ${atSpecLabel(atSpec)} — skipped.`
+      );
+    } else {
+      console.warn(
+        `  ${d.noHistoricalPrice} historical odds carried neither a closing nor an opening price — skipped.`
+      );
+    }
+  }
   if (d.lineValueSources) {
     const { closing = 0, opening = 0, fallback = 0, timeseries = 0 } = d.lineValueSources;
     const total = closing + opening + fallback + timeseries;
@@ -975,6 +1028,22 @@ function reportDiagnostics(d, a_useOpening = false) {
       );
     }
   }
+  // An offset needs the per-odd `entries` timeseries, which is a separate
+  // OpticOdds permission. Without it every offset row resolves to nothing,
+  // and the run looks like "the books had posted nothing" rather than "we are
+  // not allowed to see when they posted it". Those need telling apart.
+  if (atSpec && atSpec.kind === "offset" && (d.lineValueSources?.timeseries ?? 0) === 0) {
+    console.warn(
+      `\n  NOTHING resolved at ${atSpecLabel(atSpec)}: not one odd carried a price history.\n` +
+        `    An offset is reconstructed from each odd's \`entries\` timeseries, which is a\n` +
+        `    separate OpticOdds permission (include_timeseries). If your key lacks it, the\n` +
+        `    only moments available are --at opening and --at closing.\n` +
+        `    Note also that on this project's key clv comes back null for PLAYER props\n` +
+        `    (populated on game markets only), so --at closing will in practice fall back\n` +
+        `    to the opening line and say so above.`
+    );
+  }
+
   if (d.unmatchedMarkets?.size) {
     // Not necessarily a problem — most are markets we deliberately don't model
     // (moneyline, spreads, kicker props). But a market we DO want showing up
@@ -1108,6 +1177,24 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
   --include-offshore       With --all-books, also include offshore books. The
                            sharpest (Pinnacle) give the best fair-price
                            reference for judging ModelEdge.
+  --slot <name>            Which capture of the week this is (default: main).
+                           'main' is the Tuesday drop and keeps the original
+                           file paths; any other name nests one level deeper,
+                           e.g. data/props/2026/thursday/week-03.csv. Use it
+                           to capture a week more than once — the Tuesday
+                           board is a small fraction of what the books
+                           eventually post. See scripts/lib/slots.mjs.
+  --at <moment>            With --historical, WHICH moment to reconstruct:
+                             opening | closing   the endpoints (olv/clv)
+                             T-48h, T-24h, T-3h  that many hours before each
+                                                 fixture's OWN kickoff
+                             <ISO timestamp>     an absolute moment
+                           Offsets need the per-odd price history, which is a
+                           separate OpticOdds permission (include_timeseries);
+                           without it the run says so rather than silently
+                           substituting the opening line. Defaults the slot to
+                           the moment reconstructed, so a backfill can never
+                           overwrite the record of what was actually published.
   --historical             Pull closing lines for a week already played,
                            instead of current odds. OpticOdds retains history
                            on a rolling 2-month window, so older weeks cannot

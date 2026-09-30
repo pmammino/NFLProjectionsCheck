@@ -377,6 +377,113 @@ dashboard labels anything too small to be conclusive. A persona's ROI shows
 what a strategy would have **felt** like; only the benchmark can establish
 whether the projections work.
 
+### When the board actually exists — slots
+
+The Tuesday drop above is one sample of the market per week, taken at one
+hour. Measured against what the same week looked like near kickoff, that hour
+catches very little of it:
+
+| | Tuesday drop | near kickoff | |
+|---|---|---|---|
+| Week 2 | 1,544 markets / **15** of 16 games | 18,692 / 16 | **8%** of the board |
+| Week 3 | 2,559 markets / **3** of 16 games | 62,590 / 16 | **4%**, 13 games never seen |
+
+Books post player props game by game through the week, so on Tuesday most of
+the board does not exist yet. Two-sided quotes — the only ones that can be
+de-vigged into a fair price — go from 51% of the Tuesday board to 74% near
+kickoff, which is why so much of `data/props/` is flagged `OneSided`.
+
+The obvious fix, moving the drop later, would throw away something real. Those
+Tuesday prices **beat the close by +5.25%** across 45 player-weeks, a 70% beat
+rate. Early genuinely is softer, exactly as claimed above. Both facts hold at
+once: Tuesday has the best prices and almost none of the board.
+
+So a week can now be captured **more than once**, and each capture writes into
+its own **slot** (`scripts/lib/slots.mjs`):
+
+```
+data/props/2026/week-03.csv             main     — the Tuesday drop
+data/props/2026/thursday/week-03.csv    thursday — the midweek sweep
+data/props/2026/t-48h/week-03.csv       t-48h    — a backfill reconstruction
+```
+
+`main` keeps the original paths, so every committed file and every existing
+reader is untouched. Both drops publish edges, the personas bet both — the
+dedupe then picks the better price across them, as a subscriber holding both
+would — and every row carries a `Slot` column that the ledgers and the
+`bySlot` rollup split on. Pooling two sourcing times into one ROI would
+destroy the only comparison that decides which one to keep.
+
+| Workflow | When (UTC) | Slot |
+|---|---|---|
+| `props-weekly.yml` | Tue 14:00 | `main` — softest prices, thin board |
+| `props-midweek.yml` | Thu 15:00 | `thursday` — full board, still pre-kickoff |
+
+Thursday 15:00 sits ~9 hours before Thursday Night Football, so **every** game
+of the week is still bettable. Saturday would catch a fuller board again but
+TNF would already have played. Which is actually better is a measurement, not
+an argument — see below.
+
+### Backfilling a past week
+
+```bash
+node scripts/capture-props.mjs --historical --at closing --season 2026 --week 3
+node scripts/capture-props.mjs --historical --at T-48h  --season 2026 --week 3
+```
+
+`--at` reconstructs the board as of a chosen moment from OpticOdds' price
+history. An offset like `T-48h` is resolved against **each fixture's own
+kickoff**, never against a wall-clock time: NFL games run Thursday, Sunday and
+Monday, so one absolute timestamp sits 24 hours from one game and 96 from
+another and would compare prices at completely different stages of their own
+markets.
+
+A reconstruction defaults its slot to the moment it reconstructs, so it
+**cannot overwrite the Tuesday drop**. That matters more than it looks: the
+drop is the record of what a subscriber was actually sent, and it is the one
+artefact in this repo that no later run can rebuild. Everything else —
+ledgers, rollups, the dashboard dataset — is a pure function of the snapshots.
+
+Run it from the **Backfill props** workflow, which takes a list of weeks and
+carries on past a week that fails rather than discarding the ones that
+succeeded. It is slow: the historical endpoint takes one fixture per request
+and is rate-limited to 10 requests per 15 seconds.
+
+> **What your API key has to allow.** Offsets are reconstructed from each
+> odd's `entries` price history, which is a **separate OpticOdds permission**
+> (`include_timeseries`). Without it only `--at opening` and `--at closing`
+> resolve, and the run says so loudly rather than substituting a different
+> price — an opening line is not a T-48h line, and quietly swapping one for
+> the other would answer the timing question with the wrong data.
+>
+> Note also that on this project's key `clv` comes back **null for player
+> props** (it is populated on game markets only), so `--at closing` falls back
+> to the opening line for most rows. The capture reports the share this
+> happened to and records it in `LineSource`, so those rows stay a separate
+> cohort rather than being pooled with live-captured ones.
+
+### Which slot to source from
+
+```bash
+npm run board-timing
+```
+
+Compares every capture of every week side by side — the live drops, any
+backfilled reconstructions, and the daily near-kickoff capture as the ceiling
+— on coverage (fixtures, players, markets), the two-sided share, the hold, and
+where actuals exist the Brier score of both the market and our projection.
+
+It deliberately does not pick a winner. Coverage and price quality pull in
+opposite directions, and how much each matters depends on how many bets you
+intend to place. What it removes is the guessing: a slot is worth moving to
+when it gains enough coverage to matter *without* its prices having sharpened
+away the edge, and the Tuesday drop's +5.25% closing-line value is the number
+a later slot has to be weighed against.
+
+Read the Brier columns next to the `clusters` column, never alone. Each slot
+is scored only over the markets it actually saw, so a slot with a tiny board
+is not being judged on the same bets as a full one.
+
 ### Closing line value
 
 The measurement that does not depend on bets winning. `data/closing/` records
@@ -398,12 +505,16 @@ not invent.
 ### Pipeline
 
 ```
-scripts/capture-props.mjs            Tuesday: publish data/edges/
-scripts/capture-props.mjs --closing  daily: record data/closing/ near each kickoff
-scripts/simulate-personas.mjs        replay every persona over the season
-scripts/build-betting-data.mjs       aggregate into public/data/betting.json
-scripts/price-model.mjs              score the projections AGAINST the books
-                                     (Brier / log loss) — see Pricing lines
+scripts/capture-props.mjs                 Tuesday: publish data/edges/ (slot main)
+scripts/capture-props.mjs --slot thursday Thursday: the same, once the board exists
+scripts/capture-props.mjs --closing       daily: record data/closing/ near each kickoff
+scripts/capture-props.mjs --historical --at T-48h
+                                          rebuild a past board at a chosen moment
+scripts/simulate-personas.mjs             replay every persona over every slot
+scripts/build-betting-data.mjs            aggregate into public/data/betting.json
+scripts/board-timing.mjs                  compare the slots — when to source
+scripts/price-model.mjs                   score the projections AGAINST the books
+                                          (Brier / log loss) — see Pricing lines
 ```
 
 ```bash
@@ -418,8 +529,10 @@ npm run simulate -- --persona kelly --dry-run      # one persona, no writes
 | Workflow | When (UTC) | What |
 |---|---|---|
 | `ingest-weekly.yml` | daily **13:00** | RotoWire projections + actuals, the player roster, then replays personas |
-| `props-weekly.yml` | **Tue 14:00** | The drop: publish edges, replay personas |
+| `props-weekly.yml` | **Tue 14:00** | The drop: publish edges (slot `main`), replay personas |
+| `props-midweek.yml` | **Thu 15:00** | The second drop: the same once the books have posted the board (slot `thursday`) |
 | `closing-lines.yml` | daily **15:00** | Record closing lines for games kicking off soon |
+| `props-backfill.yml` | manual | Rebuild a past week's board at a chosen moment |
 | `optic-discover.yml` | manual | Inspect what the OpticOdds API returns |
 
 The hour between ingest and the drop is load-bearing, not cosmetic. The NFL
@@ -428,7 +541,7 @@ drop needs week N+1 projections — and Monday's ingest only wrote week N. They
 are created by the run immediately before it. Starting both together races, and
 the capture fails with *"No projections snapshot"*.
 
-All three data-writing workflows also share one `concurrency` group. They each
+All the data-writing workflows also share one `concurrency` group. They each
 `git add data/` and push to the same branch, so two at once means the second
 push is rejected; and because scheduled runs can be delayed by GitHub for many
 minutes, clock separation alone is not a guarantee. Each commit step

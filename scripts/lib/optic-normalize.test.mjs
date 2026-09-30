@@ -12,6 +12,9 @@ import {
   lastEntryBefore,
   flattenHistoricalPayloads,
   toEpochMs,
+  parseAtSpec,
+  atSpecLabel,
+  historicalPriceAt,
 } from "./optic-normalize.mjs";
 import { STAT_DEFS, matchStatKey, normalizeMarketName } from "./markets.mjs";
 
@@ -482,4 +485,93 @@ test("a full historical pull pairs into two-sided markets at closing prices", ()
   assert.equal(rows[0].overOdds, -140);
   assert.equal(rows[0].underOdds, 115);
   assert.equal(rows[0].oneSided, false);
+});
+
+// --- reconstructing the board at an arbitrary moment -----------------------
+
+test("parseAtSpec understands the endpoints, offsets and absolute times", () => {
+  assert.deepEqual(parseAtSpec("closing"), { kind: "closing" });
+  assert.deepEqual(parseAtSpec(""), { kind: "closing" });
+  assert.deepEqual(parseAtSpec("opening"), { kind: "opening" });
+  assert.deepEqual(parseAtSpec("T-48h"), { kind: "offset", hours: 48 });
+  assert.deepEqual(parseAtSpec("-48h"), { kind: "offset", hours: 48 });
+  assert.deepEqual(parseAtSpec("3h"), { kind: "offset", hours: 3 });
+  assert.deepEqual(parseAtSpec("T-1.5h"), { kind: "offset", hours: 1.5 });
+  assert.equal(parseAtSpec("2026-09-25T18:00:00Z").kind, "absolute");
+  assert.throws(() => parseAtSpec("sometime tuesday"), /Unrecognised/);
+});
+
+test("atSpecLabel names a slot that cannot collide", () => {
+  assert.equal(atSpecLabel(parseAtSpec("T-48h")), "t-48h");
+  assert.equal(atSpecLabel(parseAtSpec("opening")), "opening");
+  assert.notEqual(atSpecLabel(parseAtSpec("T-24h")), atSpecLabel(parseAtSpec("T-48h")));
+});
+
+const AT_KICKOFF = "2026-09-27T17:00:00Z";
+const atTs = (iso) => Date.parse(iso) / 1000; // the API sends epoch seconds
+const AT_REC = {
+  startDate: AT_KICKOFF,
+  olv: { price: -105, points: 49.5 },
+  clv: { price: -125, points: 51.5 },
+  entries: [
+    { timestamp: atTs("2026-09-23T12:00:00Z"), price: -105, points: 49.5 }, // T-101h
+    { timestamp: atTs("2026-09-25T17:00:00Z"), price: -112, points: 50.5 }, // T-48h
+    { timestamp: atTs("2026-09-26T17:00:00Z"), price: -118, points: 50.5 }, // T-24h
+    { timestamp: atTs("2026-09-27T14:00:00Z"), price: -125, points: 51.5 }, // T-3h
+  ],
+};
+
+test("historicalPriceAt resolves an offset against the fixture's own kickoff", () => {
+  // Games run Thursday, Sunday and Monday, so an offset has to be per-fixture
+  // — an absolute timestamp sits 24 hours from one game and 96 from another.
+  const at48 = historicalPriceAt(AT_REC, parseAtSpec("T-48h"));
+  assert.equal(at48.price, -112);
+  assert.equal(at48.points, 50.5);
+  const at24 = historicalPriceAt(AT_REC, parseAtSpec("T-24h"));
+  assert.equal(at24.price, -118);
+  // Between two entries it takes the last price at or before the cutoff.
+  assert.equal(historicalPriceAt(AT_REC, parseAtSpec("T-30h")).price, -112);
+});
+
+test("historicalPriceAt still delegates the endpoints to olv/clv", () => {
+  assert.equal(historicalPriceAt(AT_REC, parseAtSpec("closing")).price, -125);
+  assert.equal(historicalPriceAt(AT_REC, parseAtSpec("opening")).price, -105);
+});
+
+test("historicalPriceAt returns null before the odd was posted", () => {
+  // An odd the book had not put up yet is ABSENT from the board at that hour,
+  // which is exactly the fact the timing question turns on. It must not read
+  // as a price.
+  assert.equal(historicalPriceAt(AT_REC, parseAtSpec("T-200h")), null);
+});
+
+test("historicalPriceAt refuses an offset with no timeseries rather than substituting", () => {
+  // The timeseries is a separate OpticOdds permission. Falling back to the
+  // opening price would answer the timing question with the wrong data.
+  const noSeries = { ...AT_REC, entries: [] };
+  assert.equal(historicalPriceAt(noSeries, parseAtSpec("T-48h")), null);
+  // ...but the endpoints still work, because they do not need it.
+  assert.equal(historicalPriceAt(noSeries, parseAtSpec("closing")).price, -125);
+});
+
+test("historicalPriceAt refuses an offset with no kickoff", () => {
+  const noKick = { ...AT_REC, startDate: null };
+  assert.equal(historicalPriceAt(noKick, parseAtSpec("T-48h")), null);
+});
+
+test("historicalPriceAt will not reconstruct a moment that has not happened", () => {
+  const future = { ...AT_REC, startDate: "2099-01-01T00:00:00Z" };
+  assert.equal(historicalPriceAt(future, parseAtSpec("T-48h")), null);
+});
+
+test("historicalPriceAt skips a locked quote", () => {
+  // A locked price was not takeable at that moment.
+  const locked = {
+    ...AT_REC,
+    entries: [
+      { timestamp: atTs("2026-09-25T10:00:00Z"), price: -110, points: 50.5 },
+      { timestamp: atTs("2026-09-25T16:00:00Z"), price: -112, points: 50.5, locked: true },
+    ],
+  };
+  assert.equal(historicalPriceAt(locked, parseAtSpec("T-48h")).price, -110);
 });

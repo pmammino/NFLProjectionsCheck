@@ -433,6 +433,84 @@ export function lastEntryBefore(entries, cutoffIso) {
   return best;
 }
 
+// ---------------------------------------------------------------------------
+// Reconstructing the board as of an arbitrary moment
+// ---------------------------------------------------------------------------
+// `historicalLineValue` answers "opening or closing", which is the right
+// question for grading a bet and the wrong one for choosing WHEN to bet.
+// The 2026 captures made that concrete: the Tuesday drop saw 3 of 16 week-3
+// fixtures and 4% of the markets that existed by kickoff, because books post
+// player props game by game through the week. Deciding which hour to source
+// at needs the board as it stood at that hour, not at its endpoints.
+//
+// `--at T-48h` is resolved against EACH FIXTURE'S OWN KICKOFF, not against a
+// wall-clock time. NFL games run Thursday, Sunday and Monday, so a single
+// absolute timestamp sits 24 hours from one game and 96 from another and
+// would compare prices at completely different stages of their own markets.
+//
+// Offsets need the per-odd `entries` timeseries, which is a separate
+// OpticOdds permission (`include_timeseries`). Where it is absent this
+// returns null rather than quietly substituting the opening price: an
+// opening line is not a T-48h line, and a backfill that silently swapped one
+// for the other would answer the timing question with the wrong data.
+
+// "opening" | "closing" | "T-48h" / "-48h" / "48h" | an ISO timestamp.
+export function parseAtSpec(spec) {
+  const s = String(spec ?? "").trim();
+  if (s === "" || s.toLowerCase() === "closing") return { kind: "closing" };
+  if (s.toLowerCase() === "opening") return { kind: "opening" };
+
+  const offset = /^t?\s*-?\s*(\d+(?:\.\d+)?)\s*h$/i.exec(s);
+  if (offset) {
+    const hours = Number(offset[1]);
+    if (!Number.isFinite(hours) || hours < 0) throw new Error(`Bad --at offset: "${spec}"`);
+    return { kind: "offset", hours };
+  }
+
+  const ms = Date.parse(s);
+  if (Number.isFinite(ms)) return { kind: "absolute", ms };
+
+  throw new Error(
+    `Unrecognised --at "${spec}". Use opening, closing, an offset like T-48h, or an ISO timestamp.`
+  );
+}
+
+// A short label for the spec, used to name the slot a backfill writes into so
+// two reconstructions of the same week cannot overwrite each other.
+export function atSpecLabel(parsed) {
+  switch (parsed.kind) {
+    case "offset": return `t-${parsed.hours}h`;
+    case "absolute": return new Date(parsed.ms).toISOString().replace(/[:.]/g, "-");
+    default: return parsed.kind;
+  }
+}
+
+// The price for one historical odd as of the moment `parsed` describes.
+// Returns { price, points, source } or null when this odd has no price at
+// that moment — which is itself the signal that matters for timing: an odd
+// the book had not posted yet is absent from the board, not priced at zero.
+export function historicalPriceAt(rec, parsed, { now = Date.now() } = {}) {
+  if (parsed.kind === "opening" || parsed.kind === "closing") {
+    return historicalLineValue(rec, { prefer: parsed.kind });
+  }
+
+  let cutoffMs;
+  if (parsed.kind === "absolute") {
+    cutoffMs = parsed.ms;
+  } else {
+    const kickoff = toEpochMs(rec?.startDate);
+    // No kickoff means no frame of reference for "48 hours before it". Refuse
+    // rather than fall back to wall-clock, which would silently mix fixtures.
+    if (!Number.isFinite(kickoff)) return null;
+    cutoffMs = kickoff - parsed.hours * 3600_000;
+  }
+  if (cutoffMs > now) return null; // the moment has not happened yet
+
+  const at = lastEntryBefore(rec?.entries, new Date(cutoffMs).toISOString());
+  if (!at) return null;
+  return { ...at, source: "timeseries" };
+}
+
 // Flatten a historical payload into per-odd records carrying olv/clv/entries
 // alongside the usual identifying fields.
 export function flattenHistoricalPayloads(payloads) {

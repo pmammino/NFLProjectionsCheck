@@ -180,3 +180,34 @@ test("buildSamples reports a projection that disagrees across books", () => {
   const { dropped } = buildSamples(quotes, actuals(60));
   assert.equal(dropped.inconsistentProj, 1);
 });
+
+// --- slots ----------------------------------------------------------------
+
+test("readPropRow takes the slot from its caller, falling back to the row", () => {
+  // loadSeason knows which directory it read the file from, which is more
+  // reliable than a column that did not exist when most rows were written.
+  assert.equal(readPropRow(CURRENT).slot, "main");
+  assert.equal(readPropRow({ ...CURRENT, Slot: "thursday" }).slot, "thursday");
+  assert.equal(readPropRow(CURRENT, "t-48h").slot, "t-48h");
+});
+
+test("buildSamples merges two captures of the same market and records both", () => {
+  // The Tuesday drop and a later sweep are the same forecast about the same
+  // game. They collapse into one market carrying whichever books quoted it at
+  // either moment — which is the whole point of the second capture, since
+  // Tuesday saw a fraction of the board.
+  const tue = { ...quote(0.52), slot: "main", book: "DraftKings" };
+  const thu = { ...quote(0.52), slot: "thursday", book: "FanDuel", odds: -105, overOdds: -105, underOdds: -115 };
+  const { samples } = buildSamples([tue, thu], actuals(60));
+  assert.equal(samples.length, 1);
+  assert.equal(samples[0].bookCount, 2);
+  assert.deepEqual(samples[0].slots, ["main", "thursday"]);
+});
+
+test("a market only the later capture saw is still a market", () => {
+  const thu = { ...quote(0.3), slot: "thursday", line: 74.5 };
+  const { samples } = buildSamples([thu], actuals(60));
+  assert.equal(samples.length, 1);
+  assert.deepEqual(samples[0].slots, ["thursday"]);
+  assert.equal(samples[0].y, 0); // 60 yards misses 74.5
+});

@@ -49,6 +49,7 @@ import { readCsv } from "./csv.mjs";
 import { STAT_DEFS, isBettableStat } from "./markets.mjs";
 import { gradeOutcome } from "./grading.mjs";
 import { consensusProb, estimateHoldByStat } from "./consensus.mjs";
+import { SLOT_MAIN, slotOf } from "./slots.mjs";
 
 // The captures store OurProb to four decimals, so a stored "0.0000" means
 // "below 0.00005", not "impossible", and a stored "1.0000" likewise. Reading
@@ -83,7 +84,7 @@ function num(v) {
 // `overOdds`/`underOdds` are stated from the market's point of view regardless
 // of which side the row was written from, because that is what de-vigging
 // needs and it removes the sidedness from everything downstream.
-export function readPropRow(row) {
+export function readPropRow(row, slot) {
   const stat = row.Stat;
   if (!stat || !STAT_DEFS[stat]) return null;
 
@@ -98,6 +99,9 @@ export function readPropRow(row) {
   const underOdds = side === "over" ? opposite : odds;
 
   return {
+    // A row written before slots existed carries no Slot column, and every
+    // one of those came from the Tuesday drop.
+    slot: slot ?? slotOf(row),
     season: Number(row.Season),
     week: Number(row.Week),
     playerId: String(row.PlayerID),
@@ -227,6 +231,9 @@ export function buildSamples(quotes, actualsByWeek, { includeRetired = false, ma
       probSource: cons.probSource,
       meanHold: cons.meanHold,
       bestOverOdds,
+      // Which captures of the week quoted this market. A market seen only by
+      // the later sweep is exactly what the Tuesday drop was missing.
+      slots: [...new Set(group.map((q) => q.slot))].sort(),
       actual,
       y: outcome === "won" ? 1 : 0,
     });
@@ -275,18 +282,34 @@ export function loadSeason(season, { dataDir = "data" } = {}) {
   const actualsDir = join(dataDir, "actuals", String(season));
   if (!existsSync(propsDir)) throw new Error(`No prop captures at ${propsDir}`);
 
-  const weekFiles = readdirSync(propsDir)
-    .filter((f) => /^week-\d+\.csv$/.test(f))
-    .sort();
+  // Every slot's capture of every week. A week captured twice — the Tuesday
+  // drop and a later sweep — contributes both, and buildSamples then keys on
+  // (week, player, stat, line) so the two collapse into one market carrying
+  // whichever books quoted it at either moment. That is the point: the whole
+  // reason for a second capture is that Tuesday saw 4% of the board.
+  //
+  // `slot` is carried on every quote so a caller can score the slots
+  // separately. Pooling them and reporting one number would hide the very
+  // comparison the second capture exists to make.
+  const slotDirs = [{ slot: SLOT_MAIN, dir: propsDir }];
+  for (const entry of readdirSync(propsDir, { withFileTypes: true })) {
+    if (entry.isDirectory()) slotDirs.push({ slot: entry.name, dir: join(propsDir, entry.name) });
+  }
 
   const quotes = [];
-  const weeks = [];
-  for (const f of weekFiles) {
-    const week = Number(f.match(/week-(\d+)\.csv/)[1]);
-    const rows = readCsv(join(propsDir, f));
-    const parsed = rows.map(readPropRow).filter(Boolean);
-    quotes.push(...parsed);
-    weeks.push({ week, propRows: rows.length, usableQuotes: parsed.length });
+  const weeks = new Map();
+  for (const { slot, dir } of slotDirs) {
+    for (const f of readdirSync(dir).filter((x) => /^week-\d+\.csv$/.test(x)).sort()) {
+      const week = Number(f.match(/week-(\d+)\.csv/)[1]);
+      const rows = readCsv(join(dir, f));
+      const parsed = rows.map((r) => readPropRow(r, slot)).filter(Boolean);
+      quotes.push(...parsed);
+      if (!weeks.has(week)) weeks.set(week, { week, propRows: 0, usableQuotes: 0, slots: [] });
+      const w = weeks.get(week);
+      w.propRows += rows.length;
+      w.usableQuotes += parsed.length;
+      w.slots.push(slot);
+    }
   }
 
   const actualsByWeek = new Map();
@@ -299,6 +322,7 @@ export function loadSeason(season, { dataDir = "data" } = {}) {
     }
   }
 
-  for (const w of weeks) w.hasActuals = actualsByWeek.has(w.week);
-  return { season, quotes, actualsByWeek, weeks };
+  const weekList = [...weeks.values()].sort((a, b) => a.week - b.week);
+  for (const w of weekList) w.hasActuals = actualsByWeek.has(w.week);
+  return { season, quotes, actualsByWeek, weeks: weekList };
 }

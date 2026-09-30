@@ -47,6 +47,7 @@ PlayerID,Name,Team,Pos
 11734,David Njoku,LAC,TE
 11763,Aaron Jones,MIN,RB
 11767,Jeremy McNichols,WAS,RB
+11768,Dare Ogunbowale,HOU,RB
 11805,Evan Engram,DEN,TE
 11807,Jonnu Smith,GB,TE
 11834,Joshua Dobbs,DET,QB
@@ -62,6 +63,7 @@ PlayerID,Name,Team,Pos
 12216,David Moore,CAR,WR
 12316,Johnny Mundt,PHI,TE
 12389,Robert Tonyan,PIT,TE
+12401,Austin Ekeler,WAS,RB
 12477,DJ Moore,BUF,WR
 12483,Josh Allen,BUF,QB
 12490,Sam Darnold,SEA,QB
@@ -455,6 +457,7 @@ PlayerID,Name,Team,Pos
 18646,Arian Smith,NYJ,WR
 18647,Jordan Watkins,SF,WR
 18650,KeAndre Lambert-Smith,LAC,WR
+18652,Max Brosmer,MIN,QB
 18811,Jacory Croskey-Merritt,WAS,RB
 18841,Ke'Shawn Williams,CIN,WR
 18889,Efton Chism,NE,WR

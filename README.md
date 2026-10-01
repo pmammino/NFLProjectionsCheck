@@ -310,9 +310,14 @@ closing-line value is for.
    because OpticOdds' `is_onshore` flag means *regulated*, not *US*.
 
    Names resolve against the live list, so `hardrock` finds whatever id the API
-   uses (`hard_rock_bet`). A name matching nothing is reported loudly: an
-   unrecognised book isn't an API error, it just returns no odds, which is
-   indistinguishable from that book not pricing the week.
+   uses (`hard_rock`, as of the 2026 runs). A name matching nothing is reported
+   loudly: an unrecognised book isn't an API error, it just returns no odds,
+   which is indistinguishable from that book not pricing the week.
+
+   A name matching *two* books is reported too, and that one has bitten us —
+   see the `sharp` market set under **Pricing lines** for how `"circa"` went
+   ambiguous and silently left the roster. Prefer an exact id over a prefix
+   for any book whose operator might list more than one feed.
 
    `--books` overrides the roster; `--all-books` restores the unfiltered
    behaviour for research, and `--include-offshore` adds Pinnacle and friends
@@ -449,18 +454,39 @@ carries on past a week that fails rather than discarding the ones that
 succeeded. It is slow: the historical endpoint takes one fixture per request
 and is rate-limited to 10 requests per 15 seconds.
 
-> **What your API key has to allow.** Offsets are reconstructed from each
-> odd's `entries` price history, which is a **separate OpticOdds permission**
-> (`include_timeseries`). Without it only `--at opening` and `--at closing`
-> resolve, and the run says so loudly rather than substituting a different
-> price — an opening line is not a T-48h line, and quietly swapping one for
-> the other would answer the timing question with the wrong data.
+> **What this project's key actually allows — measured, 2026-10-01.** A dry
+> `--at T-48h` run over week 3 settled it:
 >
-> Note also that on this project's key `clv` comes back **null for player
-> props** (it is populated on game markets only), so `--at closing` falls back
-> to the opening line for most rows. The capture reports the share this
-> happened to and records it in `LineSource`, so those rows stay a separate
-> cohort rather than being pooled with live-captured ones.
+> | | |
+> |---|---|
+> | Historical odds endpoint | **works** — 16 fixtures, 123,464 odds returned |
+> | `entries` price history | **absent** — 0 of 123,464 odds carried one |
+> | Usable moments | `--at opening`, `--at closing` only |
+>
+> So the key has historical-odds permission and the retention window is fine;
+> what it lacks is `include_timeseries`, which is a separate OpticOdds
+> permission and the only way to reconstruct an arbitrary hour. Offsets return
+> nothing and say so rather than substituting a different price — an opening
+> line is not a T-48h line, and quietly swapping one for the other would
+> answer the timing question with the wrong data.
+>
+> **Until that permission is added, `board-timing` can compare opening against
+> closing but cannot tell you which hour to drop at.** Opening-vs-closing
+> still answers something useful — how far the board moves across a week — it
+> just cannot locate the point where coverage has arrived and the price has
+> not yet sharpened.
+>
+> Note also that on this key `clv` comes back **null for player props** (it is
+> populated on game markets only), so `--at closing` falls back to the opening
+> line for most rows. The capture reports the share this happened to and
+> records it in `LineSource`, so those rows stay a separate cohort rather than
+> being pooled with live-captured ones. In practice that means an
+> opening-vs-closing backfill may collapse into one cohort too; the run's
+> `line values:` line is what tells you.
+>
+> The empty-result diagnostic distinguishes the two causes, because they need
+> opposite fixes: "no odds came back at all" (permission, retention, books)
+> versus "plenty came back and none covered the moment you asked for".
 
 ### Which slot to source from
 
@@ -619,9 +645,15 @@ Two definitions are fitted and reported side by side:
   theScore, betr. The board you can actually bet, so a disagreement with it is
   a disagreement with a real price.
 - **sharp** — Circa, Pinnacle and friends. Beating *this* consensus is the
-  stronger claim. Right now it is starved: the only sharp book in the captures
-  is Circa, it appears in week 1 alone, and `books.mjs` does not pull Pinnacle
-  by default. Run `capture-props --include-offshore` to build it up.
+  stronger claim. It is currently starved, and the reason turned out to be a
+  bug rather than a configuration choice: `books.mjs` asked for `"circa"`,
+  which resolved fine until OpticOdds' live list gained a second Circa id.
+  From then on it matched both `circa_sports` and `circa_vegas`, was reported
+  ambiguous, and was **dropped from every capture** — visible in a week-3 run
+  log as `7 of 8 requested` books. Circa is the only sharp book in the roster,
+  so the set froze at the 114 markets captured in week 1, the last week before
+  the id went ambiguous. The roster now names `circa_sports` exactly, so the
+  set fills in as weeks land. `--include-offshore` adds Pinnacle on top.
 
 **One-sided markets.** Roughly half the committed board is quoted one side
 only, at every book that prices it — 100% of week 1, 52% of week 2, 39% of

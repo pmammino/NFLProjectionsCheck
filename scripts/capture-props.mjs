@@ -692,7 +692,17 @@ function historicalToMarkets(payloads, a) {
   const { rows, diagnostics } = pairOdds(collapsed, { statDefs: STAT_DEFS });
   return {
     rows,
-    diagnostics: { ...diagnostics, noHistoricalPrice: noPrice, lineValueSources: bySource },
+    diagnostics: {
+      ...diagnostics,
+      // How many odds the API actually returned, BEFORE any were dropped for
+      // having no price at the requested moment. Without this the caller
+      // cannot tell "the key returned nothing" from "the key returned plenty
+      // and none of it covered the moment asked for" — two problems with
+      // completely different fixes. See the zero-records diagnostic.
+      recordsFetched: records.length,
+      noHistoricalPrice: noPrice,
+      lineValueSources: bySource,
+    },
   };
 }
 
@@ -709,7 +719,7 @@ async function main() {
   console.log(
     `Capturing props from OpticOdds for season=${a.season} week=${a.week} ` +
       `minEdge=${a.minEdge} basis=${a.edgeBasis} devig=${a.devigMethod} sides=${a.sides}` +
-      (a.historical ? " (historical closing lines)" : "") +
+      (a.historical ? ` (historical, as of ${atSpecLabel(a.atSpec)})` : "") +
       (a.dryRun ? " (dry-run)" : "")
   );
 
@@ -788,20 +798,34 @@ async function main() {
   // from "no bets cleared the edge bar", and it has specific causes worth
   // naming rather than leaving the caller to guess from an empty file.
   if (diagnostics && diagnostics.total === 0) {
-    console.error(
-      `  ${fixtures.length} fixture(s) returned, but ZERO odds records.\n` +
-        (a.historical
-          ? "    For a historical pull this usually means one of:\n" +
-            "      - the API key lacks historical-odds permission (the most common cause);\n" +
-            "      - the fixture is outside the rolling 2-month retention window;\n" +
-            "      - the requested sportsbooks archived nothing for this game.\n" +
-            "    Check with a single known fixture before spending a full week's requests:\n" +
-            "      curl -H \"X-Api-Key: $OPTICODDS_API_KEY\" \\\n" +
-            "        'https://api.opticodds.com/api/v3/fixtures/odds/historical?fixture_id=<ID>&sportsbook=BetMGM'\n"
-          : "    For a live pull this usually means the game has no odds posted yet,\n" +
-            "    or the requested markets are not offered by these books.\n" +
-            "    Run `npm run optic-discover -- --markets` to check the market names.\n")
-    );
+    // Two different failures both end in an empty file, and they need
+    // opposite fixes. A real 2026 week-3 run printed the permission advice
+    // below while the key was working perfectly: 123,464 historical odds came
+    // back and every one was dropped because none carried a price at the
+    // requested T-48h. Blaming the key there sends you to fix the wrong thing.
+    if (a.historical && diagnostics.recordsFetched > 0) {
+      console.error(
+        `  ${fixtures.length} fixture(s) and ${diagnostics.recordsFetched} historical odds ` +
+          `came back, but NONE carried a price as of ${atSpecLabel(a.atSpec)}.\n` +
+          `    The key and the retention window are fine — it is the MOMENT that is\n` +
+          `    unavailable. See the note below on which moments the key supports.\n`
+      );
+    } else {
+      console.error(
+        `  ${fixtures.length} fixture(s) returned, but ZERO odds records.\n` +
+          (a.historical
+            ? "    For a historical pull this usually means one of:\n" +
+              "      - the API key lacks historical-odds permission (the most common cause);\n" +
+              "      - the fixture is outside the rolling 2-month retention window;\n" +
+              "      - the requested sportsbooks archived nothing for this game.\n" +
+              "    Check with a single known fixture before spending a full week's requests:\n" +
+              "      curl -H \"X-Api-Key: $OPTICODDS_API_KEY\" \\\n" +
+              "        'https://api.opticodds.com/api/v3/fixtures/odds/historical?fixture_id=<ID>&sportsbook=BetMGM'\n"
+            : "    For a live pull this usually means the game has no odds posted yet,\n" +
+              "    or the requested markets are not offered by these books.\n" +
+              "    Run `npm run optic-discover -- --markets` to check the market names.\n")
+      );
+    }
   }
 
   console.log(

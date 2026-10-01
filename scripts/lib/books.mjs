@@ -31,7 +31,21 @@ export const DEFAULT_BOOKS = [
   "betrivers",
   "hardrock",
   "thescore",
-  "circa",
+  // Spelled out in full, and that is not cosmetic. This entry used to read
+  // "circa", which resolved fine until OpticOdds' live list gained a second
+  // Circa id: from then on "circa" matched BOTH circa_sports and circa_vegas,
+  // resolveBookIds reported it ambiguous, and it was dropped from every
+  // capture. Observed in a 2026 week-3 run: "7 of 8 requested" books, with
+  // `"circa" is ambiguous (circa_sports, circa_vegas) — skipped`.
+  //
+  // The cost was invisible in the ledger and large in the analysis. Circa is
+  // the only sharp book in this roster, so the `sharp` market set that
+  // price-model.mjs compares against went from thin to unusable — it holds
+  // 114 markets, all from week 1, the last week before the id went ambiguous.
+  //
+  // Only ONE of the two is listed on purpose: the consensus gives each book a
+  // single vote, and two ids for one operator would weight Circa double.
+  "circa_sports",
 ];
 
 // Lowercase, strip everything that isn't alphanumeric. "Hard Rock Bet" and

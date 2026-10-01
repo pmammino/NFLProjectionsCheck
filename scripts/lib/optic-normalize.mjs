@@ -453,6 +453,12 @@ export function lastEntryBefore(entries, cutoffIso) {
 // returns null rather than quietly substituting the opening price: an
 // opening line is not a T-48h line, and a backfill that silently swapped one
 // for the other would answer the timing question with the wrong data.
+//
+// MEASURED on this project's key (2026-10-01, week 3): the historical
+// endpoint works and returned 123,464 odds across 16 fixtures, and NOT ONE of
+// them carried `entries`. So offsets are unavailable here until that
+// permission is added, and opening/closing are the only moments that resolve.
+// The capture reports this explicitly instead of writing an empty file.
 
 // "opening" | "closing" | "T-48h" / "-48h" / "48h" | an ISO timestamp.
 export function parseAtSpec(spec) {

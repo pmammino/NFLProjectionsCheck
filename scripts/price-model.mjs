@@ -362,10 +362,12 @@ function datasetSection(res, season, weeks) {
   } else if (res.counts.byWeek.length < 2) {
     console.log(
       `\n  Only one gradable week in this set, so there is nothing to hold out and\n` +
-        `  no out-of-sample number below. For the "sharp" set that is the expected\n` +
-        `  state right now: the only sharp book in the captures is Circa, it appears\n` +
-        `  in week 1 alone, and lib/books.mjs does not pull Pinnacle by default.\n` +
-        `  Run capture-props with --include-offshore to build this set up.`
+        `  no out-of-sample number below. For the "sharp" set that is because Circa\n` +
+        `  is the only sharp book in the roster and it stopped being captured after\n` +
+        `  week 1 — lib/books.mjs asked for "circa", which went ambiguous once\n` +
+        `  OpticOdds listed both circa_sports and circa_vegas, so every later run\n` +
+        `  silently dropped it. That is fixed; captures from now on include it, and\n` +
+        `  this set fills in as weeks land. --include-offshore adds Pinnacle on top.`
     );
   }
 }

@@ -1,0 +1,133 @@
+name: Backfill props (reconstruct a past board)
+
+# Rebuild what the board looked like at a chosen moment for weeks that have
+# already been played, from OpticOdds' price history.
+#
+# This is the tool for the question the Tuesday drop cannot answer on its own:
+# WHEN should we be sourcing? The drop is one sample per week taken at one
+# hour, and on 2026 week 3 that hour caught 3 of 16 games. A backfill can
+# reconstruct the same week at T-96h, T-72h, T-48h, T-24h and T-3h and let
+# `npm run board-timing` compare them on board size, two-sided share, hold,
+# and — where actuals exist — realised accuracy.
+#
+# It NEVER overwrites the Tuesday drop. Each reconstruction writes into a slot
+# named after the moment it reconstructs (data/props/{season}/t-48h/...). The
+# drop is the record of what a subscriber was actually sent and is the one
+# artefact here that no later run can rebuild.
+#
+# WHAT YOUR API KEY HAS TO ALLOW. An offset like T-48h is reconstructed from
+# each odd's `entries` price history, which is a separate OpticOdds permission
+# (include_timeseries). Without it, only `--at opening` and `--at closing`
+# work, and the run says so loudly instead of quietly substituting a different
+# price. Note also that on this project's key `clv` comes back null for PLAYER
+# props, so `closing` falls back to the opening line — which the capture
+# reports and records in LineSource.
+#
+# This is SLOW: the historical endpoint takes one fixture per request and is
+# rate limited to 10 requests per 15 seconds, so one week across 16 fixtures
+# and 8 books is a few hundred requests. Run a few weeks at a time.
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season (year), e.g. 2026"
+        required: true
+        default: "2026"
+      weeks:
+        description: "Comma-separated weeks to backfill, e.g. 1,2,3,4"
+        required: true
+        default: "1,2,3,4"
+      at:
+        description: "Moment to reconstruct: opening | closing | T-48h | T-24h | an ISO timestamp"
+        required: true
+        default: "closing"
+      includeOffshore:
+        description: "Also pull offshore books, e.g. Pinnacle (true/false)"
+        required: false
+        default: "false"
+      dryRun:
+        description: "Fetch and price but write nothing — do this first (true/false)"
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-commit
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    # Generous: a few hundred rate-limited requests per week requested.
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Backfill each week
+        env:
+          OPTICODDS_API_KEY: ${{ secrets.OPTICODDS_API_KEY }}
+        run: |
+          if [ -z "$OPTICODDS_API_KEY" ]; then
+            echo "::error::OPTICODDS_API_KEY secret is not set — odds cannot be captured."
+            exit 1
+          fi
+          common="--historical --at ${{ github.event.inputs.at }} --season ${{ github.event.inputs.season }}"
+          if [ "${{ github.event.inputs.includeOffshore }}" = "true" ]; then common="$common --include-offshore"; fi
+          if [ "${{ github.event.inputs.dryRun }}" = "true" ]; then common="$common --dry-run"; fi
+          failed=""
+          IFS=',' read -ra WEEKS <<< "${{ github.event.inputs.weeks }}"
+          for w in "${WEEKS[@]}"; do
+            w="$(echo "$w" | tr -d '[:space:]')"
+            [ -z "$w" ] && continue
+            echo "::group::week $w"
+            # One week failing (no history retained, a permission gap) must not
+            # discard the weeks that already succeeded — they are the expensive
+            # part. Record it and carry on, then fail at the end.
+            if ! node scripts/capture-props.mjs $common --week "$w"; then
+              echo "::warning::week $w failed"
+              failed="$failed $w"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::these weeks failed:$failed"
+            echo "BACKFILL_FAILED=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Replay personas
+        if: always() && github.event.inputs.dryRun != 'true'
+        run: node scripts/simulate-personas.mjs
+
+      - name: Commit snapshots
+        if: always() && github.event.inputs.dryRun != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "Nothing backfilled."
+          else
+            git commit -m "Backfill props at ${{ github.event.inputs.at }} [skip ci]"
+            pushed=false
+            for attempt in 1 2 3; do
+              if git push; then pushed=true; break; fi
+              echo "Push rejected (attempt $attempt) — rebasing onto $GITHUB_REF_NAME and retrying."
+              git pull --rebase origin "$GITHUB_REF_NAME" || break
+              sleep 5
+            done
+            if [ "$pushed" != "true" ]; then
+              echo "::error::Could not push after 3 attempts."
+              exit 1
+            fi
+          fi
+
+      - name: Fail if any week failed
+        if: always() && env.BACKFILL_FAILED == '1'
+        run: exit 1

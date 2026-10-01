@@ -1,0 +1,129 @@
+name: Publish midweek edges (Thursday sweep)
+
+# THE SECOND DROP. Same capture as the Tuesday job, run again once the books
+# have actually posted the week's board.
+#
+# Why this exists. Measured on the 2026 captures, the Tuesday drop sees a
+# small fraction of the market, because books post player props game by game
+# through the week:
+#
+#            Tuesday drop              near kickoff
+#   week 2   1,544 markets / 15 games  18,692 / 16     -> 8% of the board
+#   week 3   2,559 markets /  3 games  62,590 / 16     -> 4%, and 13 games missing
+#
+# Two-sided quotes — the only ones that can be de-vigged into a fair price —
+# go from 51% of the Tuesday board to 74% near kickoff.
+#
+# The Tuesday job is NOT replaced, because its prices are genuinely better:
+# they beat the close by +5.25% over 45 player-weeks, a 70% beat rate. Early
+# is softer. So both run, each writes its own slot (see scripts/lib/slots.mjs),
+# every bet carries a Slot column, and the rollups split on it — which is what
+# turns "Tuesday or Thursday?" from an argument into a measurement.
+#
+# Requires the OPTICODDS_API_KEY secret.
+
+on:
+  schedule:
+    # Thursday 15:00 UTC ~ 11:00 ET. Chosen so that EVERY game of the week is
+    # still pre-kickoff: Thursday Night Football starts around 00:15 UTC on
+    # Friday, so this sits ~9 hours ahead of the earliest kickoff and well
+    # ahead of Sunday's.
+    #
+    # Saturday would catch a fuller board still, but it is after TNF has
+    # played, so those props could not be bet. If the board turns out to fill
+    # later than this, move it with `npm run board-timing` rather than by
+    # guessing — that report reconstructs the board hour by hour from
+    # backfilled price history and says which slot actually prices best.
+    - cron: "0 15 * 9-12,1-2 4"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season (year), e.g. 2026. Blank = auto by date."
+        required: false
+      week:
+        description: "NFL week number. Blank = auto by date."
+        required: false
+      slot:
+        description: "Slot to write into. Keep 'thursday' unless testing."
+        required: false
+        default: "thursday"
+      minEdge:
+        description: "Minimum edge to place a paper bet, e.g. 0.03"
+        required: false
+        default: "0.03"
+      includeOffshore:
+        description: "Also pull offshore books, e.g. Pinnacle (true/false)"
+        required: false
+        default: "false"
+      dryRun:
+        description: "Fetch and price but write nothing (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  # The same single group every data-writing workflow shares: they all
+  # `git add data/` and push to one branch, so two at once means the second
+  # push is rejected as a non-fast-forward.
+  group: data-commit
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Capture props (midweek slot)
+        env:
+          OPTICODDS_API_KEY: ${{ secrets.OPTICODDS_API_KEY }}
+        run: |
+          if [ -z "$OPTICODDS_API_KEY" ]; then
+            echo "::error::OPTICODDS_API_KEY secret is not set — odds cannot be captured."
+            exit 1
+          fi
+          slot="${{ github.event.inputs.slot }}"
+          if [ -z "$slot" ]; then slot="thursday"; fi
+          args="--slot $slot"
+          if [ -n "${{ github.event.inputs.season }}" ]; then args="$args --season ${{ github.event.inputs.season }}"; fi
+          if [ -n "${{ github.event.inputs.week }}" ]; then args="$args --week ${{ github.event.inputs.week }}"; fi
+          if [ -n "${{ github.event.inputs.minEdge }}" ]; then args="$args --min-edge ${{ github.event.inputs.minEdge }}"; fi
+          if [ "${{ github.event.inputs.includeOffshore }}" = "true" ]; then args="$args --include-offshore"; fi
+          if [ "${{ github.event.inputs.dryRun }}" = "true" ]; then args="$args --dry-run"; fi
+          echo "Running: node scripts/capture-props.mjs $args"
+          node scripts/capture-props.mjs $args
+
+      # The replay reads EVERY slot's edges for the season, so this picks up
+      # both drops and tags each bet with the slot it came from.
+      - name: Replay personas
+        if: always() && github.event.inputs.dryRun != 'true'
+        run: node scripts/simulate-personas.mjs
+
+      - name: Commit snapshots
+        if: always() && github.event.inputs.dryRun != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No new props/bets to commit."
+          else
+            git commit -m "Publish midweek edges + replay personas [skip ci]"
+            pushed=false
+            for attempt in 1 2 3; do
+              if git push; then pushed=true; break; fi
+              echo "Push rejected (attempt $attempt) — rebasing onto $GITHUB_REF_NAME and retrying."
+              git pull --rebase origin "$GITHUB_REF_NAME" || break
+              sleep 5
+            done
+            if [ "$pushed" != "true" ]; then
+              echo "::error::Could not push after 3 attempts."
+              exit 1
+            fi
+          fi

@@ -75,10 +75,14 @@
 //                                  [--kelly-fraction 0.25] [--kelly-cap 0.03]
 //                                  [--devig-method multiplicative]
 //                                  [--edge-basis ev|novig]
+//                                  [--price-model projection|blend]
+//                                  [--price-model-set retail|sharp|all]
+//                                  [--price-model-file data/pricing/…/model.json]
 //                                  [--sides both|over|under]
 //                                  [--books "DraftKings,FanDuel"] (default: lib/books.mjs)
 //                                  [--all-books] [--include-offshore]
-//                                  [--historical]   closing lines for a played week
+//                                  [--historical] [--at opening|closing|T-48h]
+//                                  [--slot main|thursday|…]
 //                                  [--data-dir data] [--dry-run]
 //
 // Env: OPTICODDS_API_KEY (required).
@@ -100,7 +104,9 @@ import { OpticOddsClient } from "./lib/opticodds.mjs";
 import {
   normalizeOddsPayloads,
   flattenHistoricalPayloads,
-  historicalLineValue,
+  parseAtSpec,
+  atSpecLabel,
+  historicalPriceAt,
   pairOdds,
 } from "./lib/optic-normalize.mjs";
 import { buildPlayerIndex, matchPlayer, canonicalTeam } from "./lib/crosswalk.mjs";
@@ -108,6 +114,9 @@ import { DEFAULT_BOOKS, resolveBookIds } from "./lib/books.mjs";
 import { readCsv, toCsv } from "./lib/csv.mjs";
 import { seasonForDate, projectionWeek } from "./lib/schedule.mjs";
 import { edgeBucket } from "./lib/edge.mjs";
+import { SLOT_MAIN, slotDir, assertValidSlot } from "./lib/slots.mjs";
+import { consensusProb, estimateHoldByStat, MARKET_SET_NAMES } from "./lib/consensus.mjs";
+import { predict as predictPrice } from "./lib/pricing.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -136,6 +145,8 @@ export const PROPS_COLUMNS = [
   "ModelEdge", // OurProb - FairProb : disagreement with the market's true belief
   "EdgeBasis", // which of the two the --min-edge filter was applied to
   "DevigMethod",
+  "PriceModel", // which model produced OurProb: projection | blend
+  "Slot", // which capture of the week this is: main (the Tuesday drop) or a later one
   "LineSource", // live | closing | opening — see historicalToMarkets
   "FixtureID",
   "CapturedAt",
@@ -151,7 +162,13 @@ function parseArgs(argv) {
     devigMethod: DEFAULT_DEVIG_METHOD,
     edgeBasis: "ev",
     sides: "both",
+    // The projection-only price stays the default. Switching the live ledger
+    // onto a fitted model is a decision for the report to earn, not one to
+    // inherit by upgrading.
+    priceModel: "projection",
+    priceModelSet: "retail",
     historical: false,
+    slot: SLOT_MAIN,
     dryRun: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -164,10 +181,15 @@ function parseArgs(argv) {
       case "--kelly-fraction": a.kellyFraction = Number(next()); break;
       case "--kelly-cap": a.kellyCap = Number(next()); break;
       case "--devig-method": a.devigMethod = next(); break;
+      case "--price-model": a.priceModel = next(); break;
+      case "--price-model-set": a.priceModelSet = next(); break;
+      case "--price-model-file": a.priceModelFile = next(); break;
       case "--edge-basis": a.edgeBasis = next(); break;
       case "--sides": a.sides = next(); break;
       case "--books": a.books = next().split(",").map((s) => s.trim()).filter(Boolean); break;
       case "--historical": a.historical = true; break;
+      case "--at": a.at = next(); break;
+      case "--slot": a.slot = next(); a.slotExplicit = true; break;
       case "--use-opening": a.useOpening = true; break;
       case "--allow-empty": a.allowEmpty = true; break;
       case "--include-offshore": a.includeOffshore = true; break;
@@ -189,6 +211,30 @@ function parseArgs(argv) {
   if (!["ev", "novig"].includes(a.edgeBasis)) {
     throw new Error("--edge-basis must be one of: ev, novig");
   }
+  if (!["projection", "blend"].includes(a.priceModel)) {
+    throw new Error("--price-model must be one of: projection, blend");
+  }
+  if (!MARKET_SET_NAMES.includes(a.priceModelSet)) {
+    throw new Error(`--price-model-set must be one of: ${MARKET_SET_NAMES.join(", ")}`);
+  }
+
+  // --at reconstructs a moment from the price history, so it only means
+  // anything on a historical pull. Silently ignoring it on a live one would
+  // write a file labelled as a reconstruction that is really just "now".
+  if (a.at !== undefined && !a.historical) {
+    throw new Error("--at only applies to --historical (it reconstructs a past moment).");
+  }
+  if (a.historical) {
+    a.atSpec = parseAtSpec(a.at ?? (a.useOpening ? "opening" : "closing"));
+    if (a.at !== undefined && a.useOpening) {
+      throw new Error("--use-opening and --at are two ways to say the same thing; pass one.");
+    }
+    // A reconstruction defaults into its own slot. Overwriting the Tuesday
+    // drop with a backfill would destroy the only record of what was actually
+    // published, which no later run can rebuild. Pass --slot main to mean it.
+    if (!a.slotExplicit) a.slot = atSpecLabel(a.atSpec);
+  }
+  assertValidSlot(a.slot);
   return a;
 }
 
@@ -199,8 +245,12 @@ const selectionEdge = (cand, basis) => (basis === "novig" ? cand.modelEdge : can
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const projPath = (dir, season, week) => join(ROOT, dir, "projections", String(season), `week-${pad2(week)}.csv`);
-const propsPath = (dir, season, week) => join(ROOT, dir, "props", String(season), `week-${pad2(week)}.csv`);
-const edgesPath = (dir, season, week) => join(ROOT, dir, "edges", String(season), `week-${pad2(week)}.csv`);
+// Slot-aware output paths. See lib/slots.mjs for what a slot is and why the
+// Tuesday drop keeps the original filenames.
+const propsPath = (dir, season, week, slot) =>
+  join(ROOT, dir, "props", String(season), slotDir(slot), `week-${pad2(week)}.csv`);
+const edgesPath = (dir, season, week, slot) =>
+  join(ROOT, dir, "edges", String(season), slotDir(slot), `week-${pad2(week)}.csv`);
 const closingPath = (dir, season, week) => join(ROOT, dir, "closing", String(season), `week-${pad2(week)}.csv`);
 const rosterPath = (dir, season) => join(ROOT, dir, "players", `${season}.csv`);
 
@@ -256,6 +306,91 @@ export function ourProbability({ line, statKey }, splits) {
   const m = sumCols(splits.M, statDef.projCols);
   const c = sumCols(splits.C, statDef.projCols);
   return probOverContinuous(line, f, m, c);
+}
+
+// ---------------------------------------------------------------------------
+// Optional second pricing pass: the fitted blend
+// ---------------------------------------------------------------------------
+// priceMarket sees one book at a time and so can only ever produce the
+// projection-only price. The blend needs the whole market — a consensus is
+// not a property of any single quote — so it runs here, over every candidate,
+// exactly as the disagreement cap does.
+//
+// Two invariants this maintains and a naive implementation would not:
+//
+//  1. THE TWO SIDES STAY COHERENT. Only the Over is blended; the Under is set
+//     to its complement. Blending each side independently would produce a
+//     pair that does not sum to 1, which is not a probability and would show
+//     up as free arbitrage against ourselves.
+//
+//  2. A MARKET WITH NO CONSENSUS KEEPS ITS PROJECTION PRICE rather than being
+//     dropped or silently defaulted to the book. The blend is an improvement
+//     where it applies, not a precondition for pricing, and `PriceModel`
+//     records per row which one was used so a ledger stays auditable.
+//
+// Returns the number of candidates actually re-priced.
+export function repriceWithBlend(priced, fit, { marketSet = "retail", devigMethod } = {}) {
+  if (!fit) return 0;
+  const holdByStat = estimateHoldByStat(priced.map((p) => ({ stat: p.statKey, hold: p.hold })));
+
+  const groups = new Map();
+  for (const p of priced) {
+    const key = [p.rotowirePlayerId, p.statKey, p.line].join("|");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+
+  let changed = 0;
+  for (const group of groups.values()) {
+    // One quote per candidate, stated from the market's point of view so the
+    // consensus does not care which side each row was written from.
+    const quotes = group.map((p) => ({
+      book: p.sportsbook,
+      overOdds: p.side === "over" ? p.odds : p.oppositeOdds,
+      underOdds: p.side === "over" ? p.oppositeOdds : p.odds,
+    }));
+    const stat = group[0].statKey;
+    const cons = consensusProb(quotes, { side: "over", setName: marketSet, holdByStat, stat, method: devigMethod });
+    if (!cons) continue;
+
+    const over = group.find((p) => p.side === "over");
+    const projOver = over ? over.ourProb : 1 - group[0].ourProb;
+    const blended = predictPrice(fit, { stat, pProj: projOver, pMarket: cons.prob });
+    if (blended === null) continue;
+
+    for (const p of group) {
+      p.ourProb = p.side === "under" ? 1 - blended : blended;
+      p.edge = p.ourProb - p.impliedProb;
+      p.modelEdge = p.ourProb - p.fairProb;
+      p.priceModel = "blend";
+      changed++;
+    }
+  }
+  return changed;
+}
+
+// Load the fit written by `price-model.mjs --write`.
+//
+// Fails loudly rather than falling back to the projection price: a run asked
+// for the blend, and quietly giving it something else would put rows in a
+// ledger labelled with a model that never ran.
+function loadPriceModel(a) {
+  const path = a.priceModelFile ?? join(a.dataDir, "pricing", String(a.season), "model.json");
+  if (!existsSync(path)) {
+    throw new Error(
+      `--price-model blend needs a fitted model at ${path}.\n` +
+        `    Run: node scripts/price-model.mjs --season ${a.season} --write`
+    );
+  }
+  const payload = JSON.parse(readFileSync(path, "utf8"));
+  const set = payload.sets?.[a.priceModelSet];
+  if (!set?.fit) {
+    throw new Error(
+      `${path} carries no fit for market set "${a.priceModelSet}" ` +
+        `(has: ${Object.keys(payload.sets ?? {}).join(", ") || "none"}).`
+    );
+  }
+  return { ...set.fit, trainedOnWeeks: set.trainedOnWeeks };
 }
 
 const csvRowCount = (csv) => Math.max(0, csv.trim().split("\n").length - 1);
@@ -500,7 +635,7 @@ async function fetchWeekOdds(client, a, fixtures) {
 
   if (a.historical) {
     console.log(
-      `  fetching ${a.useOpening ? "OPENING" : "CLOSING"} lines (historical) for ` +
+      `  fetching historical odds as of ${atSpecLabel(a.atSpec)} for ` +
         `${fixtureIds.length} fixtures — one request per fixture per 5 books, so this is slow…`
     );
     const payloads = await client.getHistoricalOdds({ fixtureIds, sportsbooks, markets, onProgress });
@@ -525,9 +660,13 @@ function historicalToMarkets(payloads, a) {
   const collapsed = [];
   let noPrice = 0;
   const bySource = { closing: 0, opening: 0, fallback: 0, timeseries: 0 };
+  const atLabel = atSpecLabel(a.atSpec);
   for (const rec of records) {
-    const lv = historicalLineValue(rec, { prefer: a.useOpening ? "opening" : "closing" });
+    const lv = historicalPriceAt(rec, a.atSpec);
     if (!lv) {
+      // On an offset this is usually not an error: an odd the book had not
+      // posted by that hour is ABSENT from the board then, which is the fact
+      // the timing question turns on. It is counted, not warned about.
       noPrice++;
       continue;
     }
@@ -538,7 +677,14 @@ function historicalToMarkets(payloads, a) {
     // is not the same instrument as one captured live near close, and mixing
     // them unlabelled would quietly flatter the backtest — opening lines are
     // softer, before the book has absorbed sharp action.
-    const lineSource = lv.source === "fallback" ? (a.useOpening ? "closing" : "opening") : lv.source;
+    // Record WHICH moment this price is from. On an offset that is the offset
+    // itself, so a row backfilled at T-48h can never be read as a live one.
+    const lineSource =
+      a.atSpec.kind === "opening" || a.atSpec.kind === "closing"
+        ? lv.source === "fallback"
+          ? a.atSpec.kind === "opening" ? "closing" : "opening"
+          : lv.source
+        : atLabel;
     collapsed.push({ ...rec, price: lv.price, points: lv.points ?? rec.points, lineSource });
   }
 
@@ -662,7 +808,7 @@ async function main() {
     `  ${markets.length} distinct markets after pairing ` +
       `(${markets.filter((m) => m.oneSided).length} one-sided).`
   );
-  reportDiagnostics(diagnostics, a.useOpening);
+  reportDiagnostics(diagnostics, a.atSpec ?? null);
 
   // Join each market to a RotoWire player, then price it.
   const capturedAt = now.toISOString();
@@ -707,6 +853,38 @@ async function main() {
         team: canonicalTeam(market.team) ?? match.entry?.team ?? "",
         opp: opponentLabel(market.team || match.entry?.team, fixture),
       });
+    }
+  }
+
+  // Optional: re-price off the fitted blend, now that every book's price for
+  // a market is in hand and a consensus can be formed. Runs BEFORE the
+  // disagreement cap on purpose — the cap is a judgement about the price we
+  // are actually going to bet, so it has to see the final number.
+  if (a.priceModel === "blend") {
+    const fit = loadPriceModel(a);
+    const changed = repriceWithBlend(priced, fit, { marketSet: a.priceModelSet, devigMethod: a.devigMethod });
+    const [tilt, mktWeight, disagreeWeight] = fit.global;
+    console.log(
+      `  re-priced ${changed} of ${priced.length} candidates off the fitted blend ` +
+        `(set "${a.priceModelSet}", trained on weeks ${fit.trainedOnWeeks?.join(", ") || "?"}).`
+    );
+    console.log(
+      `    weights: tilt a=${tilt.toFixed(3)}, market c=${mktWeight.toFixed(3)}, ` +
+        `disagreement b=${disagreeWeight.toFixed(3)}`
+    );
+    // The intercept is the dangerous one. It moves EVERY price in the same
+    // direction, so a tilt fitted on a sample that over-represents overs
+    // silently turns the whole board into over bets. On the 2026 captures
+    // that is exactly what it is doing — the actuals feed omits players who
+    // recorded nothing, which are the under wins — so it is called out here
+    // rather than left to be discovered in a ledger.
+    if (Math.abs(tilt) > 0.1) {
+      console.warn(
+        `    WARNING: a global tilt of ${tilt.toFixed(3)} shifts every price toward ` +
+          `${tilt > 0 ? "overs" : "unders"}.\n` +
+          `    Check the dataset section of \`npm run price-model\` for how much of that\n` +
+          `    is a selection effect before trusting a ledger built on it.`
+      );
     }
   }
 
@@ -756,6 +934,8 @@ async function main() {
     ModelEdge: p.modelEdge.toFixed(4),
     EdgeBasis: a.edgeBasis,
     DevigMethod: p.oneSided ? "none" : a.devigMethod,
+    PriceModel: p.priceModel ?? "projection",
+    Slot: a.slot,
     LineSource: p.lineSource ?? "live",
     FixtureID: p.fixtureId,
     CapturedAt: capturedAt,
@@ -779,7 +959,7 @@ async function main() {
     return;
   }
 
-  writeCsvIfChanged(propsPath(a.dataDir, a.season, a.week), toCsv(PROPS_COLUMNS, propsRows), a);
+  writeCsvIfChanged(propsPath(a.dataDir, a.season, a.week, a.slot), toCsv(PROPS_COLUMNS, propsRows), a);
 
   // ---- data/edges: the published signal ----
   //
@@ -796,20 +976,31 @@ async function main() {
       `${(a.minEdge * 100).toFixed(1)}% bar, across ` +
       `${new Set(edgeRows.map((r) => `${r.PlayerID}|${r.Stat}`)).size} player-stats.`
   );
-  writeCsvIfChanged(edgesPath(a.dataDir, a.season, a.week), toCsv(PROPS_COLUMNS, edgeRows), a);
+  writeCsvIfChanged(edgesPath(a.dataDir, a.season, a.week, a.slot), toCsv(PROPS_COLUMNS, edgeRows), a);
 
   reportBetComposition(edgeRows);
 
   console.log(`Done. ${client.requestCount} OpticOdds requests.`);
 }
 
-function reportDiagnostics(d, a_useOpening = false) {
+function reportDiagnostics(d, atSpec = null) {
+  const a_useOpening = atSpec?.kind === "opening";
   if (!d) return;
   if (d.noSide) console.warn(`  ${d.noSide} records had no identifiable side — skipped.`);
   if (d.missingPrice) console.warn(`  ${d.missingPrice} records had no usable price/line — skipped.`);
   if (d.missingPlayer) console.warn(`  ${d.missingPlayer} records had no player — skipped.`);
   if (d.teamEntries) console.log(`  ${d.teamEntries} team entries (D/ST etc.) in player markets — skipped.`);
-  if (d.noHistoricalPrice) console.warn(`  ${d.noHistoricalPrice} historical odds carried neither a closing nor an opening price — skipped.`);
+  if (d.noHistoricalPrice) {
+    if (atSpec && atSpec.kind !== "opening" && atSpec.kind !== "closing") {
+      console.warn(
+        `  ${d.noHistoricalPrice} odds had no price as of ${atSpecLabel(atSpec)} — skipped.`
+      );
+    } else {
+      console.warn(
+        `  ${d.noHistoricalPrice} historical odds carried neither a closing nor an opening price — skipped.`
+      );
+    }
+  }
   if (d.lineValueSources) {
     const { closing = 0, opening = 0, fallback = 0, timeseries = 0 } = d.lineValueSources;
     const total = closing + opening + fallback + timeseries;
@@ -837,6 +1028,22 @@ function reportDiagnostics(d, a_useOpening = false) {
       );
     }
   }
+  // An offset needs the per-odd `entries` timeseries, which is a separate
+  // OpticOdds permission. Without it every offset row resolves to nothing,
+  // and the run looks like "the books had posted nothing" rather than "we are
+  // not allowed to see when they posted it". Those need telling apart.
+  if (atSpec && atSpec.kind === "offset" && (d.lineValueSources?.timeseries ?? 0) === 0) {
+    console.warn(
+      `\n  NOTHING resolved at ${atSpecLabel(atSpec)}: not one odd carried a price history.\n` +
+        `    An offset is reconstructed from each odd's \`entries\` timeseries, which is a\n` +
+        `    separate OpticOdds permission (include_timeseries). If your key lacks it, the\n` +
+        `    only moments available are --at opening and --at closing.\n` +
+        `    Note also that on this project's key clv comes back null for PLAYER props\n` +
+        `    (populated on game markets only), so --at closing will in practice fall back\n` +
+        `    to the opening line and say so above.`
+    );
+  }
+
   if (d.unmatchedMarkets?.size) {
     // Not necessarily a problem — most are markets we deliberately don't model
     // (moneyline, spreads, kicker props). But a market we DO want showing up
@@ -946,6 +1153,18 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                                    market. Always larger, so it selects many
                                    more bets — most of them not +EV. For
                                    research, not for a live ledger.
+  --price-model <m>        projection | blend (default: projection)
+                           projection = OurProb from the Floor/Median/Ceiling
+                                   distribution alone; the long-standing
+                                   behaviour and still the default.
+                           blend = re-price off the fitted model written by
+                                   price-model.mjs --write, which combines
+                                   the projection with the multi-book
+                                   consensus. Only turn this on once the
+                                   report shows the blend beating the market
+                                   out of sample; see README.
+  --price-model-set <s>    which fitted market set to price off (default: retail)
+  --price-model-file <p>   fit to load (default: data/pricing/{season}/model.json)
   --sides <s>              both | over | under (default: both)
   --books <a,b,c>          Sportsbooks to price against. Names are resolved
                            against the live list, so "hardrock" finds whatever
@@ -958,6 +1177,24 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
   --include-offshore       With --all-books, also include offshore books. The
                            sharpest (Pinnacle) give the best fair-price
                            reference for judging ModelEdge.
+  --slot <name>            Which capture of the week this is (default: main).
+                           'main' is the Tuesday drop and keeps the original
+                           file paths; any other name nests one level deeper,
+                           e.g. data/props/2026/thursday/week-03.csv. Use it
+                           to capture a week more than once — the Tuesday
+                           board is a small fraction of what the books
+                           eventually post. See scripts/lib/slots.mjs.
+  --at <moment>            With --historical, WHICH moment to reconstruct:
+                             opening | closing   the endpoints (olv/clv)
+                             T-48h, T-24h, T-3h  that many hours before each
+                                                 fixture's OWN kickoff
+                             <ISO timestamp>     an absolute moment
+                           Offsets need the per-odd price history, which is a
+                           separate OpticOdds permission (include_timeseries);
+                           without it the run says so rather than silently
+                           substituting the opening line. Defaults the slot to
+                           the moment reconstructed, so a backfill can never
+                           overwrite the record of what was actually published.
   --historical             Pull closing lines for a week already played,
                            instead of current odds. OpticOdds retains history
                            on a rolling 2-month window, so older weeks cannot

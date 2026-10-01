@@ -330,6 +330,10 @@ closing-line value is for.
    more interesting diagnostic but a trap as a filter: it is always larger, by
    about half the hold.
 
+   Both of these treat the market purely as a yardstick. For the other
+   question — using the books' prices as an *input* to our own, and scoring the
+   result with Brier and log loss — see **Pricing lines** below.
+
 ### The personas
 
 Nobody tails four hundred edges a week. `scripts/lib/personas.mjs` defines
@@ -373,6 +377,113 @@ dashboard labels anything too small to be conclusive. A persona's ROI shows
 what a strategy would have **felt** like; only the benchmark can establish
 whether the projections work.
 
+### When the board actually exists — slots
+
+The Tuesday drop above is one sample of the market per week, taken at one
+hour. Measured against what the same week looked like near kickoff, that hour
+catches very little of it:
+
+| | Tuesday drop | near kickoff | |
+|---|---|---|---|
+| Week 2 | 1,544 markets / **15** of 16 games | 18,692 / 16 | **8%** of the board |
+| Week 3 | 2,559 markets / **3** of 16 games | 62,590 / 16 | **4%**, 13 games never seen |
+
+Books post player props game by game through the week, so on Tuesday most of
+the board does not exist yet. Two-sided quotes — the only ones that can be
+de-vigged into a fair price — go from 51% of the Tuesday board to 74% near
+kickoff, which is why so much of `data/props/` is flagged `OneSided`.
+
+The obvious fix, moving the drop later, would throw away something real. Those
+Tuesday prices **beat the close by +5.25%** across 45 player-weeks, a 70% beat
+rate. Early genuinely is softer, exactly as claimed above. Both facts hold at
+once: Tuesday has the best prices and almost none of the board.
+
+So a week can now be captured **more than once**, and each capture writes into
+its own **slot** (`scripts/lib/slots.mjs`):
+
+```
+data/props/2026/week-03.csv             main     — the Tuesday drop
+data/props/2026/thursday/week-03.csv    thursday — the midweek sweep
+data/props/2026/t-48h/week-03.csv       t-48h    — a backfill reconstruction
+```
+
+`main` keeps the original paths, so every committed file and every existing
+reader is untouched. Both drops publish edges, the personas bet both — the
+dedupe then picks the better price across them, as a subscriber holding both
+would — and every row carries a `Slot` column that the ledgers and the
+`bySlot` rollup split on. Pooling two sourcing times into one ROI would
+destroy the only comparison that decides which one to keep.
+
+| Workflow | When (UTC) | Slot |
+|---|---|---|
+| `props-weekly.yml` | Tue 14:00 | `main` — softest prices, thin board |
+| `props-midweek.yml` | Thu 15:00 | `thursday` — full board, still pre-kickoff |
+
+Thursday 15:00 sits ~9 hours before Thursday Night Football, so **every** game
+of the week is still bettable. Saturday would catch a fuller board again but
+TNF would already have played. Which is actually better is a measurement, not
+an argument — see below.
+
+### Backfilling a past week
+
+```bash
+node scripts/capture-props.mjs --historical --at closing --season 2026 --week 3
+node scripts/capture-props.mjs --historical --at T-48h  --season 2026 --week 3
+```
+
+`--at` reconstructs the board as of a chosen moment from OpticOdds' price
+history. An offset like `T-48h` is resolved against **each fixture's own
+kickoff**, never against a wall-clock time: NFL games run Thursday, Sunday and
+Monday, so one absolute timestamp sits 24 hours from one game and 96 from
+another and would compare prices at completely different stages of their own
+markets.
+
+A reconstruction defaults its slot to the moment it reconstructs, so it
+**cannot overwrite the Tuesday drop**. That matters more than it looks: the
+drop is the record of what a subscriber was actually sent, and it is the one
+artefact in this repo that no later run can rebuild. Everything else —
+ledgers, rollups, the dashboard dataset — is a pure function of the snapshots.
+
+Run it from the **Backfill props** workflow, which takes a list of weeks and
+carries on past a week that fails rather than discarding the ones that
+succeeded. It is slow: the historical endpoint takes one fixture per request
+and is rate-limited to 10 requests per 15 seconds.
+
+> **What your API key has to allow.** Offsets are reconstructed from each
+> odd's `entries` price history, which is a **separate OpticOdds permission**
+> (`include_timeseries`). Without it only `--at opening` and `--at closing`
+> resolve, and the run says so loudly rather than substituting a different
+> price — an opening line is not a T-48h line, and quietly swapping one for
+> the other would answer the timing question with the wrong data.
+>
+> Note also that on this project's key `clv` comes back **null for player
+> props** (it is populated on game markets only), so `--at closing` falls back
+> to the opening line for most rows. The capture reports the share this
+> happened to and records it in `LineSource`, so those rows stay a separate
+> cohort rather than being pooled with live-captured ones.
+
+### Which slot to source from
+
+```bash
+npm run board-timing
+```
+
+Compares every capture of every week side by side — the live drops, any
+backfilled reconstructions, and the daily near-kickoff capture as the ceiling
+— on coverage (fixtures, players, markets), the two-sided share, the hold, and
+where actuals exist the Brier score of both the market and our projection.
+
+It deliberately does not pick a winner. Coverage and price quality pull in
+opposite directions, and how much each matters depends on how many bets you
+intend to place. What it removes is the guessing: a slot is worth moving to
+when it gains enough coverage to matter *without* its prices having sharpened
+away the edge, and the Tuesday drop's +5.25% closing-line value is the number
+a later slot has to be weighed against.
+
+Read the Brier columns next to the `clusters` column, never alone. Each slot
+is scored only over the markets it actually saw, so a slot with a tiny board
+is not being judged on the same bets as a full one.
+
 ### Closing line value
 
 The measurement that does not depend on bets winning. `data/closing/` records
@@ -394,10 +505,16 @@ not invent.
 ### Pipeline
 
 ```
-scripts/capture-props.mjs            Tuesday: publish data/edges/
-scripts/capture-props.mjs --closing  daily: record data/closing/ near each kickoff
-scripts/simulate-personas.mjs        replay every persona over the season
-scripts/build-betting-data.mjs       aggregate into public/data/betting.json
+scripts/capture-props.mjs                 Tuesday: publish data/edges/ (slot main)
+scripts/capture-props.mjs --slot thursday Thursday: the same, once the board exists
+scripts/capture-props.mjs --closing       daily: record data/closing/ near each kickoff
+scripts/capture-props.mjs --historical --at T-48h
+                                          rebuild a past board at a chosen moment
+scripts/simulate-personas.mjs             replay every persona over every slot
+scripts/build-betting-data.mjs            aggregate into public/data/betting.json
+scripts/board-timing.mjs                  compare the slots — when to source
+scripts/price-model.mjs                   score the projections AGAINST the books
+                                          (Brier / log loss) — see Pricing lines
 ```
 
 ```bash
@@ -412,8 +529,10 @@ npm run simulate -- --persona kelly --dry-run      # one persona, no writes
 | Workflow | When (UTC) | What |
 |---|---|---|
 | `ingest-weekly.yml` | daily **13:00** | RotoWire projections + actuals, the player roster, then replays personas |
-| `props-weekly.yml` | **Tue 14:00** | The drop: publish edges, replay personas |
+| `props-weekly.yml` | **Tue 14:00** | The drop: publish edges (slot `main`), replay personas |
+| `props-midweek.yml` | **Thu 15:00** | The second drop: the same once the books have posted the board (slot `thursday`) |
 | `closing-lines.yml` | daily **15:00** | Record closing lines for games kicking off soon |
+| `props-backfill.yml` | manual | Rebuild a past week's board at a chosen moment |
 | `optic-discover.yml` | manual | Inspect what the OpticOdds API returns |
 
 The hour between ingest and the drop is load-bearing, not cosmetic. The NFL
@@ -422,7 +541,7 @@ drop needs week N+1 projections — and Monday's ingest only wrote week N. They
 are created by the run immediately before it. Starting both together races, and
 the capture fails with *"No projections snapshot"*.
 
-All three data-writing workflows also share one `concurrency` group. They each
+All the data-writing workflows also share one `concurrency` group. They each
 `git add data/` and push to the same branch, so two at once means the second
 push is rejected; and because scheduled runs can be delayed by GitHub for many
 minutes, clock separation alone is not a guarantee. Each commit step
@@ -430,6 +549,191 @@ additionally rebases and retries, since every one of them only ever *adds* data
 files — rebasing onto whatever landed first is always the right resolution.
 
 `data/legacy-bets/` holds the pre-rework ledger; see the README there.
+
+## Pricing lines (not just finding edges)
+
+```bash
+npm run price-model
+```
+
+Everything under **Paper trading** treats the projection as the price and the
+market as the yardstick: `Edge = OurProb − ImpliedProb`. That framing can only
+ask *do we disagree?*, and it answers with a number that is largest exactly
+where our model is worst — because disagreement and error are the same
+measurement whenever the market is right.
+
+This report asks the other question. Given a player's Floor/Median/Ceiling
+**and** what the books are charging, what is the best available estimate of
+`P(actual > line)`? That is a forecasting problem with a ground truth, so it is
+scored properly — Brier, log loss, reliability — instead of argued about via
+ROI on a few hundred bets.
+
+### The model
+
+    logit(p) = a + c·logit(p_market) + b·[logit(p_proj) − logit(p_market)]
+
+Three parameters, fitted by minimising log loss against realised outcomes:
+
+| | Meaning | What to watch for |
+|---|---|---|
+| `b` | how much of our **disagreement** with the book to believe | `b = 0` says the projections add nothing on top of the market |
+| `c` | how much the market is worth | expect ≈ 1; a de-vigged consensus is already calibrated |
+| `a` | a global over/under tilt | on this data it is partly a **selection effect** — see below |
+
+It is written in terms of the *difference* rather than the obvious
+`a + b·logit(p_proj) + c·logit(p_market)` because the two predictors are badly
+collinear — the projection and the market agree most of the time, which is
+precisely when a regression cannot separate them. Fitted the obvious way,
+passing yards came out at `b = −0.58` against `c = +2.18`: a pair that
+reproduces the data, means nothing individually, and priced a near-certain
+Over for any market the projection was confident was Under. The difference form
+is close to orthogonal, so `b` is identified and reads directly as a shrinkage
+factor on our own opinion.
+
+Each stat gets its own `(a, b, c)`, because `calibration.mjs` establishes the
+projections are *not* uniformly miscalibrated. Small stats are pulled toward
+the global fit by a Gaussian prior **inside the likelihood**, at a strength
+measured in observations (`--shrinkage-k`, default 200).
+
+> That last detail is load-bearing and was got wrong first. Fitting each stat
+> alone and then averaging its coefficients with the global ones assumes the
+> per-stat fit is a noisy but finite estimate. On 17 near-separable passTD rows
+> it is not: the own fit returned `b = −85`, and averaging that in at 8% weight
+> still left `b = −6.6`, which priced Josh Allen Over 4.5 passing TDs at **53%**
+> against a market price of 3.8%. Eight percent of a divergent number is a
+> divergent number. A prior worth 200 observations cannot be moved far by 17
+> rows however separable they are.
+
+Logit inputs are winsorised to ±6 (≈ 0.25%/99.75%) so a fitted slope is never
+applied outside the range it was estimated across.
+
+### What "the market" means
+
+Per book: de-vig the two-sided quote (`devig.mjs`). Across books: the **median
+of the logits**, for the same reason `calibration.mjs` already takes a median —
+one stale book should not drag the consensus.
+
+Two definitions are fitted and reported side by side:
+
+- **retail** — DraftKings, FanDuel, BetMGM, Caesars, BetRivers, Hard Rock,
+  theScore, betr. The board you can actually bet, so a disagreement with it is
+  a disagreement with a real price.
+- **sharp** — Circa, Pinnacle and friends. Beating *this* consensus is the
+  stronger claim. Right now it is starved: the only sharp book in the captures
+  is Circa, it appears in week 1 alone, and `books.mjs` does not pull Pinnacle
+  by default. Run `capture-props --include-offshore` to build it up.
+
+**One-sided markets.** Roughly half the committed board is quoted one side
+only, at every book that prices it — 100% of week 1, 52% of week 2, 39% of
+week 3, 15% of week 4 as the capture widened. Cross-book
+pairing — an Over at DraftKings against an Under at FanDuel — was the obvious
+fix and buys **nothing**: across weeks 1–3 the number of markets where two
+books quote opposite sides and no single book quotes both is exactly zero.
+One-sidedness is a property of the market, not of the book.
+
+So those rows are de-vigged against an *assumed* overround, `fair = raw/(1+H)`,
+with `H` the median observed hold for that stat. That is defensible because the
+measured hold barely moves — .0772 recYds, .0769 rushYds/passYds, .0693
+receptions, .0652 completions/rushAtt — a 1.2-point spread across the whole
+board. Every row records `probSource`, and the report scores `devig` and
+`assumed-hold` rows separately. If they disagree, believe the measured one.
+
+### Read the cluster count, not the row count
+
+A week's capture is a handful of games' worth of alternate lines, not a broad
+slate:
+
+| Week | Gradable markets | Distinct players |
+|---|---|---|
+| 1 | 977 | 183 |
+| 2 | 881 | **21** |
+| 3 | 1,583 | **28** |
+
+2026 week 3 is drawn from **three fixtures**; Lamar Jackson alone accounts for
+309 quoted rows, Josh Allen for 137 of week 2's. Over 274.5 / 284.5 / 294.5
+passing yards are not three observations about whether we price him correctly —
+they are one quarterback having one game, and they resolve together.
+
+Every comparison is therefore clustered on `(week, player)`, and the report
+prints the naive `z` beside the clustered one so the size of that mistake stays
+visible. On the current data it is the difference between a finding and
+nothing:
+
+| blend vs. market, out of sample | |
+|---|---|
+| Brier difference | −0.00203 (negative = better) |
+| naive z (2,464 markets) | **−2.51** |
+| clustered z (49 player-weeks) | **−0.61** |
+
+### The verdict, as of 2026 week 4
+
+Two comparisons, and conflating them is the easiest way to misread the whole
+report:
+
+| Comparison | Asks |
+|---|---|
+| blend vs. `marketRaw` | is our price better than the book's? |
+| blend vs. `marketRecal` | do the **projections** contribute, or is the gain just a recalibration of the book? |
+
+The first can be comfortably positive while the second is zero — and that is a
+completely different business. On 2026 weeks 1–3 the fitted `b` is **−0.012**:
+the projections add essentially nothing on top of the multi-book consensus, and
+what improvement exists comes from `a` and `c` recalibrating the market itself.
+The clustered standard error puts the whole thing inside noise. **The honest
+answer today is "inconclusive, and it needs more player-weeks rather than a
+more complex model."**
+
+### One caveat that is not noise
+
+`Dropped: no actuals` is a **bias, not missing data**. The RotoWire actuals
+feed carries no all-zero rows — a player who dressed and recorded nothing in
+every tracked stat is simply absent, indistinguishable from one who was
+inactive (26.8% of week-1 prop players, 16.3% of week-2). Those are precisely
+the player-weeks where the **Under** won, so dropping them conditions the
+sample on the outcome and pushes the observed over-rate up. It is visible in
+the fitted intercept (`a = +0.33`), and applying that tilt to week 3 moves the
+median edge from −3.2% to +0.6% and takes rows clearing the 3% bar from 1,057
+to 1,401 — i.e. it would manufacture 344 over bets out of a data artefact.
+
+Fixing it needs a played/did-not-play source, which this project does not have.
+Until then the intercept carries a selection effect as well as any real market
+tilt and should not be shipped into a live price on its own. `capture-props`
+warns whenever it loads a fit with `|a| > 0.1`.
+
+### Using it in the betting path
+
+The report changes nothing by itself. To price off the blend:
+
+```bash
+npm run price-model -- --write          # fits and writes data/pricing/{season}/model.json
+npm run capture-props -- --price-model blend
+```
+
+`--price-model` defaults to `projection` — the long-standing Floor/Median/
+Ceiling price — and the default does not move until the report earns it. Every
+captured row carries a `PriceModel` column, so an archived ledger can always
+say which model priced the bet.
+
+The repricing runs as a pass over all candidates (like the disagreement cap),
+because a consensus is not a property of any single quote. Two invariants it
+maintains: only the Over is blended and the Under is set to its complement, so
+the two sides cannot drift into arbitrage against ourselves; and a market with
+no consensus keeps its projection price rather than being dropped or silently
+defaulted to the book.
+
+### Options
+
+```
+--season <y>         season to read (default: latest with captures)
+--market-set <s>     retail | sharp | all | both        (default: both)
+--stats <list>       comma-separated stat keys          (default: all bettable)
+--devig-method <m>   multiplicative | additive | power | shin
+--shrinkage-k <n>    per-stat sample worth half the global fit (default: 200)
+--min-books <n>      drop markets quoted by fewer books (default: 1)
+--include-retired    include bet:false markets (anytimeTD)
+--write              persist the fit to data/pricing/{season}/model.json
+--json               emit the analysis instead of tables
+```
 
 ## Live weekly ingestion
 

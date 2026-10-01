@@ -41,6 +41,7 @@ import { gradeOutcome } from "./lib/grading.mjs";
 import { readCsv, toCsv } from "./lib/csv.mjs";
 import { seasonForDate } from "./lib/schedule.mjs";
 import { edgeBucket } from "./lib/edge.mjs";
+import { SLOT_MAIN, slotDir, slotOf } from "./lib/slots.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -52,6 +53,12 @@ export const LEDGER_COLUMNS = [
   "Book", "Line", "Side", "Odds", "OppositeOdds",
   "ImpliedProb", "FairProb", "Hold", "OneSided",
   "OurProb", "Edge", "ModelEdge", "EdgeBucket",
+  // Which model produced OurProb (projection | blend). A ledger that cannot
+  // say how its bets were priced cannot be re-read months later.
+  "PriceModel",
+  // Which capture of the week the offer came from. Rollups split on this;
+  // pooling two sourcing times into one ROI would answer nothing.
+  "Slot",
   "StakeUnits", "ScaledBy", "BankrollBefore",
   "Status", "Actual", "PnlUnits",
   // Closing Line Value — null until a closing snapshot exists for the week.
@@ -76,8 +83,8 @@ function parseArgs(argv) {
   return a;
 }
 
-const edgesPath = (d, s, w) => join(ROOT, d, "edges", String(s), `week-${pad2(w)}.csv`);
-const propsPath = (d, s, w) => join(ROOT, d, "props", String(s), `week-${pad2(w)}.csv`);
+const edgesPath = (d, s, w, slot) => join(ROOT, d, "edges", String(s), slotDir(slot), `week-${pad2(w)}.csv`);
+const propsPath = (d, s, w, slot) => join(ROOT, d, "props", String(s), slotDir(slot), `week-${pad2(w)}.csv`);
 const actualPath = (d, s, w) => join(ROOT, d, "actuals", String(s), `week-${pad2(w)}.csv`);
 const closingPath = (d, s, w) => join(ROOT, d, "closing", String(s), `week-${pad2(w)}.csv`);
 const ledgerPath = (d, p, s, w) => join(ROOT, d, "bets", p, String(s), `week-${pad2(w)}.csv`);
@@ -123,6 +130,12 @@ function toEdge(row) {
     // no fair price to disagree with, so it equals the raw edge by definition.
     modelEdge: num(row.ModelEdge) ?? num(row.Edge),
     maxStake: num(row.MaxStake),
+    // Which model produced OurProb. Absent on every row captured before the
+    // blend existed, and those were all priced off the projection alone.
+    priceModel: row.PriceModel || "projection",
+    // Which capture of the week this offer came from. Absent on every row
+    // written before slots existed, and those were all the Tuesday drop.
+    slot: slotOf(row),
     source: row.Source || (row.OneSided === undefined ? "rotowire" : "opticodds"),
     capturedAt: row.CapturedAt || "",
   };
@@ -146,14 +159,50 @@ function loadProjectedValues(a, season, week) {
   return medians;
 }
 
-function loadEdges(a, season, week) {
-  // Prefer the published edge set; fall back to the full props scan for weeks
-  // captured before data/edges/ existed.
-  for (const p of [edgesPath(a.dataDir, season, week), propsPath(a.dataDir, season, week)]) {
-    if (!existsSync(p)) continue;
-    return applyTodaysRules(readCsv(p).map(toEdge), a, season, week);
+// Every slot's edge file for one week, newest-posting slot last.
+//
+// A week can now be captured more than once — the Tuesday drop plus a later
+// sweep once the books have actually posted the board (see SLOT_MAIN in
+// capture-props.mjs). Both are real offers a subscriber received, so both are
+// bettable, and the persona's own dedupe then picks the better price across
+// them exactly as a real bettor holding both drops would.
+//
+// What must NOT happen is the two blending into one undifferentiated ROI.
+// They are priced at different points in the week against different-sized
+// boards, and the whole reason for running both is to find out which is
+// better. So every row carries its Slot through to the ledger and the
+// rollups split on it.
+function slotsFor(a, season) {
+  const dir = join(ROOT, a.dataDir, "edges", String(season));
+  const slots = [SLOT_MAIN];
+  if (existsSync(dir)) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) slots.push(entry.name);
+    }
   }
-  return null;
+  return slots;
+}
+
+function loadEdges(a, season, week) {
+  const rows = [];
+  let found = false;
+  for (const slot of slotsFor(a, season)) {
+    // Prefer the published edge set; fall back to the full props scan for
+    // weeks captured before data/edges/ existed.
+    for (const p of [
+      edgesPath(a.dataDir, season, week, slot),
+      propsPath(a.dataDir, season, week, slot),
+    ]) {
+      if (!existsSync(p)) continue;
+      found = true;
+      // A row written before slots existed carries no Slot column; it came
+      // from the Tuesday drop, which is what SLOT_MAIN means.
+      for (const r of readCsv(p)) rows.push(toEdge({ Slot: slot, ...r }));
+      break;
+    }
+  }
+  if (!found) return null;
+  return applyTodaysRules(rows, a, season, week);
 }
 
 // Today's rules, applied to the whole season.
@@ -184,14 +233,17 @@ function applyTodaysRules(rows, a, season, week) {
 
 function weeksAvailable(a, season) {
   const weeks = new Set();
-  for (const kind of ["edges", "props"]) {
-    const dir = join(ROOT, a.dataDir, kind, String(season));
-    if (!existsSync(dir)) continue;
-    for (const f of readdirSync(dir)) {
-      const m = f.match(/^week-(\d+)\.csv$/);
+  const scan = (dir) => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const m = entry.name.match(/^week-(\d+)\.csv$/);
       if (m) weeks.add(Number(m[1]));
+      // One level down is a slot directory — a week captured only by a later
+      // sweep still has to be replayed.
+      else if (entry.isDirectory()) scan(join(dir, entry.name));
     }
-  }
+  };
+  for (const kind of ["edges", "props"]) scan(join(ROOT, a.dataDir, kind, String(season)));
   return [...weeks].sort((x, y) => x - y);
 }
 
@@ -259,6 +311,8 @@ function runPersona(a, persona, season, weeks) {
         Hold: fixed(bet.hold), OneSided: bet.oneSided ? 1 : 0,
         OurProb: fixed(bet.ourProb), Edge: fixed(bet.edge), ModelEdge: fixed(bet.modelEdge),
         EdgeBucket: edgeBucket(persona.edgeBasis === "novig" ? bet.modelEdge : bet.edge),
+        PriceModel: bet.priceModel,
+        Slot: bet.slot,
         StakeUnits: bet.stakeUnits, ScaledBy: bet.scaledBy,
         BankrollBefore: round4(bankrollBefore),
         Status: status, Actual: actual, PnlUnits: pnlUnits,

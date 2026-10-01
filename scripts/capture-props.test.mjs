@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ourProbability, PROPS_COLUMNS } from "./capture-props.mjs";
+import { ourProbability, PROPS_COLUMNS, repriceWithBlend } from "./capture-props.mjs";
 import { LEDGER_COLUMNS } from "./simulate-personas.mjs";
 import {
   matchStatKey,
@@ -144,4 +144,86 @@ test("a non-empty result replaces a populated snapshot as normal", () => {
   ]);
   assert.equal(writeGuarded(path, updated), "written");
   assert.equal(readFileSync(path, "utf8"), updated);
+});
+
+
+// --- repriceWithBlend ------------------------------------------------------
+// The optional second pricing pass. `priceMarket` sees one book at a time and
+// can only produce the projection-only price; this runs over every candidate
+// once the whole market is in hand.
+
+// A fit that simply returns the market consensus: a = 0, c = 1, b = 0. With
+// this, a re-priced candidate's OurProb must equal the de-vigged consensus,
+// which makes the wiring testable without depending on any fitted numbers.
+const MARKET_ONLY_FIT = { model: "blend", global: [0, 1, 0], stats: {} };
+
+const candidate = (over) => ({
+  rotowirePlayerId: "1",
+  statKey: "rushYds",
+  line: 49.5,
+  side: over.side ?? "over",
+  sportsbook: over.book ?? "DraftKings",
+  odds: over.odds,
+  oppositeOdds: over.oppositeOdds ?? null,
+  impliedProb: 0.5,
+  fairProb: 0.5,
+  hold: 0.048,
+  ourProb: over.ourProb ?? 0.62,
+  edge: 0,
+  modelEdge: 0,
+});
+
+test("repriceWithBlend replaces OurProb with the model's price and relabels the row", () => {
+  const rows = [candidate({ odds: -110, oppositeOdds: -110 })];
+  const changed = repriceWithBlend(rows, MARKET_ONLY_FIT);
+  assert.equal(changed, 1);
+  assert.equal(rows[0].priceModel, "blend");
+  // Two books at -110 de-vig to exactly 0.5.
+  assert.ok(Math.abs(rows[0].ourProb - 0.5) < 1e-6);
+  assert.ok(Math.abs(rows[0].edge - (0.5 - 0.5)) < 1e-6);
+});
+
+test("repriceWithBlend keeps the two sides of a market complementary", () => {
+  // Blending each side independently would produce a pair that does not sum
+  // to 1 — free arbitrage against ourselves.
+  const rows = [
+    candidate({ odds: -130, oppositeOdds: 110, ourProb: 0.62 }),
+    { ...candidate({ odds: 110, oppositeOdds: -130, ourProb: 0.38 }), side: "under" },
+  ];
+  repriceWithBlend(rows, MARKET_ONLY_FIT);
+  const over = rows.find((r) => r.side === "over");
+  const under = rows.find((r) => r.side === "under");
+  assert.ok(Math.abs(over.ourProb + under.ourProb - 1) < 1e-9);
+});
+
+test("repriceWithBlend leaves a market with no consensus on the projection price", () => {
+  // No book in the requested set quotes it, so there is no market prior. The
+  // row keeps its projection price rather than being dropped or defaulted.
+  const rows = [candidate({ odds: -110, oppositeOdds: -110, book: "circasports" })];
+  const changed = repriceWithBlend(rows, MARKET_ONLY_FIT, { marketSet: "retail" });
+  assert.equal(changed, 0);
+  assert.equal(rows[0].ourProb, 0.62);
+  assert.equal(rows[0].priceModel, undefined); // written as "projection" at CSV time
+});
+
+test("repriceWithBlend prices each line of a player separately", () => {
+  const rows = [
+    candidate({ odds: -110, oppositeOdds: -110 }),
+    { ...candidate({ odds: 300, oppositeOdds: -400 }), line: 74.5 },
+  ];
+  repriceWithBlend(rows, MARKET_ONLY_FIT);
+  assert.ok(rows[0].ourProb > rows[1].ourProb, "the longer line must price lower");
+});
+
+test("repriceWithBlend is a no-op without a fit", () => {
+  const rows = [candidate({ odds: -110, oppositeOdds: -110 })];
+  assert.equal(repriceWithBlend(rows, null), 0);
+  assert.equal(rows[0].ourProb, 0.62);
+});
+
+test("PROPS_COLUMNS and LEDGER_COLUMNS record which model priced each row", () => {
+  // Without this, an archived ledger cannot say whether a bet was taken on
+  // the projection price or the blend — and the two are not comparable.
+  assert.ok(PROPS_COLUMNS.includes("PriceModel"));
+  assert.ok(LEDGER_COLUMNS.includes("PriceModel"));
 });

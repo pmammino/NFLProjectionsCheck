@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { readCsv } from "./lib/csv.mjs";
 import { EDGE_BUCKETS } from "./lib/edge.mjs";
 import { PERSONAS, PERSONA_BY_ID, STARTING_BANKROLL_UNITS } from "./lib/personas.mjs";
+import { slotOf } from "./lib/slots.mjs";
 import { summarizeClv } from "./lib/clv.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -191,7 +192,10 @@ function bankrollPath(rows) {
 }
 
 function build() {
-  const dataDir = "data";
+  // Overridable so a scratch copy of data/ can be aggregated without
+  // touching the real one — which is how the slot rollups get exercised
+  // end to end before a second capture slot exists in the repo.
+  const dataDir = process.env.BETTING_DATA_DIR ?? "data";
   const season = resolveSeason(dataDir);
 
   const personas = [];
@@ -229,6 +233,15 @@ function build() {
       bySide: [...groupBy(rows, (r) => r.Side || "over")]
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([side, g]) => ({ side, ...rollup(g) })),
+      // Which capture of the week the bet came from. A week can be captured
+      // twice — the Tuesday drop and a later sweep once the books have
+      // actually posted the board — and the two are priced at different
+      // points against very differently sized boards. Pooling them into one
+      // ROI would destroy the only comparison that decides when to source.
+      // See lib/slots.mjs.
+      bySlot: [...groupBy(rows, (r) => slotOf(r))]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([slot, g]) => ({ slot, ...rollup(g) })),
       byWeek: bankrollPath(rows),
       bets: rows
         .map((r) => ({

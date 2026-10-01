@@ -195,9 +195,14 @@ function loadEdges(a, season, week) {
     ]) {
       if (!existsSync(p)) continue;
       found = true;
-      // A row written before slots existed carries no Slot column; it came
-      // from the Tuesday drop, which is what SLOT_MAIN means.
-      for (const r of readCsv(p)) rows.push(toEdge({ Slot: slot, ...r }));
+      // The DIRECTORY wins over the row's own Slot column. The column records
+      // what a capture called itself; the directory is where the data
+      // actually lives now, which is the thing a reader can verify. They
+      // diverge whenever a slot is renamed — as the mixed `closing` backfill
+      // was — and a ledger that kept reporting the old name would attribute
+      // bets to a slot that no longer exists. Rows written before slots
+      // existed have no column at all, and the directory says main.
+      for (const r of readCsv(p)) rows.push(toEdge({ ...r, Slot: slot }));
       break;
     }
   }

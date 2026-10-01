@@ -575,3 +575,27 @@ test("historicalPriceAt skips a locked quote", () => {
   };
   assert.equal(historicalPriceAt(locked, parseAtSpec("T-48h")).price, -110);
 });
+
+test("historicalPriceAt will not substitute the other endpoint by default", () => {
+  // The 2026 backfill is the reason. `clv` is null on most player props, so a
+  // run asking for `closing` silently produced a slot that was 86% closing
+  // lines in week 3 and 100% OPENING lines in week 4 — under one name, and
+  // mixed inside a single week, so a market's consensus could blend one
+  // book's closing price with another's opening price.
+  const openingOnly = { startDate: AT_KICKOFF, olv: { price: -105, points: 49.5 }, clv: null, entries: [] };
+  assert.equal(historicalPriceAt(openingOnly, parseAtSpec("closing")), null);
+  // The endpoint that IS present still resolves.
+  assert.equal(historicalPriceAt(openingOnly, parseAtSpec("opening")).price, -105);
+  // And the old behaviour is available knowingly.
+  const lenient = historicalPriceAt(openingOnly, parseAtSpec("closing"), { allowFallback: true });
+  assert.equal(lenient.price, -105);
+  assert.equal(lenient.source, "fallback");
+});
+
+test("historicalLineValue keeps its own fallback contract", () => {
+  // Strictness is the caller's choice; this function is also used for grading
+  // a single bet, where taking the other endpoint is the right answer.
+  const closingOnly = { startDate: AT_KICKOFF, olv: null, clv: { price: -125, points: 51.5 } };
+  assert.equal(historicalLineValue(closingOnly, { prefer: "opening" }).price, -125);
+  assert.equal(historicalLineValue(closingOnly, { prefer: "opening", allowFallback: false }), null);
+});

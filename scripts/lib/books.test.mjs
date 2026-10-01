@@ -95,3 +95,28 @@ test("blank entries in a request are skipped rather than matching everything", (
   assert.deepEqual(ids, ["draftkings"]);
   assert.deepEqual(missing, []);
 });
+
+test("every default book resolves against a live list carrying both Circa ids", () => {
+  // Regression test for a silent drop. "circa" matched both circa_sports and
+  // circa_vegas once OpticOdds listed both, so resolveBookIds reported it
+  // ambiguous and the capture ran with 7 of 8 books for weeks — taking the
+  // only sharp book in the roster with it.
+  const live = [
+    { id: "draftkings", name: "DraftKings" },
+    { id: "fanduel", name: "FanDuel" },
+    { id: "betmgm", name: "BetMGM" },
+    { id: "caesars", name: "Caesars" },
+    { id: "betrivers", name: "BetRivers" },
+    { id: "hard_rock", name: "Hard Rock" },
+    { id: "thescore", name: "theScore" },
+    { id: "circa_sports", name: "Circa Sports" },
+    { id: "circa_vegas", name: "Circa Vegas" },
+  ];
+  const r = resolveBookIds(DEFAULT_BOOKS, live);
+  assert.deepEqual(r.missing, [], "no default book should fail to resolve");
+  assert.deepEqual([...r.ambiguous], [], "no default book should be ambiguous");
+  assert.equal(r.ids.length, DEFAULT_BOOKS.length);
+  assert.ok(r.ids.includes("circa_sports"));
+  // One operator, one vote: the other Circa id must not also come along.
+  assert.ok(!r.ids.includes("circa_vegas"));
+});

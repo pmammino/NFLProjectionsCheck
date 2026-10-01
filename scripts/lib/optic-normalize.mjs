@@ -394,11 +394,11 @@ export function normalizeOddsPayloads(payloads, { statDefs }) {
 // taken. `--use-opening` exists because comparing the two measures how much a
 // line moved, which is the classic test of whether a model is early to news or
 // merely agreeing with it after the fact.
-export function historicalLineValue(rec, { prefer = "closing" } = {}) {
+export function historicalLineValue(rec, { prefer = "closing", allowFallback = true } = {}) {
   const primary = prefer === "opening" ? rec?.olv : rec?.clv;
   const fallback = prefer === "opening" ? rec?.clv : rec?.olv;
 
-  for (const source of [primary, fallback]) {
+  for (const source of allowFallback ? [primary, fallback] : [primary]) {
     const price = numOrNull(firstOf(source, ["price"]));
     if (price !== null) {
       return { price, points: numOrNull(firstOf(source, ["points"])), source: source === primary ? prefer : "fallback" };
@@ -453,6 +453,12 @@ export function lastEntryBefore(entries, cutoffIso) {
 // returns null rather than quietly substituting the opening price: an
 // opening line is not a T-48h line, and a backfill that silently swapped one
 // for the other would answer the timing question with the wrong data.
+//
+// MEASURED on this project's key (2026-10-01, week 3): the historical
+// endpoint works and returned 123,464 odds across 16 fixtures, and NOT ONE of
+// them carried `entries`. So offsets are unavailable here until that
+// permission is added, and opening/closing are the only moments that resolve.
+// The capture reports this explicitly instead of writing an empty file.
 
 // "opening" | "closing" | "T-48h" / "-48h" / "48h" | an ISO timestamp.
 export function parseAtSpec(spec) {
@@ -489,9 +495,23 @@ export function atSpecLabel(parsed) {
 // Returns { price, points, source } or null when this odd has no price at
 // that moment — which is itself the signal that matters for timing: an odd
 // the book had not posted yet is absent from the board, not priced at zero.
-export function historicalPriceAt(rec, parsed, { now = Date.now() } = {}) {
+export function historicalPriceAt(rec, parsed, { now = Date.now(), allowFallback = false } = {}) {
   if (parsed.kind === "opening" || parsed.kind === "closing") {
-    return historicalLineValue(rec, { prefer: parsed.kind });
+    // STRICT BY DEFAULT, and the 2026 backfill is why.
+    //
+    // historicalLineValue falls back to the other endpoint when the requested
+    // one is missing, which is right for grading one bet and wrong for
+    // building a board. `clv` is null on most player props here, so a run
+    // asking for `closing` produced a slot that was 86% closing lines in week
+    // 3 and 100% OPENING lines in week 4 — under one name. Worse, the two
+    // were mixed inside a single week, so a market's consensus could blend
+    // one book's closing price with another's opening price: a number
+    // belonging to no moment the market ever occupied.
+    //
+    // That is the same error this function refuses for offsets, so it refuses
+    // it here too. A row with no price at the requested endpoint is ABSENT
+    // from that board. Pass allowFallback to get the old behaviour, knowingly.
+    return historicalLineValue(rec, { prefer: parsed.kind, allowFallback });
   }
 
   let cutoffMs;

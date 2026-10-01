@@ -191,6 +191,7 @@ function parseArgs(argv) {
       case "--at": a.at = next(); break;
       case "--slot": a.slot = next(); a.slotExplicit = true; break;
       case "--use-opening": a.useOpening = true; break;
+      case "--allow-line-fallback": a.allowLineFallback = true; break;
       case "--allow-empty": a.allowEmpty = true; break;
       case "--include-offshore": a.includeOffshore = true; break;
       case "--all-books": a.allBooks = true; break;
@@ -662,7 +663,7 @@ function historicalToMarkets(payloads, a) {
   const bySource = { closing: 0, opening: 0, fallback: 0, timeseries: 0 };
   const atLabel = atSpecLabel(a.atSpec);
   for (const rec of records) {
-    const lv = historicalPriceAt(rec, a.atSpec);
+    const lv = historicalPriceAt(rec, a.atSpec, { allowFallback: a.allowLineFallback === true });
     if (!lv) {
       // On an offset this is usually not an error: an odd the book had not
       // posted by that hour is ABSENT from the board then, which is the fact
@@ -1031,6 +1032,20 @@ function reportDiagnostics(d, atSpec = null) {
     if (total > 0) {
       console.log(
         `  line values: ${closing} closing, ${opening} opening, ${fallback} fell back, ${timeseries} from timeseries.`
+      );
+    }
+    // A slot holding two different instruments is worse than a smaller slot.
+    // The consensus medians across books within a market, so a mix means some
+    // markets get a price blended from two moments — a number belonging to no
+    // moment the market ever occupied. Loud, because it is invisible in the
+    // file: every row looks fine on its own and only LineSource betrays it.
+    const kinds = [closing, opening, fallback, timeseries].filter((n) => n > 0).length;
+    if (kinds > 1) {
+      console.warn(
+        `  WARNING: this capture MIXES ${kinds} kinds of line value in one slot.\n` +
+          `    A market's consensus can then blend prices from different moments.\n` +
+          `    This is what --allow-line-fallback permits; drop it to get a slot\n` +
+          `    holding one instrument, and run each endpoint as its own slot.`
       );
     }
     // `clv` is frequently null — in a real week-1 BetMGM pull only ~26% of odds

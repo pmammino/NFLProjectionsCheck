@@ -150,7 +150,9 @@ test("the drop tallies account for every market that went in", () => {
     { ...quote(0.5), line: 80, book: "circasports" }, // no book in the retail set
   ];
   const { samples, dropped } = buildSamples(quotes, actuals(60), { marketSet: "retail" });
-  const marketsIn = new Set(quotes.map((q) => [q.week, q.playerId, q.stat, q.line].join("|"))).size;
+  const marketsIn = new Set(
+    quotes.map((q) => [q.slot ?? "main", q.week, q.playerId, q.stat, q.line].join("|"))
+  ).size;
   const accounted =
     samples.length + Object.values(dropped).reduce((a, b) => a + b, 0) - dropped.inconsistentProj;
   assert.equal(accounted, marketsIn, `${accounted} accounted for vs ${marketsIn} markets in`);
@@ -191,23 +193,32 @@ test("readPropRow takes the slot from its caller, falling back to the row", () =
   assert.equal(readPropRow(CURRENT, "t-48h").slot, "t-48h");
 });
 
-test("buildSamples merges two captures of the same market and records both", () => {
-  // The Tuesday drop and a later sweep are the same forecast about the same
-  // game. They collapse into one market carrying whichever books quoted it at
-  // either moment — which is the whole point of the second capture, since
-  // Tuesday saw a fraction of the board.
+test("buildSamples keeps two captures of the same market apart", () => {
+  // A slot is a capture at a MOMENT. Merging them would build a consensus
+  // blended across times that matches no moment the market occupied, and —
+  // since RotoWire revises projections daily — would also have to pick
+  // arbitrarily between two values of P(over) for the same line.
   const tue = { ...quote(0.52), slot: "main", book: "DraftKings" };
-  const thu = { ...quote(0.52), slot: "thursday", book: "FanDuel", odds: -105, overOdds: -105, underOdds: -115 };
-  const { samples } = buildSamples([tue, thu], actuals(60));
-  assert.equal(samples.length, 1);
-  assert.equal(samples[0].bookCount, 2);
-  assert.deepEqual(samples[0].slots, ["main", "thursday"]);
+  const thu = { ...quote(0.41), slot: "thursday", book: "FanDuel", odds: -105, overOdds: -105, underOdds: -115 };
+  const { samples, dropped } = buildSamples([tue, thu], actuals(60));
+  assert.equal(samples.length, 2);
+  assert.deepEqual(samples.map((s) => s.slot).sort(), ["main", "thursday"]);
+  // Each carries its own capture's projection, not the other's.
+  assert.equal(samples.find((s) => s.slot === "main").pProj, 0.52);
+  assert.equal(samples.find((s) => s.slot === "thursday").pProj, 0.41);
+  // And each sees only its own capture's books.
+  assert.ok(samples.every((s) => s.bookCount === 1));
+  // Which means the cross-capture projection disagreement is no longer a
+  // disagreement at all.
+  assert.equal(dropped.inconsistentProj, 0);
+  // They are still one game, so they share a cluster.
+  assert.equal(new Set(samples.map((s) => `${s.week}|${s.playerId}`)).size, 1);
 });
 
 test("a market only the later capture saw is still a market", () => {
   const thu = { ...quote(0.3), slot: "thursday", line: 74.5 };
   const { samples } = buildSamples([thu], actuals(60));
   assert.equal(samples.length, 1);
-  assert.deepEqual(samples[0].slots, ["thursday"]);
+  assert.equal(samples[0].slot, "thursday");
   assert.equal(samples[0].y, 0); // 60 yards misses 74.5
 });

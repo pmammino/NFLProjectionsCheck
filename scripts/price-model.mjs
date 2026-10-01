@@ -234,7 +234,32 @@ function countBy(samples) {
     byWeek: [...byWeek].sort((x, y) => x[0] - y[0]),
     byWeekPlayers: [...playersByWeek].map(([w, set]) => [w, set.size]).sort((x, y) => x[0] - y[0]),
     bySource: [...bySource].sort((x, y) => y[1] - x[1]),
+    bySlot: [...new Set(samples.map((s) => s.slot))].sort(),
   };
+}
+
+// Each capture of the week, scored separately. This is the comparison the
+// second capture exists to produce: the Tuesday drop and a near-kickoff
+// reconstruction are forecasts of the same games at different lead times, and
+// the market gets sharper as the week runs while our projection does not
+// obviously do the same. Pooling them would average that difference away.
+function slotScores(samples) {
+  const groups = new Map();
+  for (const s of samples) {
+    if (!groups.has(s.slot)) groups.set(s.slot, []);
+    groups.get(s.slot).push(s);
+  }
+  return [...groups]
+    .map(([slot, rows]) => ({
+      slot,
+      n: rows.length,
+      clusters: new Set(rows.map(clusterKey)).size,
+      twoSidedShare:
+        rows.filter((r) => r.probSource === "devig").length / (rows.length || 1),
+      market: scoreProbabilities(rows.map((r) => ({ p: r.pMarket, y: r.y }))),
+      proj: scoreProbabilities(rows.map((r) => ({ p: r.pProj, y: r.y }))),
+    }))
+    .sort((a, b) => b.n - a.n);
 }
 
 // Mean market probability and realized rate, split by how the market
@@ -341,6 +366,33 @@ function datasetSection(res, season, weeks) {
         `  shipped into a live price on its own.`
     );
   }
+  const slots = slotScores(res.samples);
+  if (slots.length > 1) {
+    console.log(`\n  By capture (slot) — the same games forecast at different lead times:`);
+    console.log(
+      `  ${pad("slot", 14)}${lpad("markets", 9)}${lpad("clusters", 10)}${lpad("de-vigged", 11)}` +
+        `${lpad("mkt Brier", 11)}${lpad("proj Brier", 12)}${lpad("proj - mkt", 12)}`
+    );
+    for (const g of slots) {
+      const gap =
+        Number.isFinite(g.proj.brier) && Number.isFinite(g.market.brier)
+          ? g.proj.brier - g.market.brier
+          : NaN;
+      console.log(
+        `  ${pad(g.slot, 14)}${lpad(g.n, 9)}${lpad(g.clusters, 10)}${lpad(pct(g.twoSidedShare), 11)}` +
+          `${lpad(num(g.market.brier), 11)}${lpad(num(g.proj.brier), 12)}${lpad(sgn(gap, 4), 12)}`
+      );
+    }
+    console.log(
+      `  A positive "proj - mkt" means the books price those games better than we\n` +
+        `  do. Compare the GAP across slots, not the Brier levels: the slots cover\n` +
+        `  different boards — the Tuesday drop is a few games' worth of alternate\n` +
+        `  lines — so their absolute difficulty is not the same and the levels are\n` +
+        `  not comparable. Even the gap is only suggestive until a slot exists that\n` +
+        `  covers the same fixtures at a different hour.`
+    );
+  }
+
   const src = bySourceScores(res.samples);
   if (src.length > 1) {
     console.log(`\n  Market probability by how it was obtained:`);

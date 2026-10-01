@@ -455,13 +455,33 @@ succeeded. It is slow: the historical endpoint takes one fixture per request
 and is rate-limited to 10 requests per 15 seconds.
 
 > **What this project's key actually allows — measured, 2026-10-01.** A dry
-> `--at T-48h` run over week 3 settled it:
+> `--at T-48h` run over week 3, then a full `--at closing` backfill of weeks
+> 1–4, settled it:
 >
 > | | |
 > |---|---|
 > | Historical odds endpoint | **works** — 16 fixtures, 123,464 odds returned |
 > | `entries` price history | **absent** — 0 of 123,464 odds carried one |
+> | `clv` (closing) on player props | **patchy** — 86% of week 3, 0% of week 4 |
+> | `olv` (opening) on player props | reliably present |
 > | Usable moments | `--at opening`, `--at closing` only |
+>
+> **`--at` is strict about which endpoint it takes, and the backfill is why.**
+> `historicalLineValue` falls back to the other endpoint when the requested
+> one is missing, which is right for grading one bet and wrong for building a
+> board. With the fallback on, one `--at closing` run produced a slot that was
+> 86% closing lines in week 3 and **100% opening lines in week 4** — under one
+> name, and mixed *inside* a single week, so a market's consensus could blend
+> one book's closing price with another's opening price. That is a number
+> belonging to no moment the market ever occupied, and it is invisible in the
+> file: every row looks fine alone and only `LineSource` betrays it.
+>
+> So `--at closing` now means closing, a row with no closing price is **absent
+> from that board**, and a capture that still ends up mixed says so loudly.
+> `--allow-line-fallback` restores the old behaviour knowingly. Run each
+> endpoint as its own slot. The first backfill is kept as `closing-mixed`
+> rather than deleted, honestly labelled so it cannot be mistaken for one
+> instrument.
 >
 > So the key has historical-odds permission and the retention window is fine;
 > what it lacks is `include_timeseries`, which is a separate OpticOdds

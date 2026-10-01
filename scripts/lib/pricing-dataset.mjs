@@ -7,7 +7,7 @@
 // pricing-dataset.test.mjs).
 //
 // ---------------------------------------------------------------------------
-// The unit of analysis is a MARKET, not a book row
+// The unit of analysis is a MARKET AT A MOMENT, not a book row
 // ---------------------------------------------------------------------------
 // data/props/{season}/week-NN.csv has one row per (market x book): eight books
 // quoting Saquon Barkley Over 74.5 rushing yards is eight rows. They share one
@@ -157,9 +157,23 @@ export function buildSamples(quotes, actualsByWeek, { includeRetired = false, ma
   const byMarket = new Map();
   const retired = new Set();
   for (const q of quotes) {
-    // Canonical key ignores side: the Over and Under rows of one market are
-    // the same forecast and must land in the same group.
-    const key = [q.week, q.playerId, q.stat, q.line].join("|");
+    // Canonical key ignores side — the Over and Under rows of one market are
+    // the same forecast — but NOT the slot.
+    //
+    // Merging slots was the first version here and it is wrong twice over.
+    // A slot is a capture at a moment, so pooling the Tuesday drop with a
+    // closing reconstruction produces a "consensus" blended across times that
+    // corresponds to no moment the market ever occupied; and because RotoWire
+    // revises its projections daily, the two captures also disagree about
+    // P(over) for the same line, so the merged row silently picked one. On
+    // the 2026 backfill that fired on 2,072 markets.
+    //
+    // Keyed by slot, each capture is its own forecast of the same event at its
+    // own lead time — which is how a forecast is normally scored, and it is
+    // what lets the report ask whether the model does better on the Tuesday
+    // board or the closing one. The two are not independent, but clustering is
+    // on (week, player) and already handles that.
+    const key = [q.slot, q.week, q.playerId, q.stat, q.line].join("|");
     if (!includeRetired && !isBettableStat(q.stat)) {
       retired.add(key);
       continue;
@@ -184,10 +198,10 @@ export function buildSamples(quotes, actualsByWeek, { includeRetired = false, ma
       continue;
     }
 
-    // Every quote in the group should agree on P(over) — it comes from the
-    // projection, not the book. A disagreement means the group was keyed
-    // wrongly or the snapshot mixes two captures; take the median and count
-    // it rather than averaging a bug into the dataset.
+    // Every quote in the group should now agree on P(over) exactly: it comes
+    // from the projection rather than the book, and a slot is one capture. A
+    // disagreement here means the keying is wrong or a snapshot mixes two
+    // captures, so it is counted rather than averaged away.
     const probs = group.map((q) => q.probOver).filter(Number.isFinite);
     if (probs.length === 0) continue;
     const pProj = probs[0];
@@ -231,9 +245,8 @@ export function buildSamples(quotes, actualsByWeek, { includeRetired = false, ma
       probSource: cons.probSource,
       meanHold: cons.meanHold,
       bestOverOdds,
-      // Which captures of the week quoted this market. A market seen only by
-      // the later sweep is exactly what the Tuesday drop was missing.
-      slots: [...new Set(group.map((q) => q.slot))].sort(),
+      // Which capture of the week this forecast belongs to.
+      slot: first.slot,
       actual,
       y: outcome === "won" ? 1 : 0,
     });
@@ -282,15 +295,9 @@ export function loadSeason(season, { dataDir = "data" } = {}) {
   const actualsDir = join(dataDir, "actuals", String(season));
   if (!existsSync(propsDir)) throw new Error(`No prop captures at ${propsDir}`);
 
-  // Every slot's capture of every week. A week captured twice — the Tuesday
-  // drop and a later sweep — contributes both, and buildSamples then keys on
-  // (week, player, stat, line) so the two collapse into one market carrying
-  // whichever books quoted it at either moment. That is the point: the whole
-  // reason for a second capture is that Tuesday saw 4% of the board.
-  //
-  // `slot` is carried on every quote so a caller can score the slots
-  // separately. Pooling them and reporting one number would hide the very
-  // comparison the second capture exists to make.
+  // Every slot's capture of every week, with `slot` carried on every quote so
+  // buildSamples can keep them apart. See the note there on why they must not
+  // be merged.
   const slotDirs = [{ slot: SLOT_MAIN, dir: propsDir }];
   for (const entry of readdirSync(propsDir, { withFileTypes: true })) {
     if (entry.isDirectory()) slotDirs.push({ slot: entry.name, dir: join(propsDir, entry.name) });

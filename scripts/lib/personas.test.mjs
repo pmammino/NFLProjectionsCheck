@@ -371,3 +371,37 @@ test("dedupe can be turned off for research", () => {
   });
   assert.equal(bets.length, 2);
 });
+
+// --- reference books can never be staked ------------------------------------
+
+test("eligible rejects a reference book however good the edge looks", () => {
+  // This is the invariant the whole roster split exists to enforce: a price
+  // captured to sharpen the consensus must never become a bet, because a bet
+  // at a book with no account behind it is a return nobody could have earned.
+  const base = { stat: "rushYds", book: "Pinnacle", odds: -110, edge: 0.25, modelEdge: 0.25 };
+  const persona = { id: "t", edgeBasis: "ev", minEdge: 0.03 };
+  assert.equal(eligible([{ ...base, bettable: true }], persona).length, 1);
+  assert.equal(eligible([{ ...base, bettable: false }], persona).length, 0);
+});
+
+test("eligible treats a row with no bettable flag as bettable", () => {
+  // Every row captured before the split predates the flag, and all of them
+  // were books we could bet at.
+  const persona = { id: "t", edgeBasis: "ev", minEdge: 0.03 };
+  const legacy = [{ stat: "rushYds", book: "DraftKings", odds: -110, edge: 0.2, modelEdge: 0.2 }];
+  assert.equal(eligible(legacy, persona).length, 1);
+});
+
+test("a reference book cannot win the best-price dedupe", () => {
+  // The danger is subtler than selection: dedupe keeps the single best price
+  // per player-stat, so one unreachable price would silently displace the
+  // reachable one and the bet would vanish rather than merely be mispriced.
+  const persona = { id: "t", edgeBasis: "ev", minEdge: 0.03 };
+  const edges = [
+    { playerId: "1", stat: "rushYds", book: "DraftKings", odds: -110, edge: 0.05, modelEdge: 0.05, bettable: true },
+    { playerId: "1", stat: "rushYds", book: "Pinnacle", odds: 120, edge: 0.22, modelEdge: 0.22, bettable: false },
+  ];
+  const kept = dedupe(eligible(edges, persona), persona);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].book, "DraftKings");
+});

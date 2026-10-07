@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_BOOKS, normalizeBookName, resolveBookIds } from "./books.mjs";
+import {
+  DEFAULT_BOOKS,
+  BETTABLE_BOOKS,
+  REFERENCE_BOOKS,
+  booksToFetch,
+  bookKeySet,
+  isBettableBook,
+  normalizeBookName,
+  resolveBookIds,
+} from "./books.mjs";
 
 // Shaped like the real /sportsbooks rows, with the id spellings the API is
 // likely to use — deliberately NOT the same strings a human would type.
@@ -119,4 +128,52 @@ test("every default book resolves against a live list carrying both Circa ids", 
   assert.ok(r.ids.includes("circa_sports"));
   // One operator, one vote: the other Circa id must not also come along.
   assert.ok(!r.ids.includes("circa_vegas"));
+});
+
+test("booksToFetch is the union, and a book in both lists stays bettable", () => {
+  const fetch = booksToFetch({ bettable: ["draftkings", "circa_sports"], reference: ["pinnacle"] });
+  assert.deepEqual(fetch, ["draftkings", "circa_sports", "pinnacle"]);
+  // A name on both rosters must appear once, as bettable — the stronger claim
+  // wins, since a book you can bet at is also one you can price against.
+  const both = booksToFetch({ bettable: ["circa_sports"], reference: ["Circa_Sports", "pinnacle"] });
+  assert.deepEqual(both, ["circa_sports", "pinnacle"]);
+});
+
+test("reference books ride along inside the same request budget", () => {
+  // /fixtures/odds takes 5 sportsbooks per request, so 8 books and 10 books
+  // both cost two book batches. If this ever fails, adding a reference book
+  // has started costing real quota and the roster needs a second look.
+  const fetched = booksToFetch();
+  assert.ok(fetched.length <= 10, `roster grew to ${fetched.length}, past the 2-batch budget`);
+  assert.ok(fetched.length > BETTABLE_BOOKS.length, "no reference book is being pulled at all");
+});
+
+test("bookKeySet matches every spelling a capture might write", () => {
+  // The 2026 files hold "DraftKings", "draftkings" and "hard_rock" across
+  // different weeks, so membership has to survive all of them.
+  const live = [
+    { id: "hard_rock", name: "Hard Rock" },
+    { id: "pinnacle", name: "Pinnacle" },
+  ];
+  const { resolved } = resolveBookIds(["hardrock"], live);
+  const keys = bookKeySet(resolved);
+  for (const spelling of ["hardrock", "hard_rock", "Hard Rock", "HARD ROCK"]) {
+    assert.equal(isBettableBook(spelling, keys), true, spelling);
+  }
+});
+
+test("an unknown book is never bettable", () => {
+  // A capture returning a book nobody listed is a book with no account behind
+  // it. Defaulting it to bettable would put its price into a ledger.
+  const keys = bookKeySet([{ requested: "draftkings", id: "draftkings", name: "DraftKings" }]);
+  assert.equal(isBettableBook("Pinnacle", keys), false);
+  assert.equal(isBettableBook("some_book_nobody_listed", keys), false);
+  assert.equal(isBettableBook("", keys), false);
+  assert.equal(isBettableBook("DraftKings", undefined), false);
+});
+
+test("the reference roster and the bettable roster do not overlap", () => {
+  const bettable = new Set(BETTABLE_BOOKS.map(normalizeBookName));
+  const overlap = REFERENCE_BOOKS.filter((b) => bettable.has(normalizeBookName(b)));
+  assert.deepEqual(overlap, [], "a book listed as both is just bettable; drop it from REFERENCE_BOOKS");
 });

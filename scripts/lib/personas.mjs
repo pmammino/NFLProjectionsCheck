@@ -85,6 +85,12 @@ export function eligible(edges, persona) {
   const markets = persona.markets ? new Set(persona.markets) : null;
 
   return edges.filter((e) => {
+    // A reference book's price is captured to sharpen the consensus, never to
+    // be staked — betting it books a return nobody could have earned. Checked
+    // first because it is a fact about the book, not about the bet, and it
+    // holds no matter how good the edge looks. Rows captured before the split
+    // carry no flag and were all bettable.
+    if (e.bettable === false) return false;
     if (books && !books.has(String(e.book).toLowerCase())) return false;
     if (markets && !markets.has(e.stat)) return false;
     if (persona.requireTwoSided && e.oneSided) return false;

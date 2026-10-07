@@ -74,7 +74,12 @@ import { normalizeBookName } from "./books.mjs";
 // and silently halve the sample.
 export const MARKET_SETS = {
   retail: ["draftkings", "fanduel", "betmgm", "mgm", "caesars", "betrivers", "hardrock", "hardrockbet", "thescore", "betr"],
-  sharp: ["circa", "circasports", "pinnacle", "bookmaker", "betcris"],
+  // Kept in step with REFERENCE_BOOKS in books.mjs: those are the books a
+  // capture now pulls precisely so this set has something in it. Circa stays
+  // listed here as well as in the bettable roster — it is both a book you can
+  // bet at and a sharp price worth measuring against, and the two lists are
+  // asking different questions.
+  sharp: ["circa", "circasports", "circavegas", "pinnacle", "bookmaker", "betcris"],
   all: null, // null means "no filter" — every book present in the rows
 };
 

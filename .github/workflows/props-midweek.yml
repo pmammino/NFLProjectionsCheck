@@ -29,11 +29,12 @@ on:
     # Friday, so this sits ~9 hours ahead of the earliest kickoff and well
     # ahead of Sunday's.
     #
-    # Saturday would catch a fuller board still, but it is after TNF has
-    # played, so those props could not be bet. If the board turns out to fill
-    # later than this, move it with `npm run board-timing` rather than by
-    # guessing — that report reconstructs the board hour by hour from
-    # backfilled price history and says which slot actually prices best.
+    # Saturday catches a fuller board and a fresher projection, but it is after
+    # TNF has played, so that game's props cannot be bet — see props-saturday.yml,
+    # which runs it as its own slot and leaves started games out. If the board
+    # turns out to fill later than this, move it with `npm run board-timing`
+    # rather than by guessing — that report reconstructs the board hour by hour
+    # from backfilled price history and says which slot actually prices best.
     - cron: "0 15 * 9-12,1-2 4"
   workflow_dispatch:
     inputs:

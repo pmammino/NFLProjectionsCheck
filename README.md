@@ -434,6 +434,7 @@ its own **slot** (`scripts/lib/slots.mjs`):
 ```
 data/props/2026/week-03.csv             main     — the Tuesday drop
 data/props/2026/thursday/week-03.csv    thursday — the midweek sweep
+data/props/2026/saturday/week-03.csv    saturday — the late-week sweep, on a same-day projection
 data/props/2026/t-48h/week-03.csv       t-48h    — a backfill reconstruction
 ```
 
@@ -456,11 +457,30 @@ destroy the only comparison that decides which one to keep.
 |---|---|---|
 | `props-weekly.yml` | Tue 14:00 | `main` — softest prices, thin board |
 | `props-midweek.yml` | Thu 15:00 | `thursday` — full board, still pre-kickoff |
+| `props-saturday.yml` | Sat 15:00 | `saturday` — the fullest board, on a projection written that morning |
 
 Thursday 15:00 sits ~9 hours before Thursday Night Football, so **every** game
-of the week is still bettable. Saturday would catch a fuller board again but
-TNF would already have played. Which is actually better is a measurement, not
-an argument — see below.
+of the week is still bettable. Saturday catches the fullest board and, more to the
+point, the freshest projection: after Friday's injury designations, with the week's
+news read — which is when the projection has most to add (see *Why does the
+projection earn so little?*). It costs the Thursday game, which has been played, so
+a live capture **leaves out every game that has already kicked off** (a price from
+one is not a price anyone could take) and the Saturday board is the Sunday-and-later
+games. Which slot is actually better is a measurement, not an argument — see below.
+
+**The Saturday job refreshes the projections first** (`ingest.mjs --only
+projections`) rather than trusting the daily ingest, because scheduled runs are
+routinely delayed by GitHub for hours and a "late-week" capture that quietly priced
+Friday's snapshot would defeat the slot's purpose. If the refresh fails the capture
+still runs, with a warning that the snapshot may be a day old.
+
+**Its projection share starts at zero** and is fitted from the live Saturday
+captures it writes, per stat, like every other slot: expect several weeks before it
+moves, and until then a Saturday board is priced on the weighted books alone. It also
+means the books' lead weights, which are assessed on every early board together,
+mix a Saturday board (a day ahead of the close) with a Tuesday one (five days ahead).
+That attenuates the leads a little and does not change their ranking; once there is
+a few weeks of Saturday data it should be assessed per slot.
 
 ### Backfilling a past week
 
@@ -659,6 +679,7 @@ price, edge, player search, formatting), with `lib/lines.ts` holding the types.
 ```
 scripts/capture-props.mjs                 Tuesday: publish data/edges/ (slot main)
 scripts/capture-props.mjs --slot thursday Thursday: the same, once the board exists
+scripts/capture-props.mjs --slot saturday Saturday: the same, on a projection written that morning
 scripts/capture-props.mjs --closing       daily: record data/closing/ near each kickoff
 scripts/capture-props.mjs --historical --at T-48h
                                           rebuild a past board at a chosen moment
@@ -688,6 +709,7 @@ npm run simulate -- --persona kelly --dry-run      # one persona, no writes
 | `ingest-weekly.yml` | daily **13:00** | RotoWire projections + actuals, the player roster, then replays personas |
 | `props-weekly.yml` | **Tue 14:00** | The drop: publish edges (slot `main`), replay personas |
 | `props-midweek.yml` | **Thu 15:00** | The second drop: the same once the books have posted the board (slot `thursday`) |
+| `props-saturday.yml` | **Sat 15:00** | The late-week drop: refreshes projections, then the same, leaving out games already played (slot `saturday`) |
 | `closing-lines.yml` | daily **15:00** | Record closing lines for games kicking off soon |
 | `props-backfill.yml` | manual | Rebuild a past week's board at a chosen moment |
 | `optic-discover.yml` | manual | Inspect what the OpticOdds API returns |
@@ -1164,9 +1186,10 @@ fitted against outcomes it is **0.53 ± 0.46 on receptions** (z 2.3), 0.25 on
 receiving yards, ~0 on rushing yards and negative on passing yards. With Tuesday's
 snapshot it earns about nothing anywhere.
 
-Two consequences. **Capture later**: the Thursday sweep already exists, and a
-Saturday or Sunday-morning slot (after the injury report) is where the projection
-would have most to add; each slot gets its own share as live data arrives. And the
+Two consequences. **Capture later**: the Saturday sweep (`props-saturday.yml`)
+exists for this — a projection written that morning, after Friday's injury report —
+and each slot earns its own share as live data arrives; the Thursday one is the
+midpoint and Tuesday's is the baseline. And the
 spread result says the projection's band is a poor description of its own
 uncertainty *relative to the book* — a stand-alone fix for that, fitted as of a
 week like the median correction, is the obvious next piece if the projection is to

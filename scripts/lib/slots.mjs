@@ -36,6 +36,7 @@
 //
 //     data/props/2026/week-03.csv             main — the Tuesday drop
 //     data/props/2026/thursday/week-03.csv    a later live sweep
+//     data/props/2026/saturday/week-03.csv    the late-week sweep, same-day projection
 //     data/props/2026/t-48h/week-03.csv       a backfill reconstruction
 //
 // A backfill defaults its slot to the moment it reconstructs, so it cannot

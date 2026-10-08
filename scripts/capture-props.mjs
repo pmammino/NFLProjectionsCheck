@@ -83,7 +83,7 @@
 //                                  [--books "DraftKings,FanDuel"] (default: lib/books.mjs)
 //                                  [--all-books] [--include-offshore]
 //                                  [--historical] [--at opening|closing|T-48h]
-//                                  [--slot main|thursday|…]
+//                                  [--slot main|thursday|saturday|…]
 //                                  [--data-dir data] [--dry-run]
 //
 // Env: OPTICODDS_API_KEY (required).
@@ -360,6 +360,20 @@ export function ourProbability({ line, statKey }, splits, correction = null) {
   const c = sumCols(splits.C, statDef.projCols);
   const pts = adjustedPoints({ F: f, M: m, C: c }, correction, statKey);
   return probOverContinuous(line, pts.F, pts.M, pts.C);
+}
+
+// Games still to be played, and games already under way or finished, as of `now`
+// (ms since the epoch). A fixture with no start time cannot be judged and is
+// treated as still open: dropping it on a guess would silently shrink the board.
+export function splitStarted(fixtures, now) {
+  const open = [];
+  const started = [];
+  for (const f of fixtures) {
+    const kick = f.startDate ? Date.parse(f.startDate) : NaN;
+    if (Number.isFinite(kick) && kick <= now) started.push(f);
+    else open.push(f);
+  }
+  return { open, started };
 }
 
 // ---------------------------------------------------------------------------
@@ -986,6 +1000,27 @@ async function main() {
   if (fixtures.length === 0) {
     console.warn("  No fixtures returned — nothing to capture. Check --season/--week.");
     return;
+  }
+
+  // A live capture prices what can still be bet. A game that has kicked off is
+  // in play (or over), and a price from it is not one a subscriber could have
+  // taken — on a Saturday sweep that is Thursday night's game and any early
+  // Saturday kickoff. The Tuesday and Thursday drops sit ahead of every
+  // kickoff of the week, so for them this changes nothing. Closing mode and
+  // historical pulls have their own notion of timing.
+  if (!a.historical && !a.closing) {
+    const { open, started } = splitStarted(fixtures, Date.now());
+    if (started.length > 0) {
+      console.log(
+        `  ${started.length} of ${fixtures.length} games have already kicked off and are left out: ` +
+          `${started.map((f) => `${f.awayTeam ?? "?"}@${f.homeTeam ?? "?"}`).join(", ")}.`
+      );
+    }
+    fixtures = open;
+    if (fixtures.length === 0) {
+      console.log("  every game this week has kicked off — nothing left to price. Done.");
+      return;
+    }
   }
   const fixtureById = new Map(fixtures.map((f) => [f.id, f]));
 

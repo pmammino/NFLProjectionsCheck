@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { ourProbability, PROPS_COLUMNS, repriceWithBlend, repriceWithPool, loadSourceModelFor } from "./capture-props.mjs";
+import { ourProbability, PROPS_COLUMNS, repriceWithBlend, repriceWithPool, loadSourceModelFor, splitStarted } from "./capture-props.mjs";
 import { LEDGER_COLUMNS } from "./simulate-personas.mjs";
 import {
   matchStatKey,
@@ -485,4 +485,36 @@ test("the correction is off by default", () => {
   // default without a network, so the help text has to say it.
   const r = runCapture("--help");
   assert.match(r.stdout, /--median-correction <m>\s+off \| auto \(default: off\)/);
+});
+
+// --- splitStarted ---------------------------------------------------------------
+// A live capture prices what can still be bet. On a Saturday sweep Thursday
+// night's game is over and its props are not a price anyone could take.
+
+test("splitStarted separates games that have kicked off from games still to play", () => {
+  const now = Date.parse("2026-10-03T15:00:00Z");
+  const fixtures = [
+    { id: "tnf", startDate: "2026-10-02T00:15:00Z" }, // Thursday night, played
+    { id: "early", startDate: "2026-10-03T14:00:00Z" }, // started an hour ago
+    { id: "sun", startDate: "2026-10-04T17:00:00Z" },
+    { id: "mon", startDate: "2026-10-05T00:20:00Z" },
+  ];
+  const { open, started } = splitStarted(fixtures, now);
+  assert.deepEqual(started.map((f) => f.id), ["tnf", "early"]);
+  assert.deepEqual(open.map((f) => f.id), ["sun", "mon"]);
+});
+
+test("splitStarted treats a kickoff exactly now as started, and an unknown kickoff as open", () => {
+  const now = Date.parse("2026-10-03T15:00:00Z");
+  const { open, started } = splitStarted(
+    [{ id: "now", startDate: "2026-10-03T15:00:00Z" }, { id: "unknown", startDate: null }, { id: "garbled", startDate: "soon" }],
+    now
+  );
+  assert.deepEqual(started.map((f) => f.id), ["now"]);
+  // A fixture we cannot date is kept: dropping it on a guess would shrink the board silently.
+  assert.deepEqual(open.map((f) => f.id), ["unknown", "garbled"]);
+});
+
+test("splitStarted on an empty week is empty", () => {
+  assert.deepEqual(splitStarted([], Date.now()), { open: [], started: [] });
 });

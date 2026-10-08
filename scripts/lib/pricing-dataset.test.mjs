@@ -6,6 +6,8 @@ import {
   buildSamples,
   bestPrice,
   STORED_PROB_EPS,
+  isPointInTime,
+  isProjectionPrice,
 } from "./pricing-dataset.mjs";
 
 const CURRENT = {
@@ -236,4 +238,44 @@ test("buildSamples keeps the adjustment so a fit can see it is mixing", () => {
   assert.equal(samples[0].medianAdj, 0.84);
   const plain = buildSamples([quote(0.4)], actuals(60)).samples;
   assert.equal(plain[0].medianAdj, null);
+});
+
+test("readPropRow carries how the price was obtained and which model priced it", () => {
+  assert.equal(readPropRow({ ...CURRENT, LineSource: "live", PriceModel: "pool" }).lineSource, "live");
+  assert.equal(readPropRow({ ...CURRENT, LineSource: "live", PriceModel: "pool" }).priceModel, "pool");
+  // Rows from before either column existed.
+  assert.equal(readPropRow(CURRENT).lineSource, "");
+  assert.equal(readPropRow(CURRENT).priceModel, "");
+});
+
+test("isPointInTime: a live capture is, a reconstruction is not", () => {
+  // A backfilled board is priced from the week's latest snapshot, which has
+  // absorbed everything since. Legacy week-1 rows have no source and were live.
+  assert.equal(isPointInTime({ lineSource: "live" }), true);
+  assert.equal(isPointInTime({ lineSource: "" }), true);
+  assert.equal(isPointInTime({ lineSource: "opening" }), false);
+  assert.equal(isPointInTime({ lineSource: "closing" }), false);
+});
+
+test("isProjectionPrice: only a row priced from the projection alone says what the projection said", () => {
+  assert.equal(isProjectionPrice({ priceModel: "" }), true);
+  assert.equal(isProjectionPrice({ priceModel: "projection" }), true);
+  assert.equal(isProjectionPrice({ priceModel: "blend" }), false);
+  assert.equal(isProjectionPrice({ priceModel: "pool" }), false);
+});
+
+test("buildSamples will not take a blend- or pool-priced OurProb for the projection", () => {
+  // Fitting on such a row would train the model on a number that is already the
+  // books' — the market agreeing with itself, credited to the projection.
+  const pooled = [{ ...quote(0.55), priceModel: "pool" }, { ...quote(0.55), book: "FanDuel", priceModel: "pool" }];
+  const { samples, dropped } = buildSamples(pooled, actuals(60));
+  assert.equal(samples.length, 0);
+  assert.equal(dropped.notProjectionPrice, 1);
+
+  // A market with one projection-priced quote still has its projection.
+  const mixed = [{ ...quote(0.4), priceModel: "projection" }, { ...quote(0.55), book: "FanDuel", priceModel: "pool" }];
+  const kept = buildSamples(mixed, actuals(60));
+  assert.equal(kept.samples.length, 1);
+  assert.equal(kept.samples[0].pProj, 0.4);
+  assert.equal(kept.samples[0].bookCount, 2, "and both books still feed the consensus");
 });

@@ -109,6 +109,15 @@ export function readPropRow(row, slot) {
     team: row.Team,
     pos: row.Pos,
     opp: row.Opp ?? "",
+    // How the price was obtained: "live" for a capture taken at the time,
+    // "opening"/"closing" for a reconstruction from history. A row with no
+    // column is a week-1 capture, all of which were live. It decides whether
+    // the projection on the row can be trusted as of that moment (see
+    // isPointInTime).
+    lineSource: row.LineSource ?? "",
+    // Which model produced OurProb on this row; blank on every row captured
+    // before the column existed, all of which were the projection price.
+    priceModel: row.PriceModel ?? "",
     stat,
     line,
     side,
@@ -134,6 +143,33 @@ export function readPropRow(row, slot) {
     // Under row lands on the same scale as everything else.
     probOver: clampStoredProb(side === "over" ? ourProb : 1 - ourProb),
   };
+}
+
+// Was the projection on this quote the one we actually HAD at the time?
+//
+// True for a live capture, whose OurProb was computed from the snapshot on disk
+// that day. False for a reconstruction: a backfilled opening or closing board is
+// priced from the week's latest snapshot, written days later, which contains
+// everything that happened in between. The two are not the same forecast, and
+// the difference is not small — the market later "moves toward" the final
+// snapshot's price about ten times as strongly as toward the one available at
+// the start of the week, because the late snapshot has absorbed the same news.
+// Treating the reconstruction as a forecast would credit the projection with
+// information it only acquired afterwards.
+export function isPointInTime(quote) {
+  return !quote.lineSource || quote.lineSource === "live";
+}
+
+// Is the probability on this quote a pure projection price?
+//
+// Everything downstream that wants "what the projection said" reads OurProb,
+// and OurProb is only that when the capture priced from the projection alone.
+// A row priced off the blend or the weighted pool carries a number that is
+// already mostly the books': fitting a model, or assessing the projection as a
+// source, on it would measure the market agreeing with itself and credit the
+// projection for it.
+export function isProjectionPrice(quote) {
+  return !quote.priceModel || quote.priceModel === "projection";
 }
 
 // The actual result for one market, or null when the actuals feed cannot grade
@@ -162,7 +198,7 @@ export function actualFor(actualsRow, stat) {
 export function buildSamples(quotes, actualsByWeek, { includeRetired = false, marketSet = "retail", devigMethod, minBooks = 1 } = {}) {
   const holdByStat = estimateHoldByStat(quotes);
 
-  const dropped = { retired: 0, noActual: 0, push: 0, noConsensus: 0, fewBooks: 0, inconsistentProj: 0 };
+  const dropped = { retired: 0, noActual: 0, push: 0, noConsensus: 0, fewBooks: 0, inconsistentProj: 0, notProjectionPrice: 0 };
 
   const byMarket = new Map();
   const retired = new Set();
@@ -212,8 +248,14 @@ export function buildSamples(quotes, actualsByWeek, { includeRetired = false, ma
     // from the projection rather than the book, and a slot is one capture. A
     // disagreement here means the keying is wrong or a snapshot mixes two
     // captures, so it is counted rather than averaged away.
-    const probs = group.map((q) => q.probOver).filter(Number.isFinite);
-    if (probs.length === 0) continue;
+    // Only a projection-priced row can say what the projection said. A market
+    // captured under the blend or the pool keeps its books' quotes for the
+    // consensus but has no usable projection probability, and is counted.
+    const probs = group.filter(isProjectionPrice).map((q) => q.probOver).filter(Number.isFinite);
+    if (probs.length === 0) {
+      dropped.notProjectionPrice++;
+      continue;
+    }
     const pProj = probs[0];
     if (probs.some((p) => Math.abs(p - pProj) > 1e-6)) dropped.inconsistentProj++;
 

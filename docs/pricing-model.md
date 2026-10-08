@@ -215,6 +215,55 @@ minimise  −Σ [ y·log p + (1−y)·log(1−p) ] + (λ/2)·‖θ − θ₀‖�
   sides cannot drift into arbitrage against ourselves. A market with no
   consensus keeps its projection price.
 
+### 4b. Weighting the books, and the projection as a source
+
+**Plain English.** The equal-weight "middle value" across books treats a
+one-sided Hard Rock price as exactly as informed as a two-sided Pinnacle one.
+Looking at how the market *moved* between the first posted price and the close,
+that isn't true: Pinnacle, BetMGM and Circa open close to where everyone ends up;
+Hard Rock and FanDuel open off the pack and then correct. So each source — every
+book, and our projection as if it were one more book — is graded every week on
+how much of its early disagreement the others adopted by the close, and the
+consensus is weighted by that record. New sources start equal; the projection
+starts at zero and has to earn a vote.
+
+**Stats.** For source `s`, with `L0` the median logit of the *other* books at the
+early board and `Lc` the same at the close:
+
+```
+(Lc − L0) = lead_s · (L_s − L0) + ε          slope through the origin,
+                                              errors clustered on (week, player)
+```
+
+If the best estimate of the closing price is a weighted average of the early
+sources, `lead_s` is exactly `w_s / Σw` — so a measurement that needs no outcomes
+(one number per market instead of one coin flip) can set the weights. `s` is
+excluded from its own target (a frozen price would otherwise "lead" because its
+close is inside the target). A source is a book *and* whether it quoted both sides.
+
+```
+w_s = (clusters·lead_s + K·prior_s) / (clusters + K)      K = 150 player-weeks
+prior = 0.15 per book, 0 for the projection;  w ≥ 0.01 for books
+pool: logit p = Σ w_s·clip(L_s, median ± 1.5) / Σ w_s
+```
+
+Weights are fitted **as of a week** (strictly earlier weeks only). The projection
+is assessed **point in time**: against the snapshot it actually had at the start of
+the week its lead is ~0.8% (z ≈ 2; 0.01, z 0.4 on live captures); against the
+week's final snapshot it is ~8% (z ≈ 10), which is the projection reading the same
+late news as the market, not leading it. On 2026 weeks 1–4 the weights are
+Pinnacle 0.72, BetMGM 0.47, Circa 0.37, theScore 0.36, Caesars 0.34, DraftKings
+0.25, BetRivers 0.19, Hard Rock 0.09, FanDuel 0.06, projection 0.002.
+
+What it does and does not show: weighted retail books predict Pinnacle's close
+better than the equal median (MSE 0.0174 → 0.0165, z −3.9) — partly circular, and
+not reproduced against Circa's close (z +1.4). Against outcomes it makes no
+detectable difference (Brier −0.00003, z −0.4), which four weeks cannot resolve in
+either direction. The weights describe an **early** board only, and live Tuesday
+captures carry no Pinnacle yet (0 rows in week 5), so on a Tuesday drop the pool is
+the weighted retail books. See the README
+section "Weighting the books" and `npm run source-weights`.
+
 ---
 
 ## 5. How we decide whether it works
@@ -395,6 +444,7 @@ earned (the unfiltered list was 86 books).
 | Projection → probability | `scripts/lib/probability.mjs` |
 | De-vig, consensus | `scripts/lib/devig.mjs`, `consensus.mjs` |
 | Blend fit, scoring, clustering, bands | `scripts/lib/pricing.mjs`, `npm run price-model` |
+| Source weights, weighted pool | `scripts/lib/source-weights.mjs`, `npm run source-weights` |
 | Median correction | `scripts/lib/median-correction.mjs`, `npm run median-correction` |
 | Guards (support floor, disagreement cap) | `scripts/lib/calibration.mjs` |
 | Edges and bets | `scripts/capture-props.mjs`, `scripts/lib/personas.mjs` |

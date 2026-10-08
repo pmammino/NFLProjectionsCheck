@@ -112,6 +112,18 @@ export function normalizeBookName(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
+// OpticOdds ids and display names drift across captures: the 2026 files hold
+// "mgm" and "BetMGM", "circasports" and "circa". They are one book each, and
+// counting them twice would show a book that is not there — or, in a weighted
+// consensus, give one book two votes and two separate track records.
+const BOOK_ALIASES = { mgm: "betmgm", hardrockbet: "hardrock", circa: "circasports" };
+
+// The one key a book is known by everywhere downstream of a capture.
+export function canonicalBookKey(book) {
+  const k = normalizeBookName(book);
+  return BOOK_ALIASES[k] ?? k;
+}
+
 // Resolve requested book names against the live /sportsbooks rows.
 //
 // Exact normalized match wins. Failing that, a UNIQUE containment match is

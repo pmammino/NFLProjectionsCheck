@@ -125,6 +125,7 @@ import { edgeBucket } from "./lib/edge.mjs";
 import { SLOT_MAIN, slotDir, assertValidSlot } from "./lib/slots.mjs";
 import { consensusProb, estimateHoldByStat, MARKET_SET_NAMES } from "./lib/consensus.mjs";
 import { predict as predictPrice } from "./lib/pricing.mjs";
+import { weightedConsensusProb } from "./lib/source-weights.mjs";
 import { fitFromData, adjustedPoints, multiplierFor, formatFits } from "./lib/median-correction.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -154,7 +155,7 @@ export const PROPS_COLUMNS = [
   "ModelEdge", // OurProb - FairProb : disagreement with the market's true belief
   "EdgeBasis", // which of the two the --min-edge filter was applied to
   "DevigMethod",
-  "PriceModel", // which model produced OurProb: projection | blend
+  "PriceModel", // which model produced OurProb: projection | blend | pool
   "MedianAdj", // multiplier applied to the projected median before pricing; blank = none
   "Slot", // which capture of the week this is: main (the Tuesday drop) or a later one
   "Bettable", // 1 = a bet could be placed here; 0 = reference price only, never staked
@@ -200,6 +201,7 @@ function parseArgs(argv) {
       case "--median-correction": a.medianCorrectionMode = next(); break;
       case "--price-model-set": a.priceModelSet = next(); break;
       case "--price-model-file": a.priceModelFile = next(); break;
+      case "--source-weights-file": a.sourceWeightsFile = next(); break;
       case "--edge-basis": a.edgeBasis = next(); break;
       case "--sides": a.sides = next(); break;
       case "--books": a.books = next().split(",").map((s) => s.trim()).filter(Boolean); break;
@@ -232,8 +234,8 @@ function parseArgs(argv) {
   if (!["ev", "novig"].includes(a.edgeBasis)) {
     throw new Error("--edge-basis must be one of: ev, novig");
   }
-  if (!["projection", "blend"].includes(a.priceModel)) {
-    throw new Error("--price-model must be one of: projection, blend");
+  if (!["projection", "blend", "pool"].includes(a.priceModel)) {
+    throw new Error("--price-model must be one of: projection, blend, pool");
   }
   if (!["off", "auto"].includes(a.medianCorrectionMode)) {
     throw new Error("--median-correction must be one of: off, auto");
@@ -245,6 +247,15 @@ function parseArgs(argv) {
     throw new Error(
       "--median-correction auto cannot be combined with --price-model blend: the blend was " +
         "fitted on uncorrected projection probabilities. Use one or the other."
+    );
+  }
+  // The same reason, for the pool: the projection's weight in it was earned by
+  // the UNCORRECTED projection, so feeding it a corrected one is a different
+  // source from the one that was assessed.
+  if (a.medianCorrectionMode === "auto" && a.priceModel === "pool") {
+    throw new Error(
+      "--median-correction auto cannot be combined with --price-model pool: the projection's " +
+        "weight was earned by the uncorrected projection. Use one or the other."
     );
   }
   if (!MARKET_SET_NAMES.includes(a.priceModelSet)) {
@@ -430,6 +441,89 @@ function loadPriceModel(a) {
     );
   }
   return { ...set.fit, trainedOnWeeks: set.trainedOnWeeks };
+}
+
+// ---------------------------------------------------------------------------
+// Optional second pricing pass: the weighted pool
+// ---------------------------------------------------------------------------
+// Every source — each book, and our own projection — is a vote, weighted by how
+// much of its early disagreement the rest of the market went on to adopt
+// (scripts/source-weights.mjs; the reasoning is in lib/source-weights.mjs). The
+// projection is just another vote and carries whatever weight it has earned,
+// which has so far been close to nothing; the books it is pooled with include
+// reference books, which is how Pinnacle contributes without ever being staked.
+//
+// It keeps both invariants of the blend, for the same reasons: only the Over is
+// pooled and the Under is its complement, and a market with no consensus keeps
+// its projection price. `weights` is the map for THIS week (see
+// loadSourceWeights): a capture must never price with weights that have seen
+// its own outcome.
+//
+// Returns the number of candidates actually re-priced.
+export function repriceWithPool(priced, weights, { devigMethod } = {}) {
+  if (!weights) return 0;
+  const holdByStat = estimateHoldByStat(priced.map((p) => ({ stat: p.statKey, hold: p.hold })));
+
+  const groups = new Map();
+  for (const p of priced) {
+    const key = [p.rotowirePlayerId, p.statKey, p.line].join("|");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+
+  let changed = 0;
+  for (const group of groups.values()) {
+    const quotes = group.map((p) => ({
+      book: p.sportsbook,
+      overOdds: p.side === "over" ? p.odds : p.oppositeOdds,
+      underOdds: p.side === "over" ? p.oppositeOdds : p.odds,
+    }));
+    const stat = group[0].statKey;
+    const over = group.find((p) => p.side === "over");
+    const projOver = over ? over.ourProb : 1 - group[0].ourProb;
+
+    const pooled = weightedConsensusProb(quotes, { weights, holdByStat, stat, method: devigMethod, projectionProb: projOver });
+    if (!pooled) continue;
+
+    for (const p of group) {
+      p.ourProb = p.side === "under" ? 1 - pooled.prob : pooled.prob;
+      p.edge = p.ourProb - p.impliedProb;
+      p.modelEdge = p.ourProb - p.fairProb;
+      p.priceModel = "pool";
+      changed++;
+    }
+  }
+  return changed;
+}
+
+// The weights this week may use, from the file `source-weights.mjs --write`
+// produced. That file holds one entry per week, each fitted on the weeks BEFORE
+// it, so a backfill of an old week prices with what that week could have known.
+// A week past the last entry is the live one and takes the last entry, which
+// was fitted on everything so far.
+//
+// Fails loudly rather than falling back: a run asked for the pool, and quietly
+// pricing it some other way would put rows in a ledger labelled "pool" that the
+// pool never priced.
+export function loadSourceWeights(a) {
+  const path = a.sourceWeightsFile ?? join(a.dataDir, "pricing", String(a.season), "source-weights.json");
+  if (!existsSync(path)) {
+    throw new Error(
+      `--price-model pool needs source weights at ${path}.\n` +
+        `    Run: node scripts/source-weights.mjs --season ${a.season} --write`
+    );
+  }
+  const payload = JSON.parse(readFileSync(path, "utf8"));
+  const weeks = Object.keys(payload.byWeek ?? {}).map(Number).sort((x, y) => x - y);
+  if (weeks.length === 0) throw new Error(`${path} has no weights.`);
+
+  const exact = payload.byWeek[String(a.week)];
+  // A week before the first entry has no earlier record at all: priors only.
+  const entry = exact ?? (a.week > weeks[weeks.length - 1] ? payload.byWeek[String(weeks[weeks.length - 1])] : { weights: {}, trainedOnWeeks: [] });
+  if ((entry.trainedOnWeeks ?? []).some((w) => w >= a.week)) {
+    throw new Error(`${path}: the weights for week ${a.week} were fitted on week ${a.week} or later. Regenerate them.`);
+  }
+  return { weights: entry.weights ?? {}, trainedOnWeeks: entry.trainedOnWeeks ?? [] };
 }
 
 const csvRowCount = (csv) => Math.max(0, csv.trim().split("\n").length - 1);
@@ -1011,6 +1105,24 @@ async function main() {
     }
   }
 
+  // Optional: the weighted pool. Same place and same reason as the blend — it
+  // needs every book's price for a market, and the cap below must see the
+  // final number.
+  if (a.priceModel === "pool") {
+    const { weights, trainedOnWeeks } = loadSourceWeights(a);
+    const changed = repriceWithPool(priced, weights, { devigMethod: a.devigMethod });
+    const shown = Object.entries(weights)
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 4)
+      .map(([k, w]) => `${k} ${w.toFixed(2)}`)
+      .join(", ");
+    console.log(
+      `  re-priced ${changed} of ${priced.length} candidates off the weighted pool ` +
+        `(weights fitted on weeks ${trainedOnWeeks.join(", ") || "none — priors only"}).`
+    );
+    console.log(`    heaviest: ${shown || "none yet"}; projection ${(weights.projection ?? 0).toFixed(3)}`);
+  }
+
   // The market-disagreement cap, now that every book's price is in hand.
   // The support floor already ran inside priceMarket, so nothing here can be
   // a market we declined to price.
@@ -1304,7 +1416,7 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                                    market. Always larger, so it selects many
                                    more bets — most of them not +EV. For
                                    research, not for a live ledger.
-  --price-model <m>        projection | blend (default: projection)
+  --price-model <m>        projection | blend | pool (default: projection)
                            projection = OurProb from the Floor/Median/Ceiling
                                    distribution alone; the long-standing
                                    behaviour and still the default.
@@ -1314,6 +1426,15 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                                    consensus. Only turn this on once the
                                    report shows the blend beating the market
                                    out of sample; see README.
+                           pool = re-price as a weighted average of every
+                                   book AND our projection, each weighted by
+                                   how much of its early disagreement the
+                                   market went on to adopt. Reads
+                                   source-weights.json from
+                                   source-weights.mjs --write, one entry per
+                                   week fitted on earlier weeks only. See
+                                   lib/source-weights.mjs.
+  --source-weights-file <p>  weights to load (default: data/pricing/{season}/source-weights.json)
   --median-correction <m>  off | auto (default: off)
                            auto = re-centre the projected F/M/C for rushYds
                                    and recYds before pricing. For those stats
@@ -1324,7 +1445,7 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                                    BEFORE the one priced; applied only where
                                    the shortfall is statistically solid. Each
                                    row records the multiplier in MedianAdj.
-                                   Cannot be combined with --price-model blend.
+                                   Cannot be combined with --price-model blend or pool.
                                    See lib/median-correction.mjs.
   --price-model-set <s>    which fitted market set to price off (default: retail)
   --price-model-file <p>   fit to load (default: data/pricing/{season}/model.json)

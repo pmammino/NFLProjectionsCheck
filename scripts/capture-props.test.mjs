@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { ourProbability, PROPS_COLUMNS, repriceWithBlend } from "./capture-props.mjs";
+import { ourProbability, PROPS_COLUMNS, repriceWithBlend, repriceWithPool, loadSourceWeights } from "./capture-props.mjs";
 import { LEDGER_COLUMNS } from "./simulate-personas.mjs";
 import {
   matchStatKey,
@@ -223,6 +223,115 @@ test("repriceWithBlend is a no-op without a fit", () => {
   assert.equal(rows[0].ourProb, 0.62);
 });
 
+// --- repriceWithPool -----------------------------------------------------------
+// The weighted pool: every book and the projection as votes. As with the blend,
+// the point is the wiring — which prices go in, which invariants hold.
+
+test("repriceWithPool prices off the books and relabels the row", () => {
+  const rows = [
+    candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" }),
+    candidate({ odds: -110, oppositeOdds: -110, book: "FanDuel" }),
+  ];
+  const changed = repriceWithPool(rows, {});
+  assert.equal(changed, 2);
+  assert.ok(rows.every((r) => r.priceModel === "pool"));
+  // Two books at -110 de-vig to 0.5, and the projection (0.62) has no weight
+  // until it has earned some.
+  assert.ok(Math.abs(rows[0].ourProb - 0.5) < 1e-6, `got ${rows[0].ourProb}`);
+});
+
+test("repriceWithPool: the projection moves the price exactly as much as its weight says", () => {
+  const mk = () => [
+    candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" }),
+    candidate({ odds: -110, oppositeOdds: -110, book: "FanDuel" }),
+  ];
+  const none = mk();
+  repriceWithPool(none, {});
+  const some = mk();
+  repriceWithPool(some, { projection: 0.3 });
+  assert.ok(some[0].ourProb > none[0].ourProb, "a weighted projection that says 62% pulls the price up");
+  assert.ok(some[0].ourProb < 0.62, "but never past the projection itself");
+});
+
+test("repriceWithPool keeps the two sides of a market complementary", () => {
+  const rows = [
+    candidate({ odds: -130, oppositeOdds: 110, ourProb: 0.62 }),
+    { ...candidate({ odds: 110, oppositeOdds: -130, ourProb: 0.38 }), side: "under" },
+  ];
+  repriceWithPool(rows, { projection: 0.3 });
+  const over = rows.find((r) => r.side === "over");
+  const under = rows.find((r) => r.side === "under");
+  assert.ok(Math.abs(over.ourProb + under.ourProb - 1) < 1e-9);
+});
+
+test("repriceWithPool leaves a market with no book price on the projection price", () => {
+  const rows = [{ ...candidate({ odds: -110, oppositeOdds: -110 }), odds: null, oppositeOdds: null }];
+  assert.equal(repriceWithPool(rows, { projection: 1 }), 0);
+  assert.equal(rows[0].ourProb, 0.62);
+  assert.equal(rows[0].priceModel, undefined);
+});
+
+test("repriceWithPool counts a reference book's price in the pool", () => {
+  // Pinnacle is never staked, but pricing off it is the point of having it.
+  const base = [candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" })];
+  const withRef = [
+    candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" }),
+    candidate({ odds: 140, oppositeOdds: -170, book: "Pinnacle" }),
+  ];
+  repriceWithPool(base, { "draftkings:2": 0.1 });
+  repriceWithPool(withRef, { "draftkings:2": 0.1, "pinnacle:2": 0.9 });
+  assert.ok(withRef[0].ourProb < base[0].ourProb, "Pinnacle quotes the over as the underdog and carries the weight");
+});
+
+test("repriceWithPool is a no-op without weights", () => {
+  const rows = [candidate({ odds: -110, oppositeOdds: -110 })];
+  assert.equal(repriceWithPool(rows, null), 0);
+  assert.equal(rows[0].ourProb, 0.62);
+});
+
+// --- loadSourceWeights ---------------------------------------------------------
+
+function weightsFile(byWeek) {
+  const dir = mkdtempSync(join(tmpdir(), "sw-"));
+  const path = join(dir, "source-weights.json");
+  writeFileSync(path, JSON.stringify({ season: 2026, byWeek }));
+  return path;
+}
+
+test("loadSourceWeights reads the entry for the week being priced", () => {
+  const path = weightsFile({
+    "2": { weights: { "a:2": 0.2 }, trainedOnWeeks: [1] },
+    "3": { weights: { "a:2": 0.3 }, trainedOnWeeks: [1, 2] },
+  });
+  assert.deepEqual(loadSourceWeights({ sourceWeightsFile: path, week: 2, season: 2026 }).weights, { "a:2": 0.2 });
+  assert.deepEqual(loadSourceWeights({ sourceWeightsFile: path, week: 3, season: 2026 }).trainedOnWeeks, [1, 2]);
+});
+
+test("loadSourceWeights: a live week past the last entry takes the last, fitted on everything so far", () => {
+  const path = weightsFile({ "2": { weights: { x: 1 }, trainedOnWeeks: [1] }, "5": { weights: { x: 2 }, trainedOnWeeks: [1, 2, 3, 4] } });
+  assert.deepEqual(loadSourceWeights({ sourceWeightsFile: path, week: 6, season: 2026 }).weights, { x: 2 });
+});
+
+test("loadSourceWeights: a week before any record prices on the priors, not on later weeks", () => {
+  // A backfill of week 1 must not be priced with weights that have seen week 4.
+  const path = weightsFile({ "2": { weights: { x: 1 }, trainedOnWeeks: [1] } });
+  const got = loadSourceWeights({ sourceWeightsFile: path, week: 1, season: 2026 });
+  assert.deepEqual(got.weights, {});
+  assert.deepEqual(got.trainedOnWeeks, []);
+});
+
+test("loadSourceWeights refuses weights that had seen the week they would price", () => {
+  const path = weightsFile({ "3": { weights: { x: 1 }, trainedOnWeeks: [1, 2, 3] } });
+  assert.throws(() => loadSourceWeights({ sourceWeightsFile: path, week: 3, season: 2026 }), /fitted on week 3 or later/);
+});
+
+test("loadSourceWeights fails loudly, with the command to fix it, when the file is missing", () => {
+  assert.throws(
+    () => loadSourceWeights({ sourceWeightsFile: "/nonexistent/source-weights.json", week: 3, season: 2026 }),
+    /source-weights\.mjs --season 2026 --write/
+  );
+});
+
 test("PROPS_COLUMNS and LEDGER_COLUMNS record which model priced each row", () => {
   // Without this, an archived ledger cannot say whether a bet was taken on
   // the projection price or the blend — and the two are not comparable.
@@ -295,6 +404,19 @@ test("--median-correction rejects a value it does not know", () => {
   const r = runCapture("--median-correction", "sometimes");
   assert.notEqual(r.status, 0);
   assert.match(r.stderr + r.stdout, /--median-correction must be one of: off, auto/);
+});
+
+test("--median-correction auto cannot be combined with the pool", () => {
+  // The projection's weight in the pool was earned by the uncorrected projection.
+  const r = runCapture("--median-correction", "auto", "--price-model", "pool");
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr + r.stdout, /cannot be combined with --price-model pool/);
+});
+
+test("--price-model accepts pool and rejects what it does not know", () => {
+  const bad = runCapture("--price-model", "ensemble");
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr + bad.stdout, /--price-model must be one of: projection, blend, pool/);
 });
 
 test("--median-correction auto cannot be combined with the blend", () => {

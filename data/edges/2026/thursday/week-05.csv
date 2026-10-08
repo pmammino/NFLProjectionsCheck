@@ -1,0 +1,34 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,5,12483,Josh Allen,BUF,QB,at LAR,rushAtt,DraftKings,11.5,over,7.48,630,,0.1370,0.1370,,1,0.2067,0.0008,0.0697,0.0697,ev,none,pool,,thursday,1,live,20261013A957AFD4,2026-10-08T20:38:02.473Z
+2026,5,11712,Deshaun Watson,CLE,QB,at NYJ,rushAtt,DraftKings,11.5,over,3.13,1700,,0.0556,0.0556,,1,0.1176,0.0000,0.0620,0.0620,ev,none,pool,,thursday,1,live,2026101112C81881,2026-10-08T20:38:02.473Z
+2026,5,14416,Jalen Hurts,PHI,QB,at JAX,rushAtt,DraftKings,11.5,over,5.79,1380,,0.0676,0.0676,,1,0.1283,0.0000,0.0607,0.0607,ev,none,pool,,thursday,1,live,2026101118C77B29,2026-10-08T20:38:02.473Z
+2026,5,18450,Ollie Gordon II,MIA,RB,vs CIN,rushAtt,DraftKings,17.5,over,12,930,,0.0971,0.0971,,1,0.1521,0.1217,0.0551,0.0551,ev,none,pool,,thursday,1,live,20261011087E6185,2026-10-08T20:38:02.473Z
+2026,5,13894,KaVontae Turpin,DAL,WR,vs TB,recYds,FanDuel,19.5,over,10.47,429,,0.1890,0.1890,,1,0.2431,0.2366,0.0541,0.0541,ev,none,pool,,thursday,1,live,2026100942D78F91,2026-10-08T20:38:02.473Z
+2026,5,17037,Tyler Shough,NO,QB,vs MIN,rushYds,DraftKings,29.5,over,18.48,850,,0.1053,0.1053,,1,0.1562,0.0745,0.0510,0.0510,ev,none,pool,,thursday,1,live,202610116F5167CB,2026-10-08T20:38:02.473Z
+2026,5,18445,Omarion Hampton,LAC,RB,vs DEN,rushAtt,DraftKings,17.5,over,9.61,940,,0.0962,0.0962,,1,0.1464,0.1684,0.0503,0.0503,ev,none,pool,,thursday,1,live,20261011D653A330,2026-10-08T20:38:02.473Z
+2026,5,17037,Tyler Shough,NO,QB,vs MIN,rushYds,DraftKings,24.5,over,18.48,526,,0.1597,0.1597,,1,0.2093,0.2152,0.0496,0.0496,ev,none,pool,,thursday,1,live,202610116F5167CB,2026-10-08T20:38:02.473Z
+2026,5,13556,David Montgomery,HOU,RB,at TEN,rushYds,Hard Rock,64.5,over,45.26,250,-375,0.2857,0.2657,0.0752,0,0.3326,0.1949,0.0469,0.0669,ev,multiplicative,pool,,thursday,1,live,20261011771379DF,2026-10-08T20:38:02.473Z
+2026,5,15357,Trevor Lawrence,JAX,QB,vs PHI,rushAtt,DraftKings,5.5,over,5.12,381,,0.2079,0.2079,,1,0.2546,0.3206,0.0467,0.0467,ev,none,pool,,thursday,1,live,2026101118C77B29,2026-10-08T20:38:02.473Z
+2026,5,18449,Woody Marks,HOU,RB,at TEN,rushAtt,DraftKings,11.5,over,11.71,274,,0.2674,0.2674,,1,0.3117,0.5175,0.0443,0.0443,ev,none,pool,,thursday,1,live,20261011771379DF,2026-10-08T20:38:02.473Z
+2026,5,14418,J.K. Dobbins,DEN,RB,at LAC,rushAtt,DraftKings,17.5,over,12.85,351,,0.2217,0.2217,,1,0.2650,0.0910,0.0433,0.0433,ev,none,pool,,thursday,1,live,20261011D653A330,2026-10-08T20:38:02.473Z
+2026,5,17037,Tyler Shough,NO,QB,vs MIN,rushYds,DraftKings,19.5,over,18.48,303,,0.2481,0.2481,,1,0.2911,0.4469,0.0430,0.0430,ev,none,pool,,thursday,1,live,202610116F5167CB,2026-10-08T20:38:02.473Z
+2026,5,17784,Bucky Irving,TB,RB,at DAL,rushAtt,DraftKings,17.5,over,17.32,398,,0.2008,0.2008,,1,0.2415,0.4781,0.0407,0.0407,ev,none,pool,,thursday,1,live,2026100942D78F91,2026-10-08T20:38:02.473Z
+2026,5,13894,KaVontae Turpin,DAL,WR,vs TB,recYds,FanDuel,29.5,over,10.47,849,,0.1054,0.1054,,1,0.1446,0.0653,0.0392,0.0392,ev,none,pool,,thursday,1,live,2026100942D78F91,2026-10-08T20:38:02.473Z
+2026,5,18524,Bhayshul Tuten,JAX,RB,vs PHI,rushAtt,DraftKings,17.5,over,15.03,229,,0.3040,0.3040,,1,0.3412,0.1903,0.0372,0.0372,ev,none,pool,,thursday,1,live,2026101118C77B29,2026-10-08T20:38:02.473Z
+2026,5,19607,Kaelon Black,SF,RB,at SEA,rushYds,BetRivers,29.5,over,15.29,440,,0.1852,0.1852,,1,0.2212,0.3677,0.0360,0.0360,ev,none,pool,,thursday,1,live,202610119C07AE76,2026-10-08T20:38:02.473Z
+2026,5,17692,Jayden Daniels,WAS,QB,vs NYG,rushAtt,theScore,11.5,over,8.02,1400,,0.0667,0.0667,,1,0.1019,0.0013,0.0352,0.0352,ev,none,pool,,thursday,1,live,202610117E00D723,2026-10-08T20:38:02.473Z
+2026,5,16933,Chris Rodriguez Jr.,JAX,RB,vs PHI,rushYds,BetRivers,39.5,over,25.08,285,,0.2597,0.2597,,1,0.2946,0.2593,0.0348,0.0348,ev,none,pool,,thursday,1,live,2026101118C77B29,2026-10-08T20:38:02.473Z
+2026,5,13556,David Montgomery,HOU,RB,at TEN,rushYds,Hard Rock,54.5,over,45.26,145,-210,0.4082,0.3760,0.0856,0,0.4418,0.3398,0.0336,0.0658,ev,multiplicative,pool,,thursday,1,live,20261011771379DF,2026-10-08T20:38:02.473Z
+2026,5,19292,Jalon Daniels,TB,QB,at DAL,rushAtt,DraftKings,11.5,over,4.05,810,,0.1099,0.1099,,1,0.1432,0.0000,0.0333,0.0333,ev,none,pool,,thursday,1,live,2026100942D78F91,2026-10-08T20:38:02.473Z
+2026,5,13556,David Montgomery,HOU,RB,at TEN,rushAtt,DraftKings,17.5,over,14.52,252,,0.2841,0.2841,,1,0.3169,0.2041,0.0329,0.0329,ev,none,pool,,thursday,1,live,20261011771379DF,2026-10-08T20:38:02.473Z
+2026,5,15907,Brian Robinson Jr.,ATL,RB,vs BAL,rushAtt,theScore,14.5,over,6.31,900,,0.1000,0.1000,,1,0.1324,0.1370,0.0324,0.0324,ev,none,pool,,thursday,1,live,2026101240603BF9,2026-10-08T20:38:02.473Z
+2026,5,15807,Kyren Williams,LAR,RB,vs BUF,recYds,BetRivers,39.5,over,20.4,430,,0.1887,0.1887,,1,0.2209,0.1165,0.0322,0.0322,ev,none,pool,,thursday,1,live,20261013A957AFD4,2026-10-08T20:38:02.473Z
+2026,5,19292,Jalon Daniels,TB,QB,at DAL,rushAtt,theScore,11.5,over,4.05,800,,0.1111,0.1111,,1,0.1432,0.0000,0.0321,0.0321,ev,none,pool,,thursday,1,live,2026100942D78F91,2026-10-08T20:38:02.473Z
+2026,5,17700,Michael Penix Jr.,ATL,QB,vs BAL,rushYds,DraftKings,9.5,over,11.19,521,,0.1610,0.1610,,1,0.1926,0.5881,0.0316,0.0316,ev,none,pool,,thursday,1,live,2026101240603BF9,2026-10-08T20:38:02.473Z
+2026,5,18514,Cam Skattebo,NYG,RB,at WAS,rushAtt,BetRivers,19.5,over,14.78,390,,0.2041,0.2041,,1,0.2355,0.2584,0.0314,0.0314,ev,none,pool,,thursday,1,live,202610117E00D723,2026-10-08T20:38:02.473Z
+2026,5,5971,Matthew Stafford,LAR,QB,vs BUF,rushYds,DraftKings,9.5,over,5.09,468,,0.1761,0.1761,,1,0.2075,0.0401,0.0314,0.0314,ev,none,pool,,thursday,1,live,20261013A957AFD4,2026-10-08T20:38:02.473Z
+2026,5,17037,Tyler Shough,NO,QB,vs MIN,rushYds,Caesars,29.5,over,18.48,700,,0.1250,0.1250,,1,0.1562,0.0745,0.0312,0.0312,ev,none,pool,,thursday,1,live,202610116F5167CB,2026-10-08T20:38:02.473Z
+2026,5,18520,Kyle Monangai,CHI,RB,at GB,rushYds,BetRivers,79.5,over,54.1,400,,0.2000,0.2000,,1,0.2308,0.2364,0.0308,0.0308,ev,none,pool,,thursday,1,live,202610112660CB0C,2026-10-08T20:38:02.473Z
+2026,5,15976,Tyler Allgeier,ARI,RB,vs DET,rushYds,Caesars,59.5,over,30.98,850,,0.1053,0.1053,,1,0.1361,0.0398,0.0308,0.0308,ev,none,pool,,thursday,1,live,20261011FEDB71B4,2026-10-08T20:38:02.473Z
+2026,5,18445,Omarion Hampton,LAC,RB,vs DEN,rushAtt,BetRivers,14.5,over,9.61,410,,0.1961,0.1961,,1,0.2267,0.2758,0.0306,0.0306,ev,none,pool,,thursday,1,live,20261011D653A330,2026-10-08T20:38:02.473Z
+2026,5,18450,Ollie Gordon II,MIA,RB,vs CIN,rushAtt,theScore,14.5,over,12,325,,0.2353,0.2353,,1,0.2654,0.2980,0.0301,0.0301,ev,none,pool,,thursday,1,live,20261011087E6185,2026-10-08T20:38:02.473Z

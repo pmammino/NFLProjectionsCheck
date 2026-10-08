@@ -116,6 +116,11 @@ export function readPropRow(row, slot) {
     overOdds: Number.isFinite(overOdds) ? overOdds : null,
     underOdds: Number.isFinite(underOdds) ? underOdds : null,
     hold: num(row.Hold),
+    // The multiplier applied to the projected median before this row was
+    // priced, or null. Blank on every row captured before the correction
+    // existed, none of which were corrected. Carried so a fit can tell when it
+    // is mixing corrected and uncorrected projection probabilities.
+    medianAdj: Number.isFinite(num(row.MedianAdj)) ? num(row.MedianAdj) : null,
     // Reference books price the consensus but can never be staked, so they
     // are excluded from the best-price comparison below. Absent on rows
     // captured before the split, all of which were bettable.
@@ -255,6 +260,7 @@ export function buildSamples(quotes, actualsByWeek, { includeRetired = false, ma
       bestOverOdds,
       // Which capture of the week this forecast belongs to.
       slot: first.slot,
+      medianAdj: first.medianAdj ?? null,
       actual,
       y: outcome === "won" ? 1 : 0,
     });

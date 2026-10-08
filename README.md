@@ -596,6 +596,7 @@ scripts/build-betting-data.mjs            aggregate into public/data/betting.jso
 scripts/board-timing.mjs                  compare the slots — when to source
 scripts/price-model.mjs                   score the projections AGAINST the books
                                           (Brier / log loss) — see Pricing lines
+scripts/median-correction.mjs             is the projected Median in the right place?
 ```
 
 ```bash
@@ -837,6 +838,116 @@ Fixing it needs a played/did-not-play source, which this project does not have.
 Until then the intercept carries a selection effect as well as any real market
 tilt and should not be shipped into a live price on its own. `capture-props`
 warns whenever it loads a fit with `|a| > 0.1`.
+
+### The projected "Median" is too high for rushing and receiving yards
+
+```bash
+npm run median-correction
+```
+
+The projection's tilt against the book is not spread evenly. Near the money
+it prices `recYds` overs **+5.7 ± 0.6** points above the book and `rushYds`
+overs **+5.0 ± 1.1**, and the passing stats not at all. (A tilt against the
+*outcome* is much noisier — in the coin-flip band it is +2.4 ± 3.3, inside its
+own error — so the claim rests on the comparison with the book, where the
+measurement is tight.)
+
+The cause is the middle of the band. Floor/Median/Ceiling are treated as the
+25th/50th/75th percentiles; for these two stats the "Median" is not the 50th.
+Across every player-week in 2026 weeks 1–4:
+
+| stat | P(actual ≤ M) — should be 50% | sum(actual) / sum(M) | median(actual / M) |
+|---|---|---|---|
+| `rushYds` | **63%** (z = 5.5) | 0.95 | 0.80 |
+| `recYds` | **56%** (z = 3.7) | 1.05 | 0.88 |
+| `passYds` | 50.4% | 1.00 | 0.99 |
+
+A middle value that is right on average but too high as a median is what the
+expected value of a right-skewed stat looks like, so that is the working
+explanation. **It is inferred from the pattern, not checked against RotoWire's
+own definition.** It is not the low-volume problem `calibration.mjs` already
+guards: only 6–9% of those rows are zeros, and `rushYds` sits at 60–65% below
+its median in every third of projected volume.
+
+#### What the correction does
+
+Each of F, M, C is rescaled by the multiplier that puts it on its target
+quantile (`kF` is the 25th percentile of `actual / F`, `kM` the 50th of
+`actual / M`, `kC` the 75th of `actual / C` — the same fit
+`calibration-report` section 2 prints). Three rules keep it honest:
+
+1. **Allowlist.** Only `rushYds` and `recYds` are eligible. A significance test
+   alone is not enough, and the data showed why: on the week-3 refit `passAtt`
+   cleared the z bar (2.5), and applying it took near-the-money Brier from
+   0.2332 to 0.2472 — worse, because there was no bias, only a noisy week.
+2. **Significance.** Within the allowlist a correction applies only on at least
+   100 player-weeks with `|z| ≥ 2.5`. As of week 2 neither stat qualifies; both
+   do from week 3, which is correct behaviour for a season that has not yet
+   produced the evidence.
+3. **No look-ahead.** A fit is "as of" a week and reads only weeks *strictly
+   before* it. Pricing week W with a multiplier that had seen W's result would
+   be grading with the answer in hand, and a backfill of an old week is exactly
+   where it would sneak in. It is the same loader for a live Tuesday capture and
+   a `--historical` one.
+
+The median multiplier is bounded to [0.5, 1.5] and refused outside it; the
+floor and ceiling multipliers get a looser [0.25, 2.0]. That asymmetry is a fix,
+not a tidy-up: `recYds`' floor multiplier came out at 0.48 when fitted on week 1
+alone, and a single shared bound refused the whole correction on it, although
+the median multiplier was a stable 0.83–0.86 — the noisiest of three numbers
+vetoing the most reliable one.
+
+The fitted multipliers have been stable as weeks arrived (`recYds` `kM`
+0.83 → 0.85 → 0.84; `rushYds` 0.95 on one week of data, then 0.79, 0.79), and the
+corrections that apply improve held-out weeks in `calibration-report` section 3
+(`rushYards` error 29 → 4) while the passing corrections make them worse.
+
+#### What it does and does not buy
+
+Out of sample, near the money (weeks 2–4, each priced with a fit that saw only
+earlier weeks, scored on the frozen-snapshot slots):
+
+| | Brier | vs the book | z |
+|---|---|---|---|
+| raw projection | 0.2357 | +0.0083 | +3.34 |
+| corrected | 0.2338 | +0.0063 | +2.87 |
+| the book | 0.2275 | | |
+
+It closes **about a quarter of the projection's gap to the market**. By stat,
+`recYds` goes 0.2369 → 0.2343 (book 0.2310) and `rushYds` 0.2309 → 0.2274 (book
+0.2199); `passYds` is untouched at 0.2395 against the book's 0.2261, and that
+is the largest gap on the board with no bias to remove. The rest is not a tilt a
+multiplier can fix — the projection carries less information than the book.
+**Treat this as hygiene, not an edge.** Its practical effect is to stop
+manufacturing over edges on two stats.
+
+Read the report's "lean" against the *market's* row, not against zero: the
+observed over-rate leaves out players who recorded nothing, which are the
+unders, so every price reads low against it.
+
+The Tuesday `main` slot is not scored here. Its stored prices came from an
+earlier projection snapshot than the frozen one (8,401 of its 10,944 rows differ
+from a re-pricing by more than 0.001, by up to 0.95), so re-pricing it would
+compare two projections; the report excludes and names those rows rather than
+dropping them quietly.
+
+#### Turning it on
+
+```bash
+npm run capture-props -- --median-correction auto
+```
+
+**It is off by default**, because it changes what the Tuesday drop publishes
+and that is a decision, not an upgrade. When on, the capture prints the as-of
+fit it used, and every priced row records the multiplier in a `MedianAdj`
+column (blank = uncorrected), carried through to the ledgers. It cannot be
+combined with `--price-model blend`: the blend was fitted on uncorrected
+projection probabilities, and feeding it corrected ones would change its input
+without refitting it. `price-model` says so when it finds a mix.
+
+The `Proj` column and the support floors still use the **raw** projected
+median. They ask whether a player is projected for a real role, which is a
+statement about the feed, not about the shape of the outcome.
 
 ### Using it in the betting path
 

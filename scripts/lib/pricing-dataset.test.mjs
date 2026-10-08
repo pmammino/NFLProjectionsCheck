@@ -222,3 +222,18 @@ test("a market only the later capture saw is still a market", () => {
   assert.equal(samples[0].slot, "thursday");
   assert.equal(samples[0].y, 0); // 60 yards misses 74.5
 });
+
+test("readPropRow carries the median adjustment, and blank means none", () => {
+  // Rows captured before the correction existed have no MedianAdj, and none
+  // of them were corrected.
+  assert.equal(readPropRow(CURRENT).medianAdj, null);
+  assert.equal(readPropRow({ ...CURRENT, MedianAdj: "" }).medianAdj, null);
+  assert.equal(readPropRow({ ...CURRENT, MedianAdj: "0.8412" }).medianAdj, 0.8412);
+});
+
+test("buildSamples keeps the adjustment so a fit can see it is mixing", () => {
+  const { samples } = buildSamples([{ ...quote(0.4), medianAdj: 0.84 }], actuals(60));
+  assert.equal(samples[0].medianAdj, 0.84);
+  const plain = buildSamples([quote(0.4)], actuals(60)).samples;
+  assert.equal(plain[0].medianAdj, null);
+});

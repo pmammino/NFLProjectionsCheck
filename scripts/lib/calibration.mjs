@@ -111,6 +111,25 @@
 // To act on this properly: re-measure once several weeks of quarterback
 // actuals exist, and fit the multiplier per stat from the volume/yards band
 // ratio above rather than assuming equal contribution.
+//
+// ---------------------------------------------------------------------------
+// A different problem, and one that IS corrected: where the Median sits
+// ---------------------------------------------------------------------------
+// Everything above is about how WIDE the band is. A separate finding, from
+// four weeks of actuals, is about where its MIDDLE is. For rushing and
+// receiving yardage only 36-44% of actuals land above the projected "Median"
+// (it should be 50%), while the totals are right — a median that is really an
+// expected value. That is a location error, not a width error, so the sigma
+// objections above do not apply to it, and it survives the held-out test that
+// the width corrections fail.
+//
+// It is handled in median-correction.mjs, behind `capture-props
+// --median-correction auto`, for rushYds and recYds only. Passing stats have no
+// such bias and the same fit on them made held-out weeks worse.
+//
+// The support floors below are unchanged and still gate on the RAW projected
+// median: they ask whether a player is projected for a real role, which is a
+// statement about the feed rather than about the shape of the outcome.
 
 // ---------------------------------------------------------------------------
 // Guard 1: support floor

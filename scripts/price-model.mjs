@@ -374,6 +374,17 @@ function datasetSection(res, season, weeks) {
         `  shipped into a live price on its own.`
     );
   }
+  const corrected = res.samples.filter((x) => x.medianAdj !== null && x.medianAdj !== undefined).length;
+  if (corrected > 0) {
+    console.log(
+      `\n  ${corrected} of ${res.counts.total} markets were priced with a median correction (capture-props\n` +
+        `  --median-correction auto), so their projection probability is not the raw Floor/Median/Ceiling\n` +
+        `  price. The blend below is fitted on a MIX of corrected and uncorrected rows; its disagreement\n` +
+        `  weight is not comparable across that boundary. \`npm run median-correction\` scores the\n` +
+        `  correction on its own, which is the cleaner read.`
+    );
+  }
+
   const slots = slotScores(res.samples);
   if (slots.length > 1) {
     console.log(`\n  By capture (slot) — the same games forecast at different lead times:`);

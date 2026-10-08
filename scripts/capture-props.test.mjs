@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { ourProbability, PROPS_COLUMNS, repriceWithBlend } from "./capture-props.mjs";
 import { LEDGER_COLUMNS } from "./simulate-personas.mjs";
 import {
@@ -226,4 +228,87 @@ test("PROPS_COLUMNS and LEDGER_COLUMNS record which model priced each row", () =
   // the projection price or the blend — and the two are not comparable.
   assert.ok(PROPS_COLUMNS.includes("PriceModel"));
   assert.ok(LEDGER_COLUMNS.includes("PriceModel"));
+});
+
+
+// --- median correction -------------------------------------------------------
+
+const RUSH_SPLITS = {
+  F: { RushYards: "28.0" },
+  M: { RushYards: "40.0" },
+  C: { RushYards: "52.0" },
+};
+const RUSH_CORRECTION = { rushYds: { applied: true, kF: 0.7, kM: 0.8, kC: 0.95 } };
+
+test("ourProbability with no correction is exactly the long-standing price", () => {
+  const plain = ourProbability({ line: 40, statKey: "rushYds" }, RUSH_SPLITS);
+  assert.equal(ourProbability({ line: 40, statKey: "rushYds" }, RUSH_SPLITS, null), plain);
+  assert.equal(ourProbability({ line: 40, statKey: "rushYds" }, RUSH_SPLITS, {}), plain);
+  // A correction that was fitted but not APPLIED must change nothing.
+  assert.equal(
+    ourProbability({ line: 40, statKey: "rushYds" }, RUSH_SPLITS, { rushYds: { applied: false, kF: 0.5, kM: 0.5, kC: 0.5 } }),
+    plain
+  );
+  assert.ok(Math.abs(plain - 0.5) < 1e-9, "a line at the median is a coin flip before correction");
+});
+
+test("ourProbability with a correction prices the line at the corrected median", () => {
+  const corrected = ourProbability({ line: 40, statKey: "rushYds" }, RUSH_SPLITS, RUSH_CORRECTION);
+  // The median moves from 40 to 32, so a 40-yard line is now well above it.
+  assert.ok(corrected < 0.4, `P(over 40) = ${corrected}`);
+  // And a line at the corrected median is the coin flip.
+  const atNewMedian = ourProbability({ line: 32, statKey: "rushYds" }, RUSH_SPLITS, RUSH_CORRECTION);
+  assert.ok(Math.abs(atNewMedian - 0.5) < 1e-9, `P(over 32) = ${atNewMedian}`);
+});
+
+test("a correction for one stat does not leak into another", () => {
+  const splits = { F: { PassYards: "230" }, M: { PassYards: "277.9" }, C: { PassYards: "320" } };
+  assert.equal(
+    ourProbability({ line: 250, statKey: "passYds" }, splits, RUSH_CORRECTION),
+    ourProbability({ line: 250, statKey: "passYds" }, splits)
+  );
+});
+
+test("a poisson stat never takes a median correction", () => {
+  // Poisson stats price off the projected count, not the F/M/C band, so there
+  // is no median to move. Even a hand-built correction must be inert here.
+  const splits = { M: { PassTDs: "1.7" } };
+  const hostile = { passTD: { applied: true, kF: 0.5, kM: 0.5, kC: 0.5 } };
+  assert.equal(
+    ourProbability({ line: 1.5, statKey: "passTD" }, splits, hostile),
+    ourProbability({ line: 1.5, statKey: "passTD" }, splits)
+  );
+});
+
+test("PROPS_COLUMNS and LEDGER_COLUMNS record the median adjustment", () => {
+  assert.ok(PROPS_COLUMNS.includes("MedianAdj"));
+  assert.ok(LEDGER_COLUMNS.includes("MedianAdj"));
+});
+
+// The flag checks live in parseArgs, which runs before anything touches the
+// network, so they can be exercised through the real CLI without a key.
+const CAPTURE = fileURLToPath(new URL("./capture-props.mjs", import.meta.url));
+const runCapture = (...args) =>
+  spawnSync(process.execPath, [CAPTURE, ...args], { encoding: "utf8", env: { ...process.env, OPTICODDS_API_KEY: "" } });
+
+test("--median-correction rejects a value it does not know", () => {
+  const r = runCapture("--median-correction", "sometimes");
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr + r.stdout, /--median-correction must be one of: off, auto/);
+});
+
+test("--median-correction auto cannot be combined with the blend", () => {
+  // The blend was fitted on uncorrected projection probabilities; feeding it
+  // corrected ones would change its input without refitting it.
+  const r = runCapture("--median-correction", "auto", "--price-model", "blend");
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr + r.stdout, /cannot be combined with --price-model blend/);
+});
+
+test("the correction is off by default", () => {
+  // The Tuesday drop is the product; its pricing changes when someone decides
+  // it should, not when they upgrade. --help is the only way to read the
+  // default without a network, so the help text has to say it.
+  const r = runCapture("--help");
+  assert.match(r.stdout, /--median-correction <m>\s+off \| auto \(default: off\)/);
 });

@@ -358,7 +358,8 @@ function datasetSection(res, season, weeks) {
   console.log(
     `Dropped: retired market ${d.retired}, no actuals ${d.noActual}, push ${d.push}, ` +
       `no book in set ${d.noConsensus}, too few books ${d.fewBooks}` +
-      (d.inconsistentProj ? `, inconsistent projection ${d.inconsistentProj}` : "")
+      (d.inconsistentProj ? `, inconsistent projection ${d.inconsistentProj}` : "") +
+      (d.notProjectionPrice ? `, priced off the blend or pool ${d.notProjectionPrice}` : "")
   );
   if (d.noActual > 0) {
     console.log(

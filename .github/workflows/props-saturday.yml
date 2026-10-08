@@ -1,0 +1,152 @@
+name: Publish Saturday edges (Saturday sweep)
+
+# THE LATE-WEEK DROP. The Tuesday and Thursday jobs price a projection that was
+# written days before the game. This one prices a projection written this
+# morning, after the Friday injury report, against the board as it stands then.
+#
+# Why this exists. Measured on the 2026 weeks 2-4 (`npm run projection-miss`),
+# the projection's gap to the closing book, in Brier score near the money:
+#
+#   Tuesday's snapshot             +0.0178
+#   last snapshot before the game  +0.0073
+#
+# The projection improves every day, because the books have been pricing the
+# week's news since the lines opened and it reads it a day at a time. With a
+# fresh snapshot it earns a real share of the price on the volume stats
+# (receptions, receiving yards) and with Tuesday's it earns about nothing. A
+# share is fitted per stat AND per capture slot (scripts/lib/source-weights.mjs),
+# so this slot learns its own from the live captures it writes — it starts at
+# zero and has to earn one, which takes several weeks of data.
+#
+# Two things this job does that the earlier ones do not need to:
+#
+#  1. It refreshes the projections first. Scheduled ingest runs are routinely
+#     delayed by GitHub for hours, and a "late-week" capture that silently priced
+#     Friday's snapshot would defeat the point of the slot.
+#  2. It leaves out games that have already kicked off. Thursday night's game is
+#     over by Saturday, and a price from it is not one anybody could take
+#     (capture-props drops started fixtures from every live capture).
+#
+# The Tuesday and Thursday jobs are NOT replaced: early prices are softer, and
+# every bet carries a Slot column so the rollups can say which drop earns.
+#
+# Requires the OPTICODDS_API_KEY secret, and ROTOWIRE_COOKIE for the refresh.
+
+on:
+  schedule:
+    # Saturday 15:00 UTC ~ 11:00 ET. After Friday's final injury designations,
+    # ahead of every Sunday kickoff, and ahead of the late-season Saturday games
+    # (the earliest is ~21:30 UTC). Gated to the season's months.
+    - cron: "0 15 * 9-12,1-2 6"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season (year), e.g. 2026. Blank = auto by date."
+        required: false
+      week:
+        description: "NFL week number. Blank = auto by date."
+        required: false
+      slot:
+        description: "Slot to write into. Keep 'saturday' unless testing."
+        required: false
+        default: "saturday"
+      refreshProjections:
+        description: "Re-ingest today's projections before capturing (true/false)"
+        required: false
+        default: "true"
+      minEdge:
+        description: "Minimum edge to place a paper bet, e.g. 0.03"
+        required: false
+        default: "0.03"
+      includeOffshore:
+        description: "ONLY affects --all-books; on the normal path it does nothing. Pinnacle is already pulled as a reference book."
+        required: false
+        default: "false"
+      dryRun:
+        description: "Fetch and price but write nothing (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  # The same single group every data-writing workflow shares: they all
+  # `git add data/` and push to one branch, so two at once means the second
+  # push is rejected as a non-fast-forward.
+  group: data-commit
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Fresh projections are the whole point of this slot. A failure here is
+      # reported loudly but does not stop the capture: a Saturday board priced
+      # on yesterday's snapshot is still more informative than none, and the
+      # warning says which it was.
+      - name: Refresh projections
+        if: github.event.inputs.refreshProjections != 'false' && github.event.inputs.dryRun != 'true'
+        env:
+          ROTOWIRE_COOKIE: ${{ secrets.ROTOWIRE_COOKIE }}
+          SEASON: ${{ github.event.inputs.season }}
+          WEEK: ${{ github.event.inputs.week }}
+        run: |
+          echo "Running: node scripts/ingest.mjs --only projections"
+          if ! node scripts/ingest.mjs --only projections; then
+            echo "::warning::Projection refresh failed — the Saturday capture will price the latest snapshot already on disk, which may be a day old."
+          fi
+
+      - name: Capture props (Saturday slot)
+        env:
+          OPTICODDS_API_KEY: ${{ secrets.OPTICODDS_API_KEY }}
+        run: |
+          if [ -z "$OPTICODDS_API_KEY" ]; then
+            echo "::error::OPTICODDS_API_KEY secret is not set — odds cannot be captured."
+            exit 1
+          fi
+          slot="${{ github.event.inputs.slot }}"
+          if [ -z "$slot" ]; then slot="saturday"; fi
+          args="--slot $slot"
+          if [ -n "${{ github.event.inputs.season }}" ]; then args="$args --season ${{ github.event.inputs.season }}"; fi
+          if [ -n "${{ github.event.inputs.week }}" ]; then args="$args --week ${{ github.event.inputs.week }}"; fi
+          if [ -n "${{ github.event.inputs.minEdge }}" ]; then args="$args --min-edge ${{ github.event.inputs.minEdge }}"; fi
+          if [ "${{ github.event.inputs.includeOffshore }}" = "true" ]; then args="$args --include-offshore"; fi
+          if [ "${{ github.event.inputs.dryRun }}" = "true" ]; then args="$args --dry-run"; fi
+          echo "Running: node scripts/capture-props.mjs $args"
+          node scripts/capture-props.mjs $args
+
+      # The replay reads EVERY slot's edges for the season, so this picks up
+      # all three drops and tags each bet with the slot it came from.
+      - name: Replay personas
+        if: always() && github.event.inputs.dryRun != 'true'
+        run: node scripts/simulate-personas.mjs
+
+      - name: Commit snapshots
+        if: always() && github.event.inputs.dryRun != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No new props/bets to commit."
+          else
+            git commit -m "Publish Saturday edges + replay personas [skip ci]"
+            pushed=false
+            for attempt in 1 2 3; do
+              if git push; then pushed=true; break; fi
+              echo "Push rejected (attempt $attempt) — rebasing onto $GITHUB_REF_NAME and retrying."
+              git pull --rebase origin "$GITHUB_REF_NAME" || break
+              sleep 5
+            done
+            if [ "$pushed" != "true" ]; then
+              echo "::error::Could not push after 3 attempts."
+              exit 1
+            fi
+          fi

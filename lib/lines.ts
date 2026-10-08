@@ -150,6 +150,11 @@ export const SLOT_INFO: Record<string, { label: string; blurb: string }> = {
     label: "Thursday sweep",
     blurb: "The midweek capture, once the books have posted the board but every game is still pre-kickoff.",
   },
+  saturday: {
+    label: "Saturday sweep",
+    blurb:
+      "The late-week capture, on a projection written that morning and after the Friday injury report. Games already played are left out.",
+  },
 };
 
 export const slotLabel = (slot: string) => SLOT_INFO[slot]?.label ?? slot;

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { ourProbability, PROPS_COLUMNS, repriceWithBlend } from "./capture-props.mjs";
+import { ourProbability, PROPS_COLUMNS, repriceWithBlend, repriceWithPool, loadSourceModelFor, splitStarted } from "./capture-props.mjs";
 import { LEDGER_COLUMNS } from "./simulate-personas.mjs";
 import {
   matchStatKey,
@@ -223,6 +223,158 @@ test("repriceWithBlend is a no-op without a fit", () => {
   assert.equal(rows[0].ourProb, 0.62);
 });
 
+// --- repriceWithPool -----------------------------------------------------------
+// The default pricing pass: every book, weighted, with the projection taking the
+// share it has earned. As with the blend, the point is the wiring — which prices
+// go in, which invariants hold.
+
+const modelOf = (weights = {}, shares = {}) => ({ weights, shares });
+const earned = (stat, slot, share) => ({ [`${stat}|${slot}`]: { share } });
+
+test("repriceWithPool prices off the books and relabels the row", () => {
+  const rows = [
+    candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" }),
+    candidate({ odds: -110, oppositeOdds: -110, book: "FanDuel" }),
+  ];
+  const changed = repriceWithPool(rows, modelOf());
+  assert.equal(changed, 2);
+  assert.ok(rows.every((r) => r.priceModel === "pool"));
+  // Two books at -110 de-vig to 0.5, and the projection (0.62) has earned no
+  // share, so it has no say.
+  assert.ok(Math.abs(rows[0].ourProb - 0.5) < 1e-6, `got ${rows[0].ourProb}`);
+});
+
+test("repriceWithPool: the projection moves the price exactly as far as its earned share says", () => {
+  const mk = () => [
+    candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" }),
+    candidate({ odds: -110, oppositeOdds: -110, book: "FanDuel" }),
+  ];
+  const none = mk();
+  repriceWithPool(none, modelOf());
+  const some = mk();
+  repriceWithPool(some, modelOf({}, earned("rushYds", "main", 0.3)));
+  assert.ok(some[0].ourProb > none[0].ourProb, "a share for a projection that says 62% pulls the price up");
+  assert.ok(some[0].ourProb < 0.62, "but never past the projection itself");
+});
+
+test("repriceWithPool: a share is for one stat on one kind of capture", () => {
+  // A receptions share must not leak onto rushing yards, and a Tuesday share
+  // must not be applied to a Thursday projection — they are different forecasts.
+  const mk = () => [candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" }), candidate({ odds: -110, oppositeOdds: -110, book: "FanDuel" })];
+  const base = mk();
+  repriceWithPool(base, modelOf());
+  const otherStat = mk();
+  repriceWithPool(otherStat, modelOf({}, earned("receptions", "main", 0.5)));
+  assert.equal(otherStat[0].ourProb, base[0].ourProb);
+  const otherSlot = mk();
+  repriceWithPool(otherSlot, modelOf({}, earned("rushYds", "thursday", 0.5)), { slot: "main" });
+  assert.equal(otherSlot[0].ourProb, base[0].ourProb);
+  const matching = mk();
+  repriceWithPool(matching, modelOf({}, earned("rushYds", "thursday", 0.5)), { slot: "thursday" });
+  assert.ok(matching[0].ourProb > base[0].ourProb);
+});
+
+test("repriceWithPool keeps the two sides of a market complementary", () => {
+  const rows = [
+    candidate({ odds: -130, oppositeOdds: 110, ourProb: 0.62 }),
+    { ...candidate({ odds: 110, oppositeOdds: -130, ourProb: 0.38 }), side: "under" },
+  ];
+  repriceWithPool(rows, modelOf({}, earned("rushYds", "main", 0.3)));
+  const over = rows.find((r) => r.side === "over");
+  const under = rows.find((r) => r.side === "under");
+  assert.ok(Math.abs(over.ourProb + under.ourProb - 1) < 1e-9);
+});
+
+test("repriceWithPool leaves a market with no book price on the projection price", () => {
+  const rows = [{ ...candidate({ odds: -110, oppositeOdds: -110 }), odds: null, oppositeOdds: null }];
+  assert.equal(repriceWithPool(rows, modelOf({}, earned("rushYds", "main", 0.7))), 0);
+  assert.equal(rows[0].ourProb, 0.62);
+  assert.equal(rows[0].priceModel, undefined);
+});
+
+test("repriceWithPool counts a reference book's price in the pool", () => {
+  // Pinnacle is never staked, but pricing off it is the point of having it.
+  const base = [candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" })];
+  const withRef = [
+    candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" }),
+    candidate({ odds: 140, oppositeOdds: -170, book: "Pinnacle" }),
+  ];
+  repriceWithPool(base, modelOf({ "draftkings:2": 0.1 }));
+  repriceWithPool(withRef, modelOf({ "draftkings:2": 0.1, "pinnacle:2": 0.9 }));
+  assert.ok(withRef[0].ourProb < base[0].ourProb, "Pinnacle quotes the over as the underdog and carries the weight");
+});
+
+test("repriceWithPool keeps the projection price on the row (ProjProb) however the row is re-priced", () => {
+  const rows = [candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" }), candidate({ odds: -110, oppositeOdds: -110, book: "FanDuel" })];
+  rows.forEach((r) => (r.projProb = r.ourProb));
+  repriceWithPool(rows, modelOf());
+  assert.ok(rows.every((r) => r.projProb === 0.62));
+  assert.ok(rows.every((r) => Math.abs(r.ourProb - 0.62) > 0.05));
+});
+
+test("repriceWithPool is a no-op without a model", () => {
+  const rows = [candidate({ odds: -110, oppositeOdds: -110 })];
+  assert.equal(repriceWithPool(rows, null), 0);
+  assert.equal(rows[0].ourProb, 0.62);
+});
+
+// --- loadSourceModelFor ----------------------------------------------------------
+
+function weightsFile(byWeek) {
+  const dir = mkdtempSync(join(tmpdir(), "sw-"));
+  const path = join(dir, "source-weights.json");
+  writeFileSync(path, JSON.stringify({ season: 2026, byWeek }));
+  return path;
+}
+const load = (path, week) => loadSourceModelFor({ sourceWeightsFile: path, week, season: 2026 });
+
+test("a pinned file is read for the week being priced, with the projection's shares", () => {
+  const path = weightsFile({
+    "2": { weights: { "a:2": 0.2 }, projectionShare: { "recYds|main": 0.1 }, trainedOnWeeks: [1], shareWeeks: [1] },
+    "3": { weights: { "a:2": 0.3 }, projectionShare: { "recYds|main": 0.2 }, trainedOnWeeks: [1, 2], shareWeeks: [1, 2] },
+  });
+  assert.deepEqual(load(path, 2).weights, { "a:2": 0.2 });
+  assert.equal(load(path, 3).shares["recYds|main"].share, 0.2);
+  assert.deepEqual(load(path, 3).trainedOnWeeks, [1, 2]);
+});
+
+test("a pinned file: a live week past the last entry takes the last, fitted on everything so far", () => {
+  const path = weightsFile({ "2": { weights: { x: 1 }, trainedOnWeeks: [1] }, "5": { weights: { x: 2 }, trainedOnWeeks: [1, 2, 3, 4] } });
+  assert.deepEqual(load(path, 6).weights, { x: 2 });
+});
+
+test("a pinned file: a week before any record prices on the priors, not on later weeks", () => {
+  // A backfill of week 1 must not be priced with weights that have seen week 4.
+  const path = weightsFile({ "2": { weights: { x: 1 }, trainedOnWeeks: [1] } });
+  const got = load(path, 1);
+  assert.deepEqual(got.weights, {});
+  assert.deepEqual(got.trainedOnWeeks, []);
+});
+
+test("a pinned file that had seen the week it would price is refused", () => {
+  const w = weightsFile({ "3": { weights: { x: 1 }, trainedOnWeeks: [1, 2, 3] } });
+  assert.throws(() => load(w, 3), /fitted on week 3 or later/);
+  // The projection's shares count too: they are fitted on outcomes.
+  const s = weightsFile({ "3": { weights: {}, projectionShare: {}, trainedOnWeeks: [1, 2], shareWeeks: [1, 2, 3] } });
+  assert.throws(() => load(s, 3), /fitted on week 3 or later/);
+});
+
+test("a missing pinned file fails loudly, with the command that writes it", () => {
+  assert.throws(() => load("/nonexistent/source-weights.json", 3), /source-weights\.mjs --season 2026 --write/);
+});
+
+test("with no history at all the model is empty and pricing proceeds on equal weights", () => {
+  const dir = mkdtempSync(join(tmpdir(), "empty-"));
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const m = loadSourceModelFor({ dataDir: dir, season: 2031, week: 1 });
+    assert.deepEqual(m, { weights: {}, shares: {}, trainedOnWeeks: [], shareWeeks: [] });
+  } finally {
+    console.warn = warn;
+  }
+});
+
 test("PROPS_COLUMNS and LEDGER_COLUMNS record which model priced each row", () => {
   // Without this, an archived ledger cannot say whether a bet was taken on
   // the projection price or the blend — and the two are not comparable.
@@ -297,6 +449,28 @@ test("--median-correction rejects a value it does not know", () => {
   assert.match(r.stderr + r.stdout, /--median-correction must be one of: off, auto/);
 });
 
+test("--median-correction auto cannot be combined with the pool", () => {
+  // The projection's weight in the pool was earned by the uncorrected projection.
+  const r = runCapture("--median-correction", "auto", "--price-model", "pool");
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr + r.stdout, /cannot be combined with --price-model pool/);
+  // And the default is the pool, so asking for the correction alone is the same error.
+  const bare = runCapture("--median-correction", "auto");
+  assert.notEqual(bare.status, 0);
+  assert.match(bare.stderr + bare.stdout, /--price-model projection/);
+});
+
+test("pool is the default price model, and projection is still available", () => {
+  const out = runCapture("--help");
+  assert.match(out.stdout, /--price-model <m>\s+pool \| projection \| blend \(default: pool\)/);
+});
+
+test("--price-model accepts pool and rejects what it does not know", () => {
+  const bad = runCapture("--price-model", "ensemble");
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr + bad.stdout, /--price-model must be one of: projection, blend, pool/);
+});
+
 test("--median-correction auto cannot be combined with the blend", () => {
   // The blend was fitted on uncorrected projection probabilities; feeding it
   // corrected ones would change its input without refitting it.
@@ -311,4 +485,36 @@ test("the correction is off by default", () => {
   // default without a network, so the help text has to say it.
   const r = runCapture("--help");
   assert.match(r.stdout, /--median-correction <m>\s+off \| auto \(default: off\)/);
+});
+
+// --- splitStarted ---------------------------------------------------------------
+// A live capture prices what can still be bet. On a Saturday sweep Thursday
+// night's game is over and its props are not a price anyone could take.
+
+test("splitStarted separates games that have kicked off from games still to play", () => {
+  const now = Date.parse("2026-10-03T15:00:00Z");
+  const fixtures = [
+    { id: "tnf", startDate: "2026-10-02T00:15:00Z" }, // Thursday night, played
+    { id: "early", startDate: "2026-10-03T14:00:00Z" }, // started an hour ago
+    { id: "sun", startDate: "2026-10-04T17:00:00Z" },
+    { id: "mon", startDate: "2026-10-05T00:20:00Z" },
+  ];
+  const { open, started } = splitStarted(fixtures, now);
+  assert.deepEqual(started.map((f) => f.id), ["tnf", "early"]);
+  assert.deepEqual(open.map((f) => f.id), ["sun", "mon"]);
+});
+
+test("splitStarted treats a kickoff exactly now as started, and an unknown kickoff as open", () => {
+  const now = Date.parse("2026-10-03T15:00:00Z");
+  const { open, started } = splitStarted(
+    [{ id: "now", startDate: "2026-10-03T15:00:00Z" }, { id: "unknown", startDate: null }, { id: "garbled", startDate: "soon" }],
+    now
+  );
+  assert.deepEqual(started.map((f) => f.id), ["now"]);
+  // A fixture we cannot date is kept: dropping it on a guess would shrink the board silently.
+  assert.deepEqual(open.map((f) => f.id), ["unknown", "garbled"]);
+});
+
+test("splitStarted on an empty week is empty", () => {
+  assert.deepEqual(splitStarted([], Date.now()), { open: [], started: [] });
 });

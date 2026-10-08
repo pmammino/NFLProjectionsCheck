@@ -434,6 +434,7 @@ its own **slot** (`scripts/lib/slots.mjs`):
 ```
 data/props/2026/week-03.csv             main     — the Tuesday drop
 data/props/2026/thursday/week-03.csv    thursday — the midweek sweep
+data/props/2026/saturday/week-03.csv    saturday — the late-week sweep, on a same-day projection
 data/props/2026/t-48h/week-03.csv       t-48h    — a backfill reconstruction
 ```
 
@@ -456,11 +457,30 @@ destroy the only comparison that decides which one to keep.
 |---|---|---|
 | `props-weekly.yml` | Tue 14:00 | `main` — softest prices, thin board |
 | `props-midweek.yml` | Thu 15:00 | `thursday` — full board, still pre-kickoff |
+| `props-saturday.yml` | Sat 15:00 | `saturday` — the fullest board, on a projection written that morning |
 
 Thursday 15:00 sits ~9 hours before Thursday Night Football, so **every** game
-of the week is still bettable. Saturday would catch a fuller board again but
-TNF would already have played. Which is actually better is a measurement, not
-an argument — see below.
+of the week is still bettable. Saturday catches the fullest board and, more to the
+point, the freshest projection: after Friday's injury designations, with the week's
+news read — which is when the projection has most to add (see *Why does the
+projection earn so little?*). It costs the Thursday game, which has been played, so
+a live capture **leaves out every game that has already kicked off** (a price from
+one is not a price anyone could take) and the Saturday board is the Sunday-and-later
+games. Which slot is actually better is a measurement, not an argument — see below.
+
+**The Saturday job refreshes the projections first** (`ingest.mjs --only
+projections`) rather than trusting the daily ingest, because scheduled runs are
+routinely delayed by GitHub for hours and a "late-week" capture that quietly priced
+Friday's snapshot would defeat the slot's purpose. If the refresh fails the capture
+still runs, with a warning that the snapshot may be a day old.
+
+**Its projection share starts at zero** and is fitted from the live Saturday
+captures it writes, per stat, like every other slot: expect several weeks before it
+moves, and until then a Saturday board is priced on the weighted books alone. It also
+means the books' lead weights, which are assessed on every early board together,
+mix a Saturday board (a day ahead of the close) with a Tuesday one (five days ahead).
+That attenuates the leads a little and does not change their ranking; once there is
+a few weeks of Saturday data it should be assessed per slot.
 
 ### Backfilling a past week
 
@@ -659,6 +679,7 @@ price, edge, player search, formatting), with `lib/lines.ts` holding the types.
 ```
 scripts/capture-props.mjs                 Tuesday: publish data/edges/ (slot main)
 scripts/capture-props.mjs --slot thursday Thursday: the same, once the board exists
+scripts/capture-props.mjs --slot saturday Saturday: the same, on a projection written that morning
 scripts/capture-props.mjs --closing       daily: record data/closing/ near each kickoff
 scripts/capture-props.mjs --historical --at T-48h
                                           rebuild a past board at a chosen moment
@@ -668,6 +689,9 @@ scripts/board-timing.mjs                  compare the slots — when to source
 scripts/price-model.mjs                   score the projections AGAINST the books
                                           (Brier / log loss) — see Pricing lines
 scripts/median-correction.mjs             is the projected Median in the right place?
+scripts/source-weights.mjs                the books' weights and the projection's share
+                                          of the price, as of each week
+scripts/projection-miss.mjs               where, and why, the projection loses to the books
 scripts/build-lines-data.mjs              compact the captured board for the Line Pricer tab
 ```
 
@@ -685,6 +709,7 @@ npm run simulate -- --persona kelly --dry-run      # one persona, no writes
 | `ingest-weekly.yml` | daily **13:00** | RotoWire projections + actuals, the player roster, then replays personas |
 | `props-weekly.yml` | **Tue 14:00** | The drop: publish edges (slot `main`), replay personas |
 | `props-midweek.yml` | **Thu 15:00** | The second drop: the same once the books have posted the board (slot `thursday`) |
+| `props-saturday.yml` | **Sat 15:00** | The late-week drop: refreshes projections, then the same, leaving out games already played (slot `saturday`) |
 | `closing-lines.yml` | daily **15:00** | Record closing lines for games kicking off soon |
 | `props-backfill.yml` | manual | Rebuild a past week's board at a chosen moment |
 | `optic-discover.yml` | manual | Inspect what the OpticOdds API returns |
@@ -1006,20 +1031,201 @@ dropping them quietly.
 #### Turning it on
 
 ```bash
-npm run capture-props -- --median-correction auto
+npm run capture-props -- --price-model projection --median-correction auto
 ```
 
 **It is off by default**, because it changes what the Tuesday drop publishes
 and that is a decision, not an upgrade. When on, the capture prints the as-of
 fit it used, and every priced row records the multiplier in a `MedianAdj`
-column (blank = uncorrected), carried through to the ledgers. It cannot be
-combined with `--price-model blend`: the blend was fitted on uncorrected
-projection probabilities, and feeding it corrected ones would change its input
-without refitting it. `price-model` says so when it finds a mix.
+column (blank = uncorrected), carried through to the ledgers. It prices the
+projection on its own, so it cannot be combined with the default `pool` — whose
+projection share was earned by the uncorrected projection — nor with
+`--price-model blend`, which was fitted on uncorrected probabilities and would have
+its input changed without refitting. `price-model` says so when it finds a mix.
 
 The `Proj` column and the support floors still use the **raw** projected
 median. They ask whether a player is projected for a real role, which is a
 statement about the feed, not about the shape of the outcome.
+
+### The books as the pricing guide, with the projection alongside
+
+```bash
+npm run source-weights                 # the books' weights and the projection's shares, as of each week
+npm run projection-miss                # where, and why, the projection loses to the books
+npm run capture-props                  # prices with the pool (the default)
+npm run capture-props -- --price-model projection   # the long-standing projection-only price
+```
+
+**This is now the default price.** `OurProb` is a weighted average of every book,
+with the projection taking whatever share of the price it has earned. Both halves
+are fitted on earlier weeks only, for the week being priced, from the committed
+captures — nothing to refit and nothing that can go stale. `ProjProb` records what
+the projection alone said on every row, because after re-pricing `OurProb` no
+longer is.
+
+#### What it does to the ledger — read this first
+
+On the 2026 Tuesday boards, rows clearing the 3% edge bar:
+
+| week | projection price | pool |
+|---|---|---|
+| 3 | 1,057 | **7** |
+| 4 | 4,203 | **3** |
+| 5 | 4,176 | **6** |
+
+Almost every edge the projection-only ledger found was the projection disagreeing
+with a price that already carried the week's news, and a disagreement with the
+market is not an edge. What survives is stale outliers: a book out of line with
+the weighted rest, bettable after its margin. Expect few or no persona bets from a
+Tuesday drop. That is the pool working, not failing — but it makes the paper
+ledger a test of line shopping until the projection has earned a share. `--price-model projection`
+restores the old behaviour in one flag.
+
+#### The books: weighted by how much their early prices led the market
+
+The median gave a one-sided Hard Rock quote exactly as much say as a two-sided
+Pinnacle one. Every book is instead assessed on one question:
+
+> When this book disagreed with the rest of the market at the open, how much of
+> that disagreement had the rest of the market adopted by the close?
+
+That is a regression slope (`lead`, through the origin, errors clustered on
+player-week) of *where the other books went* on *where this book started*. It is a
+weight and not just a correlation: if the best estimate of the closing price is a
+weighted average of the early sources, the coefficient on one source in a
+regression of the future market on it is exactly its share of the total weight.
+It needs no outcomes — one price per market rather than one coin flip — so a few
+weeks are enough where a Brier score would need a season. Two details carry the
+result: **the book is left out of its own target** (otherwise a frozen price
+"leads" by agreeing with itself), and **a source is a book and whether it quoted
+both sides** (a one-sided quote has an assumed margin stripped from it, and is a
+noisier statement from the same book).
+
+2026 weeks 1–4, 93,141 early/closing market pairs; weights after four weeks:
+
+| book | lead | z | weight |
+|---|---|---|---|
+| Pinnacle (two-sided) | 0.88 | 19 | 0.72 |
+| BetMGM | 0.58 | 13 | 0.47 |
+| Circa | 0.48 | 3.4 | 0.37 |
+| theScore | 0.42 | 4.9 | 0.36 |
+| Caesars | 0.39 | 8.3 | 0.34 |
+| DraftKings | 0.27 | 5.9 | 0.25 |
+| BetRivers | 0.21 | 3.6 | 0.19 |
+| **Hard Rock** (two-sided) | **0.08** | 2.5 | 0.09 |
+| **FanDuel** (two-sided) | **0.04** | 0.4 | 0.06 |
+
+Pinnacle, BetMGM and Circa open close to where the market ends up; Hard Rock and
+FanDuel open off the pack and then correct. Hard Rock is the most extreme book in
+about 40% of markets and carries by far the most volume, so under the median it
+pulled the consensus the most while telling it the least. A book with no record
+keeps a prior weight (0.15); evidence outweighs the prior at 150 player-weeks.
+
+These weights describe an **early** board — Tuesday or Thursday, hours to days
+before kickoff. At the close the books agree with each other and there is nothing
+left for them to lead. And **live Tuesday captures carry no Pinnacle yet** (0 rows
+in week 5): the weights come from backfilled opening boards, so on a Tuesday drop
+the pool is the weighted retail books and the largest weight above does not apply.
+
+#### The projection: a share of the price, per stat and per slot
+
+```
+logit P(over) = L_books + share · (L_projection − L_books)
+```
+
+`share` is 0 for "ignore the projection" and 1 for "believe it over the books", and
+it is **fitted against outcomes**, per stat and per capture slot (a Thursday
+projection is not a Tuesday one), on live captures only. The books' yardstick is
+the wrong one for it: "did the market later move toward it" asks whether a source
+is *ahead* of the market, and a projection written daily and read on Tuesday can
+only be behind — on that test it scores 0.01 (z 0.4), and the test cannot tell a
+projection with nothing to add from one that is merely late. At the moment of the
+price the question that can be answered is how much of the price should come from
+it.
+
+- **Point in time.** A backfilled board is priced from the week's *latest*
+  snapshot, written days later. Against it the market appears to follow the
+  projection by **8%** (z ≈ 10); against the snapshot from the start of the week,
+  **0.8%** (z ≈ 2). The first is the projection having read the same news as the
+  market, not leading it. Only live captures count, via `ProjProb`.
+- **No credit on account.** A share starts at zero, is pulled toward zero by a
+  prior worth 150 player-weeks, is marked down by one standard error (a couple of
+  dozen cells and a few weeks each means the best-looking one is partly luck), is
+  floored at zero and capped at 0.75. A cell with no live data prices on the books
+  alone. Votes are bounded to within 1.5 logit points of the books, so a
+  projection that is confidently far from the market cannot repeat the passTD
+  failure above.
+
+On the live Tuesday captures so far every share is inside its own error bar, so
+every share *used* is zero and the pool is currently the weighted books. **That is the honest state and
+it will move on its own** as captures accumulate — particularly on a later-week
+capture, where the research below says the projection has something to add.
+
+#### Why does the projection earn so little? (`npm run projection-miss`)
+
+Four candidate causes, tested separately on weeks 2–4 against the book at the same
+moment (near the money, clustered by player-week):
+
+| | what it tests | result |
+|---|---|---|
+| **Timing** | the books price news the projection has not read | **the largest cause.** Gap to the closing book: **+0.0178** on Tuesday's snapshot → **+0.0073** on the last snapshot before the game. The projection improves every day; the books have been pricing the week's news since the lines opened |
+| **Spread** | the band is too narrow, so it is overconfident | **second.** Widening the band 1.75× on the pre-kickoff snapshot takes +0.0073 → +0.0041; 2.5× on Tuesday's takes +0.0178 → +0.0119. The projection's probabilities sit too far from a coin flip given how much it differs from the book |
+| **Tails** | the far tails are too thin | **negligible.** A Student-t with the same quartiles moves the gap by ≤ 0.0003. The tail miscalibration is real (where the projection says 2% over, the book and the outcomes say 9–12%) but it is few rows at small Brier weight and not where a bet is decided |
+| **Location** | the middle is in the wrong place | rushing and receiving yards only; closes about a quarter of the gap (see the median correction above) |
+
+What remains after a fresh snapshot and a wider band is stat-specific. Receptions
+and rushing attempts end level with the book. Receiving yards ends close
+(+0.0013). **Passing yards is the outlier** (+0.010 even after repairs, and
+*negative* share against outcomes): the books know more about quarterbacks —
+weather, matchup, pace, a defence's coverage — than the feed does.
+
+So **no, the problem is not that the books have many prices and we have one**; it
+is that the books have *fresh* prices and we read the projection on Tuesday. With a
+fresh snapshot the projection earns a share of the price on the volume stats —
+fitted against outcomes it is **0.53 ± 0.46 on receptions** (z 2.3), 0.25 on
+receiving yards, ~0 on rushing yards and negative on passing yards. With Tuesday's
+snapshot it earns about nothing anywhere.
+
+Two consequences. **Capture later**: the Saturday sweep (`props-saturday.yml`)
+exists for this — a projection written that morning, after Friday's injury report —
+and each slot earns its own share as live data arrives; the Thursday one is the
+midpoint and Tuesday's is the baseline. And the
+spread result says the projection's band is a poor description of its own
+uncertainty *relative to the book* — a stand-alone fix for that, fitted as of a
+week like the median correction, is the obvious next piece if the projection is to
+be used on its own.
+
+Caveats on all of this: three or four weeks; several cells with a couple of hundred
+player-weeks each; the share of 0.53 is one of about twenty cells, which is why
+shares are marked down by an error bar before use. The timing result rests on the
+daily snapshots in git history and so needs a full clone (`git fetch --unshallow`).
+
+> **A caveat on the earlier sections.** `price-model` and `median-correction` score
+> the projection using the frozen (latest) snapshot. That snapshot is more
+> informed than the Tuesday one, so those comparisons *flatter* the projection.
+> The conclusion — that it is worse than the market near the money — survives
+> that advantage, and would be at least as strong on point-in-time data.
+
+#### Does the weighting work?
+
+| test | result |
+|---|---|
+| Pool of the **retail** books at the open vs. **Pinnacle's own close** (a price neither the pool nor its weights saw) | MSE 0.0174 → 0.0165, **z −3.9** |
+| The same against **Circa's** close | 0.0108 → 0.0112, z +1.4 — no gain |
+| Brier vs outcomes, weighted books vs retail median (14,582 markets) | −0.00003, z −0.4 — no difference |
+
+The weighting predicts where the market goes; that is established for Pinnacle's
+close and **not** for Circa's, and the Pinnacle result is partly circular
+(Pinnacle's later prices are part of what the weights were trained to follow). It
+does **not** improve the Brier score against outcomes — at this sample size
+nothing could be shown either way. The result is "does no harm".
+
+Pool- and blend-priced rows are **not projection prices**. Nothing may fit a model
+on `OurProb` or assess the projection from it: `buildSamples` and the source
+assessment read `ProjProb`, refuse a re-priced row that does not carry one
+(`isProjectionPrice`), and `price-model` reports how many it set aside. The pool
+cannot be combined with `--median-correction auto` (the projection's share was
+earned by the uncorrected projection).
 
 ### Using it in the betting path
 
@@ -1030,10 +1236,10 @@ npm run price-model -- --write          # fits and writes data/pricing/{season}/
 npm run capture-props -- --price-model blend
 ```
 
-`--price-model` defaults to `projection` — the long-standing Floor/Median/
-Ceiling price — and the default does not move until the report earns it. Every
-captured row carries a `PriceModel` column, so an archived ledger can always
-say which model priced the bet.
+`--price-model` defaults to `pool` (see above); `projection` is the long-standing
+Floor/Median/Ceiling price and `blend` the fitted one. Every captured row carries
+a `PriceModel` column, so an archived ledger can always say which model priced the
+bet, and a `ProjProb` column with what the projection alone said.
 
 The repricing runs as a pass over all candidates (like the disagreement cap),
 because a consensus is not a property of any single quote. Two invariants it

@@ -34,7 +34,7 @@
 // to the browser, so the file carries odds rather than a pre-multiplied matrix
 // of edges.
 
-import { normalizeBookName } from "./books.mjs";
+import { canonicalBookKey } from "./books.mjs";
 import { consensusProb, estimateHoldByStat } from "./consensus.mjs";
 import { STAT_DEFS } from "./markets.mjs";
 import { probOverContinuous } from "./probability.mjs";
@@ -55,10 +55,6 @@ const CONSISTENT = 1e-3;
 // capture was priced off an EARLIER projection (RotoWire refreshes daily).
 const STALE_MEDIAN = 0.05;
 
-// OpticOdds ids and display names drift across captures: the 2026 files hold
-// "mgm" and "BetMGM", "circasports" and "circa". They are one book each, and
-// counting them twice would show a book that is not there.
-const ALIASES = { mgm: "betmgm", hardrockbet: "hardrock", circa: "circasports" };
 const LABELS = {
   draftkings: "DraftKings",
   fanduel: "FanDuel",
@@ -73,10 +69,7 @@ const LABELS = {
   betr: "Betr",
 };
 
-export function canonicalBookKey(book) {
-  const k = normalizeBookName(book);
-  return ALIASES[k] ?? k;
-}
+export { canonicalBookKey };
 
 export function bookLabel(book) {
   return LABELS[canonicalBookKey(book)] ?? String(book);

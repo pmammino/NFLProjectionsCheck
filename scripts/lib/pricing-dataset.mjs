@@ -116,6 +116,10 @@ export function readPropRow(row, slot) {
     overOdds: Number.isFinite(overOdds) ? overOdds : null,
     underOdds: Number.isFinite(underOdds) ? underOdds : null,
     hold: num(row.Hold),
+    // Reference books price the consensus but can never be staked, so they
+    // are excluded from the best-price comparison below. Absent on rows
+    // captured before the split, all of which were bettable.
+    bettable: row.Bettable === undefined || row.Bettable === "" ? true : num(row.Bettable) === 1,
     // `Proj` in the current schema, `RwProj` in the week-1 one. A column that
     // is present but blank must fall through the same as a missing one, which
     // `??` alone would not do.
@@ -225,8 +229,12 @@ export function buildSamples(quotes, actualsByWeek, { includeRetired = false, ma
 
     // Best available Over price among the books in the set. Not used in the
     // fit — the model predicts an outcome, not a return — but the report
-    // needs it to translate a probability improvement into money.
-    const bestOverOdds = bestPrice(group.map((q) => (q.side === "over" ? q.odds : q.overOdds)));
+    // needs it to translate a probability improvement into money, and for
+    // that it has to be a price somebody could have taken. Reference books
+    // contribute to the consensus above and are excluded here.
+    const bestOverOdds = bestPrice(
+      group.filter((q) => q.bettable !== false).map((q) => (q.side === "over" ? q.odds : q.overOdds))
+    );
 
     samples.push({
       key,

@@ -56,6 +56,9 @@ export const LEDGER_COLUMNS = [
   // Which model produced OurProb (projection | blend). A ledger that cannot
   // say how its bets were priced cannot be re-read months later.
   "PriceModel",
+  // Always 1 in a ledger — a reference book's price can never be staked — but
+  // carried so a row stays self-describing away from the capture that made it.
+  "Bettable",
   // Which capture of the week the offer came from. Rollups split on this;
   // pooling two sourcing times into one ROI would answer nothing.
   "Slot",
@@ -133,6 +136,9 @@ function toEdge(row) {
     // Which model produced OurProb. Absent on every row captured before the
     // blend existed, and those were all priced off the projection alone.
     priceModel: row.PriceModel || "projection",
+    // Absent on every row captured before bettable and reference books were
+    // separated, and all of those were bettable.
+    bettable: row.Bettable === undefined || row.Bettable === "" ? true : Number(row.Bettable) === 1,
     // Which capture of the week this offer came from. Absent on every row
     // written before slots existed, and those were all the Tuesday drop.
     slot: slotOf(row),
@@ -317,6 +323,7 @@ function runPersona(a, persona, season, weeks) {
         OurProb: fixed(bet.ourProb), Edge: fixed(bet.edge), ModelEdge: fixed(bet.modelEdge),
         EdgeBucket: edgeBucket(persona.edgeBasis === "novig" ? bet.modelEdge : bet.edge),
         PriceModel: bet.priceModel,
+        Bettable: bet.bettable === false ? 0 : 1,
         Slot: bet.slot,
         StakeUnits: bet.stakeUnits, ScaledBy: bet.scaledBy,
         BankrollBefore: round4(bankrollBefore),

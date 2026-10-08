@@ -110,7 +110,14 @@ import {
   pairOdds,
 } from "./lib/optic-normalize.mjs";
 import { buildPlayerIndex, matchPlayer, canonicalTeam } from "./lib/crosswalk.mjs";
-import { DEFAULT_BOOKS, resolveBookIds } from "./lib/books.mjs";
+import {
+  BETTABLE_BOOKS,
+  REFERENCE_BOOKS,
+  booksToFetch,
+  resolveBookIds,
+  bookKeySet,
+  isBettableBook,
+} from "./lib/books.mjs";
 import { readCsv, toCsv } from "./lib/csv.mjs";
 import { seasonForDate, projectionWeek } from "./lib/schedule.mjs";
 import { edgeBucket } from "./lib/edge.mjs";
@@ -147,6 +154,7 @@ export const PROPS_COLUMNS = [
   "DevigMethod",
   "PriceModel", // which model produced OurProb: projection | blend
   "Slot", // which capture of the week this is: main (the Tuesday drop) or a later one
+  "Bettable", // 1 = a bet could be placed here; 0 = reference price only, never staked
   "LineSource", // live | closing | opening — see historicalToMarkets
   "FixtureID",
   "CapturedAt",
@@ -194,6 +202,10 @@ function parseArgs(argv) {
       case "--allow-line-fallback": a.allowLineFallback = true; break;
       case "--allow-empty": a.allowEmpty = true; break;
       case "--include-offshore": a.includeOffshore = true; break;
+      case "--reference-books":
+        a.referenceBooks = next().split(",").map((x) => x.trim()).filter(Boolean);
+        break;
+      case "--no-reference-books": a.noReferenceBooks = true; break;
       case "--all-books": a.allBooks = true; break;
       case "--closing": a.closing = true; break;
       case "--closing-window-hours": a.closingWindowHours = Number(next()); break;
@@ -481,6 +493,7 @@ function priceMarket(market, splits, a, reject = null) {
       odds: market.overOdds,
       oppositeOdds: market.underOdds,
       ourProb: probOver,
+      bettable: market.bettable,
       impliedProb: rawOver,
       fairProb: fair,
       hold: devigged ? devigged.hold : null,
@@ -499,6 +512,7 @@ function priceMarket(market, splits, a, reject = null) {
       odds: market.underOdds,
       oppositeOdds: market.overOdds,
       ourProb: probUnder,
+      bettable: market.bettable,
       impliedProb: rawUnder,
       fairProb: devigged.fairProbUnder,
       hold: devigged.hold,
@@ -578,12 +592,40 @@ async function resolveBooks(client, a) {
 
   // The normal path: a curated roster, resolved against the live list so a
   // shorthand like "hardrock" finds whatever id the API actually uses.
-  const requested = a.books ?? DEFAULT_BOOKS;
-  const { ids, matched, missing, ambiguous } = resolveBookIds(requested, all);
+  //
+  // TWO rosters, not one. `bettable` are books a bet can be placed at and are
+  // the only prices allowed to reach data/edges/ or a ledger. `reference`
+  // books are captured for their price and never staked — they exist to
+  // sharpen the fair-value consensus. See lib/books.mjs.
+  //
+  // --books overrides the BETTABLE list only. Naming your own accounts should
+  // not silently also discard the sharp reference the model is judged against.
+  const bettableWanted = a.books ?? BETTABLE_BOOKS;
+  const referenceWanted = a.referenceBooks ?? (a.noReferenceBooks ? [] : REFERENCE_BOOKS);
+  const requested = booksToFetch({ bettable: bettableWanted, reference: referenceWanted });
+  const { ids, matched, resolved, missing, ambiguous } = resolveBookIds(requested, all);
+
+  // --include-offshore has never done anything on this path: it is read only
+  // inside the --all-books branch above. Saying so beats leaving a flag that
+  // appears to work — it is part of why the starved `sharp` market set was
+  // misdiagnosed as "offshore books were not requested" when the real cause
+  // was Circa dropping out of the roster.
+  if (a.includeOffshore) {
+    console.warn(
+      `  --include-offshore has no effect without --all-books. Sharp prices now come\n` +
+        `    from the REFERENCE roster, which is pulled by default (${REFERENCE_BOOKS.join(", ") || "none"}).\n` +
+        `    Use --reference-books to change it, or --no-reference-books to drop it.`
+    );
+  }
+
+  const bettableSet = new Set(bettableWanted.map((b) => b.toLowerCase()));
+  const bettableResolved = resolved.filter((r) => bettableSet.has(r.requested.toLowerCase()));
+  a.bettableKeys = bookKeySet(bettableResolved);
 
   console.log(`  books: ${ids.length} of ${requested.length} requested, resolved against ${all.length} live books`);
   for (const [want, id] of matched) {
-    console.log(`    ${want}${want === id ? "" : ` -> ${id}`}`);
+    const role = bettableSet.has(want.toLowerCase()) ? "" : "   [reference only — never staked]";
+    console.log(`    ${want}${want === id ? "" : ` -> ${id}`}${role}`);
   }
 
   // A book that fails to resolve is NOT an API error — it just returns no odds,
@@ -870,7 +912,11 @@ async function main() {
       noProjection++;
       continue;
     }
-    for (const cand of priceMarket(market, splits, a, countRejection)) {
+    // Which roster this book is on. Decided here, once, from the resolved
+    // roster rather than re-derived downstream — a row whose Bettable flag
+    // disagreed with the roster that produced it would be unauditable.
+    const taggedMarket = { ...market, bettable: isBettableBook(market.sportsbook, a.bettableKeys) };
+    for (const cand of priceMarket(taggedMarket, splits, a, countRejection)) {
       priced.push({
         ...cand,
         rotowirePlayerId: match.playerId,
@@ -961,6 +1007,7 @@ async function main() {
     DevigMethod: p.oneSided ? "none" : a.devigMethod,
     PriceModel: p.priceModel ?? "projection",
     Slot: a.slot,
+    Bettable: p.bettable === false ? 0 : 1,
     LineSource: p.lineSource ?? "live",
     FixtureID: p.fixtureId,
     CapturedAt: capturedAt,
@@ -995,9 +1042,21 @@ async function main() {
   //
   // This is the file a subscriber would effectively receive on Tuesday
   // morning. scripts/simulate-personas.mjs turns it into per-persona ledgers.
-  const edgeRows = propsRows.filter((r) => Number(r[a.edgeBasis === "novig" ? "ModelEdge" : "Edge"]) >= a.minEdge);
+  // Only a price you can actually take becomes an edge. Reference books are
+  // captured, priced and kept in data/props — they are what sharpens the
+  // consensus — but a bet at one is a return nobody could have earned, which
+  // is the whole reason the two rosters are separate.
+  const bettableRows = propsRows.filter((r) => Number(r.Bettable) === 1);
+  const referenceOnly = propsRows.length - bettableRows.length;
+  if (referenceOnly > 0) {
+    console.log(
+      `  ${referenceOnly} of ${propsRows.length} priced rows are reference-only and cannot ` +
+        `become edges (kept in data/props for the consensus).`
+    );
+  }
+  const edgeRows = bettableRows.filter((r) => Number(r[a.edgeBasis === "novig" ? "ModelEdge" : "Edge"]) >= a.minEdge);
   console.log(
-    `  ${edgeRows.length} of ${propsRows.length} candidates clear the ` +
+    `  ${edgeRows.length} of ${bettableRows.length} bettable candidates clear the ` +
       `${(a.minEdge * 100).toFixed(1)}% bar, across ` +
       `${new Set(edgeRows.map((r) => `${r.PlayerID}|${r.Stat}`)).size} player-stats.`
   );
@@ -1208,14 +1267,22 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
   --books <a,b,c>          Sportsbooks to price against. Names are resolved
                            against the live list, so "hardrock" finds whatever
                            id the API uses. Default: the roster in
-                           lib/books.mjs (${DEFAULT_BOOKS.join(", ")}).
+                           lib/books.mjs (${BETTABLE_BOOKS.join(", ")}).
+                           Overrides the BETTABLE roster only; reference books
+                           are unaffected.
   --all-books              Ignore the roster and use every active book that
                            prices NFL. The ledger takes the BEST price across
                            whatever is pulled, so this reports returns nobody
                            could have earned — research only.
-  --include-offshore       With --all-books, also include offshore books. The
-                           sharpest (Pinnacle) give the best fair-price
-                           reference for judging ModelEdge.
+  --reference-books <l>    Comma-separated books captured for their PRICE but
+                           never staked. They sharpen the fair-value consensus
+                           the model is judged against and can never reach
+                           data/edges/ or a ledger. Default: the reference
+                           roster in lib/books.mjs (${REFERENCE_BOOKS.join(", ")}).
+  --no-reference-books     Pull only books a bet can be placed at.
+  --include-offshore       ONLY affects --all-books. On the normal curated path
+                           it does nothing and says so — sharp prices come from
+                           --reference-books instead.
   --slot <name>            Which capture of the week this is (default: main).
                            'main' is the Tuesday drop and keeps the original
                            file paths; any other name nests one level deeper,

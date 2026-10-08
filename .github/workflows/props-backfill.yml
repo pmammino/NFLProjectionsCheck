@@ -43,7 +43,7 @@ on:
         required: true
         default: "closing"
       includeOffshore:
-        description: "Also pull offshore books, e.g. Pinnacle (true/false)"
+        description: "ONLY affects --all-books; on the normal path it does nothing. Pinnacle is already pulled as a reference book."
         required: false
         default: "false"
       dryRun:

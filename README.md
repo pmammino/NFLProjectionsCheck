@@ -297,9 +297,26 @@ closing-line value is for.
    Roughly three quarters of player props are quoted one-sided, and those rows
    are flagged `OneSided` — no fair price can be derived from a single quote.
 
-3. **Which books.** A **curated roster** — DraftKings, FanDuel, BetMGM,
-   Caesars, BetRivers, Hard Rock, theScore and Circa — defined in
-   `scripts/lib/books.mjs`.
+3. **Which books.** **Two curated rosters**, defined in
+   `scripts/lib/books.mjs`, because *"which books do I price against?"* and
+   *"which books can I actually bet at?"* are different questions:
+
+   | | | |
+   |---|---|---|
+   | **Bettable** | DraftKings, FanDuel, BetMGM, Caesars, BetRivers, Hard Rock, theScore, Circa Sports | the only prices that reach `data/edges/`, a persona, or the best-price comparison |
+   | **Reference** | Pinnacle | captured and priced, **never staked** — it exists to sharpen the fair-value consensus |
+
+   These were one list until the split, and that conflation forced a false
+   choice. Pinnacle's de-vigged price is the best available estimate of a true
+   probability, so you want it in the consensus — but it is also a book most
+   subscribers cannot reach, so a ledger that takes its price books a bet
+   nobody could have placed. Separated, both are satisfiable at once. Every
+   row in `data/props/` carries a `Bettable` column, so an archived capture
+   can be re-read without knowing the roster of the day.
+
+   Adding reference books is close to free: `/fixtures/odds` takes 5
+   sportsbooks per request, so a roster of 8 and one of 10 both cost two book
+   batches per fixture batch.
 
    Deliberately not "every book available". The capture takes the best price
    across whatever it pulls, which is only meaningful among books you can
@@ -319,9 +336,17 @@ closing-line value is for.
    ambiguous and silently left the roster. Prefer an exact id over a prefix
    for any book whose operator might list more than one feed.
 
-   `--books` overrides the roster; `--all-books` restores the unfiltered
-   behaviour for research, and `--include-offshore` adds Pinnacle and friends
-   when a sharper fair-price reference is the point.
+   `--books` overrides the **bettable** roster only — naming your own accounts
+   should not silently also discard the sharp reference the model is judged
+   against. `--reference-books` changes the other list and
+   `--no-reference-books` drops it. `--all-books` restores the unfiltered
+   behaviour for research.
+
+   > `--include-offshore` only ever applied to `--all-books`; on the curated
+   > path it did nothing, silently. It now says so. That silent no-op is part
+   > of why the starved `sharp` market set was first misdiagnosed as "offshore
+   > books were not requested" when the real cause was Circa dropping out of
+   > the roster.
 
 4. **Two edges, answering different questions:**
 
@@ -665,8 +690,11 @@ Two definitions are fitted and reported side by side:
   theScore, betr. The board you can actually bet, so a disagreement with it is
   a disagreement with a real price.
 - **sharp** — Circa, Pinnacle and friends. Beating *this* consensus is the
-  stronger claim. It is currently starved, and the reason turned out to be a
-  bug rather than a configuration choice: `books.mjs` asked for `"circa"`,
+  stronger claim. Pinnacle is now pulled on every capture as a **reference
+  book** (above), so this set fills in from here on without any flag.
+
+  It was starved until now, and the reason turned out to be a bug rather than
+  a configuration choice: `books.mjs` asked for `"circa"`,
   which resolved fine until OpticOdds' live list gained a second Circa id.
   From then on it matched both `circa_sports` and `circa_vegas`, was reported
   ambiguous, and was **dropped from every capture** — visible in a week-3 run

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dataset, Position } from "@/lib/types";
 import {
   filterRows,
@@ -19,6 +19,8 @@ import CoverageView from "./CoverageView";
 import ConditionalView from "./ConditionalView";
 import TDView from "./TDView";
 import BettingView from "./BettingView";
+import LinePricerView from "./LinePricerView";
+import type { LineTarget } from "@/lib/lines";
 
 type Tab =
   | "simple"
@@ -28,7 +30,8 @@ type Tab =
   | "touchdowns"
   | "scatter"
   | "explorer"
-  | "betting";
+  | "betting"
+  | "lines";
 
 type Scope = "weekly" | "season";
 
@@ -40,6 +43,14 @@ export default function Dashboard() {
   const [metricKey, setMetricKey] = useState<string>("targets");
   const [tdKey, setTdKey] = useState<string>("recTD");
   const [filters, setFilters] = useState<Filters | null>(null);
+  // A bet handed from Paper Trading to the Line Pricer, so one click opens the
+  // exact line on the exact capture the bet was taken from.
+  const [lineTarget, setLineTarget] = useState<LineTarget | null>(null);
+  const openLine = (t: LineTarget) => {
+    setLineTarget(t);
+    setTab("lines");
+  };
+  const consumeLineTarget = useCallback(() => setLineTarget(null), []);
 
   useEffect(() => {
     fetch("/data/dashboard.json")
@@ -287,6 +298,7 @@ export default function Dashboard() {
             ["scatter", "Projected vs Actual"],
             ["explorer", byWeek ? "Player-week detail" : "Player detail"],
             ["betting", "Paper Trading"],
+            ["lines", "Line Pricer"],
           ] as [Tab, string][]
         ).map(([t, label]) => (
           <button
@@ -303,7 +315,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {tab !== "simple" && tab !== "calibration" && tab !== "touchdowns" && tab !== "betting" && selectedMetric && (
+      {tab !== "simple" && tab !== "calibration" && tab !== "touchdowns" && tab !== "betting" && tab !== "lines" && selectedMetric && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400">Metric:</span>
           {availableMetrics.map((m) => (
@@ -375,7 +387,8 @@ export default function Dashboard() {
           minProjVolume={filters.minProjVolume}
         />
       )}
-      {tab === "betting" && <BettingView />}
+      {tab === "betting" && <BettingView onOpenLine={openLine} />}
+      {tab === "lines" && <LinePricerView target={lineTarget} onConsumed={consumeLineTarget} />}
       </main>
     </>
   );

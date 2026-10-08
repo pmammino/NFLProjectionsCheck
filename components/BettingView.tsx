@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Explainer from "./Explainer";
+import type { LineTarget } from "@/lib/lines";
 
 // The Paper Trading tab reads public/data/betting.json, which holds one entry
 // per simulated bettor. See scripts/lib/personas.mjs for what the personas are
@@ -78,6 +79,12 @@ interface Bet {
   clvStatus: string | null;
   clvProb: number | null;
   source: string;
+  // Which capture the price came from, how it was priced, and whether the
+  // projected median was corrected first. `slot` is what lets the Line Pricer
+  // open the exact board this bet was taken from.
+  slot: string;
+  priceModel: string;
+  medianAdj: number | null;
 }
 
 interface Persona {
@@ -136,7 +143,7 @@ const pct = (n: number | null | undefined, d = 1) =>
   n === null || n === undefined ? "—" : `${(n * 100).toFixed(d)}%`;
 const units = (n: number, d = 2) => `${n >= 0 ? "+" : ""}${n.toFixed(d)}u`;
 
-export default function BettingView() {
+export default function BettingView({ onOpenLine }: { onOpenLine?: (t: LineTarget) => void }) {
   const [ds, setDs] = useState<BettingDataset | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [personaId, setPersonaId] = useState<string | null>(null);
@@ -233,6 +240,7 @@ export default function BettingView() {
               statusFilter={statusFilter}
               onStat={setStatFilter}
               onStatus={setStatusFilter}
+              onOpenLine={onOpenLine}
             />
           )}
         </>
@@ -501,6 +509,7 @@ function BetTable({
   statusFilter,
   onStat,
   onStatus,
+  onOpenLine,
 }: {
   bets: Bet[];
   persona: Persona;
@@ -508,6 +517,7 @@ function BetTable({
   statusFilter: string;
   onStat: (v: string) => void;
   onStatus: (v: string) => void;
+  onOpenLine?: (t: LineTarget) => void;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-slate-800">
@@ -557,6 +567,7 @@ function BetTable({
               <th className="px-3 py-2 text-right">Actual</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2 text-right">P&amp;L</th>
+              {onOpenLine ? <th className="px-3 py-2" /> : null}
             </tr>
           </thead>
           <tbody>
@@ -607,6 +618,19 @@ function BetTable({
                     </span>
                   )}
                 </td>
+                {onOpenLine ? (
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() =>
+                        onOpenLine({ week: b.week, slot: b.slot, playerId: b.playerId, stat: b.stat, line: b.line })
+                      }
+                      title="See every line and price for this player, as it stood in the capture this bet came from"
+                      className="rounded bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300 transition hover:bg-slate-700"
+                    >
+                      Price ▸
+                    </button>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>

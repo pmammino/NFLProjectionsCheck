@@ -272,6 +272,13 @@ function build() {
           clvStatus: r.ClvStatus || null,
           clvProb: numOrNull(r.ClvProb),
           source: r.Source || "",
+          // Which capture the price came from, how it was priced, and whether
+          // the projected median was corrected first. The Line Pricer tab uses
+          // `slot` to open the exact board a bet was taken from; a ledger row
+          // written before slots existed was the Tuesday drop.
+          slot: r.Slot || "main",
+          priceModel: r.PriceModel || "projection",
+          medianAdj: numOrNull(r.MedianAdj),
         }))
         .sort((a, b) => b.week - a.week || (b.edge ?? 0) - (a.edge ?? 0)),
     });

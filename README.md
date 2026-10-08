@@ -583,6 +583,77 @@ reported as a direction only. Converting a half-point into price terms needs a
 model of what a half-point is worth for that stat, which we do not have and do
 not invent.
 
+### Line Pricer — look up the price of any bet or quoted line
+
+The **Line Pricer** tab answers "what did we think this line was worth, and what
+were the books saying?" for any player, stat and line in a captured board — not
+only the ones that became bets. Search a player (accent-insensitive, matches
+name words, team, or a name prefix), pick a stat, and the page shows:
+
+- **The projection** — Floor / Median / Ceiling as frozen at the snapshot, and,
+  where the median correction applies to that stat, the re-centred triple
+  (tick *price off the median-corrected projection* to price with it).
+- **A ladder of every quoted line** — our P(over), the market's P(over)
+  (retail consensus, with the sharp-book number beside it where one quoted the
+  line), our edge against the best *bettable* price, and the actual result once
+  the game has been played. Expand a line for the per-book table: every book's
+  over/under, bettable books first, reference books (Pinnacle) labelled and
+  never offered as a price to take.
+- **Which capture you are looking at** — Tuesday drop, Opening board, Closing
+  board or Thursday sweep. They are different instruments: the same line is
+  priced differently in each, so a line is never merged across them. The
+  default is the fullest board for the week.
+
+From **Paper Trading**, every row of the bet log has a **Price ▸** button that
+opens the exact capture and line that bet was struck on.
+
+Things the page will not let you misread:
+
+- **`†` on a market price** means it was *inferred*: every book quoted only one
+  side, so an assumed margin was stripped to get a probability. An unmarked
+  price was measured from two-sided quotes. A "mixed" source is two-sided
+  books with a one-sided one filled in; it is described in the tooltip.
+- **Far-from-even lines are hidden by default** (market price outside 5–95%).
+  They are real quotes but swamp the ladder and carry little information; the
+  *Show N far-from-even* toggle brings them back. The line a bet was struck on
+  is always shown.
+- **Stale projections are flagged.** A Tuesday-drop line can be priced from an
+  earlier projection than the snapshot shows; when the two medians differ by
+  more than 0.05 the row says so rather than pairing mismatched numbers.
+- **The corrected price is only shown when it is the honest one.** It appears
+  only if the correction was applied for that stat as of that week, the
+  capture itself was priced uncorrected, and recomputing the price reproduces
+  the stored one.
+- **A stale or mismatched data file is refused**, with a message telling you to
+  rebuild, rather than rendered. Files are versioned (`LINES_SCHEMA`), and a
+  test keeps the page's copy equal to the builder's.
+
+#### Building the data
+
+```bash
+npm run build:lines                 # also runs on predev / prebuild
+LINES_MAX_WEEKS=18 npm run build:lines
+npm run build:lines -- --force      # ignore the cache
+```
+
+Output is `public/data/lines/` — one JSON per (week, capture) plus `index.json`,
+generated and **not committed**. A full board is ~3 MB per capture (~0.5 MB
+gzipped), so only the latest `LINES_MAX_WEEKS` weeks (default 6) are built and
+older files are removed; raise it for a longer look-back. Total size depends on
+how many captures exist; keep it in mind for the Vercel deploy limit. The
+build is **incremental**: each file is keyed by a fingerprint of its capture,
+that week's snapshot and actuals, every earlier week's (the correction is
+fitted on them), and the builder's own source, and is skipped when none
+changed. A fresh clone builds everything once (~1 minute); after that it is
+seconds. The correction shown for week *N* is always fitted on weeks before *N*.
+
+Other env: `SEASON`, `LINES_DATA_DIR`, `LINES_OUT_DIR`, `LINES_CACHE`.
+
+The logic lives in two testable modules: `scripts/lib/lines-index.mjs` (the
+builder: compaction, book aliasing, market-source tagging, corrected-price
+checks) and `scripts/lib/lines-view.mjs` (client-safe arithmetic: best bettable
+price, edge, player search, formatting), with `lib/lines.ts` holding the types.
+
 ### Pipeline
 
 ```
@@ -597,6 +668,7 @@ scripts/board-timing.mjs                  compare the slots — when to source
 scripts/price-model.mjs                   score the projections AGAINST the books
                                           (Brier / log loss) — see Pricing lines
 scripts/median-correction.mjs             is the projected Median in the right place?
+scripts/build-lines-data.mjs              compact the captured board for the Line Pricer tab
 ```
 
 ```bash
@@ -1183,6 +1255,10 @@ otherwise it falls back to the legacy root CSVs (`weekly_projections.csv` +
 `actual_games.csv`), so the dashboard keeps building before any ingest has run.
 `meta.dataSource` in the JSON records which path was used. The Season-long scope
 still reads `season_projections.csv` + `actual_season_stats.csv`.
+
+`predev`/`prebuild` also run `build-betting-data.mjs` (Paper Trading) and
+`build-lines-data.mjs` (Line Pricer, see above); both write generated,
+uncommitted files under `public/data/`.
 
 ## Deploying to Vercel
 

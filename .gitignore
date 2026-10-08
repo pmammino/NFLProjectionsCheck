@@ -8,6 +8,7 @@
 # generated data (rebuilt by prebuild/predev from the CSVs)
 /public/data/dashboard.json
 /public/data/betting.json
+/public/data/lines/
 
 # misc
 .DS_Store

@@ -5,6 +5,7 @@ import {
   PRIOR_WEIGHT,
   MIN_WEIGHT,
   MAX_DEVIATION,
+  MAX_PROJECTION_SHARE,
   sourceKey,
   bookOfSource,
   bookVotes,
@@ -17,6 +18,12 @@ import {
   assessSources,
   fitSourceWeights,
   weightsAsOf,
+  fitProjectionShare,
+  fitProjectionShares,
+  sharesAsOf,
+  buildShareSamples,
+  shareKey,
+  shareFor,
 } from "./source-weights.mjs";
 import { consensusProb, logit, sigmoid } from "./consensus.mjs";
 import { devigTwoWay } from "./devig.mjs";
@@ -131,35 +138,48 @@ test("one wild price cannot drag a weighted mean further than MAX_DEVIATION from
 test("a market with no usable book price has no consensus, even with a projection", () => {
   // The projection is a vote, not a market: it must never manufacture a
   // "market" price out of nothing.
-  assert.equal(weightedConsensusProb([], { projectionProb: 0.7, weights: { [PROJECTION_SOURCE]: 1 } }), null);
-  assert.equal(weightedConsensusProb([{ book: "DraftKings", overOdds: null, underOdds: null }], { projectionProb: 0.7 }), null);
+  assert.equal(weightedConsensusProb([], { projectionProb: 0.7, projectionShare: 0.5 }), null);
+  assert.equal(weightedConsensusProb([{ book: "DraftKings", overOdds: null, underOdds: null }], { projectionProb: 0.7, projectionShare: 0.5 }), null);
 });
 
-test("the projection carries no weight until it has earned some", () => {
+test("the projection has no say until it has earned a share", () => {
   const rows = [row("DraftKings", 0.5), row("FanDuel", 0.5), row("Caesars", 0.5)];
   const without = weightedConsensusProb(rows, {}).prob;
-  const withIt = weightedConsensusProb(rows, { projectionProb: 0.9 });
-  assert.equal(withIt.prob, without, "default weight is zero");
-  assert.equal(withIt.projectionShare, 0);
-  const earned = weightedConsensusProb(rows, { projectionProb: 0.9, weights: { [PROJECTION_SOURCE]: 0.15 } });
+  const noShare = weightedConsensusProb(rows, { projectionProb: 0.9 });
+  assert.equal(noShare.prob, without, "default share is zero");
+  assert.equal(noShare.projectionShare, 0);
+  const earned = weightedConsensusProb(rows, { projectionProb: 0.9, projectionShare: 0.3 });
   assert.ok(earned.prob > without);
-  assert.ok(earned.projectionShare > 0.2 && earned.projectionShare < 0.3, `share ${earned.projectionShare}`);
+  assert.equal(earned.projectionShare, 0.3);
+  assert.ok(Math.abs(earned.booksProb - without) < 1e-12, "the books' own number is reported unchanged");
+});
+
+test("the projection's share is a share of the logit: 0.3 moves the price 30% of the way", () => {
+  const rows = [row("DraftKings", 0.5), row("FanDuel", 0.5), row("Caesars", 0.5)];
+  const base = weightedConsensusProb(rows, {});
+  const got = weightedConsensusProb(rows, { projectionProb: 0.7, projectionShare: 0.3 });
+  const expected = sigmoid(0.7 * logit(base.prob) + 0.3 * logit(0.7));
+  assert.ok(Math.abs(got.prob - expected) < 1e-3, `got ${got.prob}, expected ${expected}`);
+});
+
+test("a share is capped, whatever was asked for", () => {
+  const rows = [row("DraftKings", 0.5), row("FanDuel", 0.5), row("Caesars", 0.5)];
+  assert.equal(weightedConsensusProb(rows, { projectionProb: 0.7, projectionShare: 5 }).projectionShare, MAX_PROJECTION_SHARE);
+  assert.equal(weightedConsensusProb(rows, { projectionProb: 0.7, projectionShare: -1 }).projectionShare, 0);
 });
 
 test("the projection is bounded by what the books say, so a broken projection cannot blow up a price", () => {
   // The passTD failure: a projection that is confident far from the market.
-  // Even with a large weight it can only pull MAX_DEVIATION away from the books.
+  // Even at the largest share it can only pull MAX_DEVIATION away from the books.
   const rows = [row("DraftKings", 0.04), row("FanDuel", 0.04), row("Caesars", 0.04)];
-  const got = weightedConsensusProb(rows, { projectionProb: 0.99, weights: { [PROJECTION_SOURCE]: 5 } }).prob;
+  const got = weightedConsensusProb(rows, { projectionProb: 0.99, projectionShare: MAX_PROJECTION_SHARE }).prob;
   assert.ok(got < sigmoid(logit(0.04) + MAX_DEVIATION) + 1e-6, `got ${got}`);
 });
 
-test("weightOf: books fall back to the prior, the projection to zero, and a floor holds", () => {
+test("weightOf: a book falls back to its prior, and a floor holds", () => {
   assert.equal(weightOf({}, "draftkings:2"), PRIOR_WEIGHT);
-  assert.equal(weightOf({}, PROJECTION_SOURCE), 0);
   assert.equal(weightOf({ "draftkings:2": 0 }, "draftkings:2"), MIN_WEIGHT);
   assert.equal(weightOf({ "draftkings:2": -3 }, "draftkings:2"), MIN_WEIGHT);
-  assert.equal(weightOf({ [PROJECTION_SOURCE]: -1 }, PROJECTION_SOURCE), 0);
 });
 
 test("effectiveSources falls as one book takes over", () => {
@@ -355,10 +375,9 @@ test("the projection is withheld from a reconstructed board and kept on a live o
 // fitting weights
 // ---------------------------------------------------------------------------
 
-test("with no evidence a book keeps its prior and the projection keeps zero", () => {
-  const { weights } = fitSourceWeights({ "a:2": { n: 0, clusters: 0, lead: null }, [PROJECTION_SOURCE]: { n: 0, clusters: 0, lead: null } });
+test("with no evidence a book keeps its prior", () => {
+  const { weights } = fitSourceWeights({ "a:2": { n: 0, clusters: 0, lead: null } });
   assert.equal(weights["a:2"], PRIOR_WEIGHT);
-  assert.equal(weights[PROJECTION_SOURCE], 0);
 });
 
 test("evidence moves a weight toward its measured lead, more as clusters grow", () => {
@@ -372,11 +391,14 @@ test("a negative lead is read as no information, floored rather than inverted", 
   assert.equal(weights["a:2"], MIN_WEIGHT);
 });
 
-test("a projection with no lead stays at zero; one with a lead earns exactly its evidence", () => {
-  const none = fitSourceWeights({ [PROJECTION_SOURCE]: { n: 3000, clusters: 500, lead: -0.01 } }).weights[PROJECTION_SOURCE];
-  assert.equal(none, 0);
-  const some = fitSourceWeights({ [PROJECTION_SOURCE]: { n: 3000, clusters: 500, lead: 0.3 } }).weights[PROJECTION_SOURCE];
-  assert.ok(some > 0.2 && some < 0.3, `got ${some}`);
+test("the projection's lead is reported but is never a book weight", () => {
+  // Its share of the price is fitted against outcomes (fitProjectionShare), not
+  // from how far the market followed it.
+  const { weights, detail } = fitSourceWeights({ [PROJECTION_SOURCE]: { n: 3000, clusters: 500, lead: 0.3 }, "a:2": { n: 100, clusters: 50, lead: 0.4 } });
+  assert.equal(weights[PROJECTION_SOURCE], undefined);
+  assert.equal(detail[PROJECTION_SOURCE].lead, 0.3);
+  assert.equal(detail[PROJECTION_SOURCE].weight, null);
+  assert.ok(weights["a:2"] > PRIOR_WEIGHT);
 });
 
 test("the prior is configurable", () => {
@@ -452,4 +474,158 @@ test("poolVotes prices exactly as weightedConsensusProb does from the same votes
   const b = poolVotes(bookVotes(rows), { weights, projectionProb: 0.7 });
   assert.deepEqual(a, b);
   assert.equal(poolVotes([], {}), null);
+});
+
+// ---------------------------------------------------------------------------
+// the projection's share of the price
+// ---------------------------------------------------------------------------
+
+// Outcomes drawn from a world where the projection DOES carry `trueShare` of the
+// truth: P(over) = sigmoid(lBooks + trueShare * (lProj - lBooks)).
+function shareWorld({ n = 3000, trueShare, seed = 3, clusters = n, stat = "receptions", slot = "main", week = 1 }) {
+  const r = rng(seed);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const lBooks = gauss(r) * 0.4;
+    const lProj = lBooks + gauss(r) * 0.6;
+    const p = sigmoid(lBooks + trueShare * (lProj - lBooks));
+    out.push({ stat, slot, week, cluster: `${week}|${i % clusters}`, lBooks, lProj, y: r() < p ? 1 : 0 });
+  }
+  return out;
+}
+
+test("a projection that carries half the truth is found to carry about half", () => {
+  const got = fitProjectionShare(shareWorld({ trueShare: 0.5, n: 20000 }), { priorClusters: 150 });
+  assert.ok(Math.abs(got.raw - 0.5) < 0.1, `fitted ${got.raw}`);
+  // Used a little below the fit — one standard error of caution.
+  assert.ok(got.share <= got.raw && got.share > got.raw - 0.1, `used ${got.share}`);
+  assert.ok(got.z > 3, `z ${got.z}`);
+});
+
+test("a projection with nothing to add is given no share", () => {
+  const got = fitProjectionShare(shareWorld({ trueShare: 0, n: 8000 }));
+  assert.ok(got.share < 0.1, `share ${got.share}`);
+  assert.ok(Math.abs(got.z) < 3);
+});
+
+test("a projection that is anti-informative is floored at zero but reported negative", () => {
+  // The passing-yards result: the books' price is better the further from the
+  // projection it moves. That is not a licence to bet against our own numbers on
+  // a few weeks of data — it is "no information".
+  const got = fitProjectionShare(shareWorld({ trueShare: -0.6, n: 8000 }));
+  assert.equal(got.share, 0);
+  assert.ok(got.raw < 0, `raw ${got.raw}`);
+});
+
+test("a share is capped at MAX_PROJECTION_SHARE however good the record", () => {
+  const got = fitProjectionShare(shareWorld({ trueShare: 1, n: 20000 }));
+  assert.ok(got.raw > 0.85);
+  assert.equal(got.share, MAX_PROJECTION_SHARE);
+});
+
+test("with little evidence the prior holds a share down; with a lot it does not", () => {
+  const small = fitProjectionShare(shareWorld({ trueShare: 0.6, n: 120, seed: 5 }), { priorClusters: 150, caution: 0 });
+  const unshrunk = fitProjectionShare(shareWorld({ trueShare: 0.6, n: 120, seed: 5 }), { priorClusters: 0, caution: 0 });
+  assert.ok(small.share < unshrunk.share, `${small.share} vs ${unshrunk.share}`);
+  const big = fitProjectionShare(shareWorld({ trueShare: 0.6, n: 30000, seed: 6 }), { priorClusters: 150 });
+  assert.ok(Math.abs(big.raw - 0.6) < 0.1, `big ${big.raw}`);
+});
+
+test("many rungs of one ladder count once toward the prior", () => {
+  // The same 600 observations as 6 player-weeks or as 600: the first is far less
+  // evidence and must be held closer to zero.
+  const obs = shareWorld({ trueShare: 0.6, n: 600, seed: 8 });
+  const few = fitProjectionShare(obs.map((o, i) => ({ ...o, cluster: `c${i % 6}` })), { caution: 0 });
+  const many = fitProjectionShare(obs.map((o, i) => ({ ...o, cluster: `c${i}` })), { caution: 0 });
+  assert.equal(few.clusters, 6);
+  assert.equal(many.clusters, 600);
+  assert.ok(few.share < many.share, `${few.share} vs ${many.share}`);
+});
+
+test("an empty cell has no share and no NaN", () => {
+  assert.deepEqual(fitProjectionShare([]), { n: 0, clusters: 0, share: 0, raw: 0, se: null, z: null });
+});
+
+test("shares are per stat and per slot, and an unknown cell is zero", () => {
+  const samples = [
+    ...shareWorld({ trueShare: 0.7, n: 6000, stat: "receptions", slot: "main", seed: 1 }),
+    ...shareWorld({ trueShare: 0, n: 6000, stat: "passYds", slot: "main", seed: 2 }),
+    ...shareWorld({ trueShare: 0.7, n: 6000, stat: "receptions", slot: "thursday", seed: 3 }),
+  ];
+  const shares = fitProjectionShares(samples);
+  assert.ok(shareFor(shares, "receptions", "main") > 0.4);
+  assert.ok(shareFor(shares, "passYds", "main") < 0.15);
+  assert.ok(shareFor(shares, "receptions", "thursday") > 0.4);
+  assert.equal(shareFor(shares, "rushYds", "main"), 0);
+  assert.equal(shareFor(shares, "receptions", "closing"), 0);
+  assert.ok(Object.keys(shares).includes(shareKey("receptions", "main")));
+});
+
+test("shares going into a week are fitted on strictly earlier weeks", () => {
+  const w1 = shareWorld({ trueShare: 0.7, n: 6000, week: 1, seed: 1 });
+  const w2 = shareWorld({ trueShare: 0.7, n: 6000, week: 2, seed: 2 });
+  const w3 = shareWorld({ trueShare: -1, n: 6000, week: 3, seed: 3 });
+  const into3 = sharesAsOf([...w1, ...w2, ...w3], 3);
+  const only12 = sharesAsOf([...w1, ...w2], 3);
+  assert.deepEqual(into3, only12, "week 3's own outcomes cannot reach week 3's shares");
+  assert.deepEqual(sharesAsOf([...w1], 1), {}, "the first week has no record at all");
+});
+
+// --- building the observations -------------------------------------------------
+
+const pitQuote = (over = {}) => ({
+  slot: "main", week: 2, playerId: "p1", stat: "recYds", line: 50.5, lineSource: "live",
+  probOver: 0.6, ...twoSided(0.5), ...over,
+});
+const liveBoard = (extra = {}) => ["DraftKings", "FanDuel", "Caesars"].map((book) => pitQuote({ book, ...extra }));
+
+test("share observations come only from point-in-time boards that can say what the projection said", () => {
+  const outcomeOf = () => 1;
+  assert.equal(buildShareSamples(liveBoard(), { outcomeOf }).length, 1);
+  assert.equal(buildShareSamples(liveBoard({ lineSource: "opening", slot: "opening" }), { outcomeOf }).length, 0, "a reconstruction is not what we had");
+  assert.equal(buildShareSamples(liveBoard({ probOver: NaN }), { outcomeOf }).length, 0, "a re-priced row with no ProjProb cannot say");
+});
+
+test("share observations need an outcome, enough books, and a market near the money", () => {
+  assert.equal(buildShareSamples(liveBoard(), { outcomeOf: () => null }).length, 0);
+  const two = [pitQuote({ book: "DraftKings" }), pitQuote({ book: "FanDuel" })];
+  assert.equal(buildShareSamples(two, { outcomeOf: () => 1 }).length, 0, "two books is not a consensus");
+  const lopsided = ["DraftKings", "FanDuel", "Caesars"].map((book) => pitQuote({ book, ...twoSided(0.9) }));
+  assert.equal(buildShareSamples(lopsided, { outcomeOf: () => 1 }).length, 0, "tails are left out");
+});
+
+test("share observations judge each market against the books' weights as of ITS week", () => {
+  const seen = [];
+  buildShareSamples([...liveBoard({ week: 2 }), ...liveBoard({ week: 3, playerId: "p2" })], {
+    outcomeOf: () => 1,
+    weightsFor: (w) => {
+      seen.push(w);
+      return {};
+    },
+  });
+  assert.deepEqual(seen.sort(), [2, 3]);
+});
+
+test("a share observation carries the books' logit, the projection's, and the outcome", () => {
+  const [o] = buildShareSamples(liveBoard({ probOver: 0.65 }), { outcomeOf: () => 0 });
+  assert.equal(o.stat, "recYds");
+  assert.equal(o.slot, "main");
+  assert.equal(o.y, 0);
+  assert.ok(Math.abs(o.lProj - logit(0.65)) < 1e-9);
+  assert.ok(Math.abs(o.lBooks) < 0.1);
+  assert.equal(o.cluster, "2|p1");
+});
+
+test("a share is marked down by its own uncertainty: a cell that has not left its error bar is zero", () => {
+  // The winner's curse. Of two dozen cells, the one that looks best is partly
+  // lucky; a positive fit inside its own error bar is not a reason to trust it.
+  const noisy = shareWorld({ trueShare: 0.3, n: 150, seed: 9 }).map((o, i) => ({ ...o, cluster: `c${i}` }));
+  const cautious = fitProjectionShare(noisy);
+  const bold = fitProjectionShare(noisy, { caution: 0 });
+  assert.ok(cautious.share < bold.share || bold.share === 0, `${cautious.share} vs ${bold.share}`);
+  assert.ok(cautious.share <= Math.max(0, cautious.raw - cautious.se) + 1e-12);
+  // And with no standard error at all (one player-week) there is no evidence.
+  const one = fitProjectionShare(shareWorld({ trueShare: 0.5, n: 40, clusters: 1 }));
+  assert.equal(one.se, null);
+  assert.equal(one.share, 0);
 });

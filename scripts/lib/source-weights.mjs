@@ -47,24 +47,44 @@
 // books'* later prices only.
 //
 // ---------------------------------------------------------------------------
-// The projection is a source, with one handicap
+// The projection is a source too — assessed on the yardstick that suits it
 // ---------------------------------------------------------------------------
-// It is measured exactly as a book is: its early logit against the books'
-// move. Two rules keep that honest.
+// It is assessed every week alongside the books, but not on the books' yardstick.
+// "Did the market later move toward it" asks whether a source is AHEAD of the
+// market, which is the right question for a book posting at the open and the
+// wrong one for a projection that is written daily and read on Tuesday: it can
+// only be behind. Measured that way it earns nothing at any freshness (0.8% of
+// the market's move on the snapshot it had at the start of the week), and that
+// number cannot distinguish a projection with nothing to add from one that is
+// merely late.
+//
+// The question that can is the one the pool actually needs answered: at the
+// moment of the price, how much of the price should come from the projection
+// rather than the books? That is a one-parameter logistic fit against outcomes,
+// with the books' pool as the offset:
+//
+//     logit P(over) = L_books + share · (L_proj − L_books)
+//
+// `share` is 0 for "ignore the projection" and 1 for "believe it over the
+// books", fitted per stat and per capture slot — because it is not one number.
+// On the 2026 weeks 2–4 data, with the snapshot an hour before kickoff, it was
+// 0.54 on receptions (z 2.3), 0.24 on receiving yards, ~0 on rushing yards and
+// NEGATIVE on passing yards; with Tuesday's snapshot it was ~0 everywhere. A
+// pool with a single projection weight averages a real signal on receptions
+// with noise elsewhere and finds nothing.
+//
+// Two rules keep that honest.
 //
 //  1. POINT IN TIME. A backfilled board is priced from the week's latest
-//     projection snapshot, which has absorbed everything that happened since.
-//     Against that snapshot the market appears to move toward the projection by
-//     ~8%; against the snapshot that existed at the start of the week it is
-//     ~0.8%. The first number is the projection having read the same news as
-//     the market, not leading it. The projection is therefore assessed only on
-//     rows whose price was live when captured (pricing-dataset isPointInTime).
+//     projection snapshot, which has absorbed everything since. Only live
+//     captures (pricing-dataset isPointInTime) count, using ProjProb — what the
+//     projection alone said, recorded even when a pool priced the row.
 //
-//  2. NO CREDIT ON ACCOUNT. Every book starts at an equal prior weight and moves
-//     as evidence arrives. The projection starts at zero. Our own output has
-//     been measured worse than the books in the middle of the board, so it has
-//     to earn a vote rather than be handed one while it has no record.
-//
+//  2. NO CREDIT ON ACCOUNT. A share starts at zero, is pulled toward zero by a
+//     prior worth PRIOR_CLUSTERS player-weeks, and a negative fit is read as "no
+//     information" and floored at zero. A cell with no live data prices on the
+//     books alone.
+
 // ---------------------------------------------------------------------------
 // What the weights are NOT
 // ---------------------------------------------------------------------------
@@ -94,8 +114,22 @@ export const PROJECTION_SOURCE = "projection";
 // would hold in an equal-weight pool.
 export const PRIOR_WEIGHT = 0.15;
 
-// The projection's prior. See the header: it has to earn a vote.
-export const PROJECTION_PRIOR_WEIGHT = 0;
+// How many standard errors a fitted share is marked down by before it is used.
+// There are a couple of dozen (stat, slot) cells and a few weeks of data in each,
+// so the best-looking cell is partly luck — the winner's curse — and a share of
+// 0.27 on 38 player-weeks with an error bar of ±1.2 is pricing off noise. One
+// standard error means a share is used only to the extent the evidence supports
+// it, and a cell that has not left its error bar is zero.
+export const SHARE_CAUTION = 1;
+
+// The most of a price the projection can ever be, however good its record. A
+// ceiling on a four-week estimate, not a belief about the truth.
+export const MAX_PROJECTION_SHARE = 0.75;
+
+// Share fits use markets where the books' price is within this of 50/50 (the
+// repo's "near the money"); in the tails a logit is rounding, and a projection
+// that is overconfident out there would swamp the fit.
+export const SHARE_BAND = 0.25;
 
 // How much evidence it takes to outweigh the prior, in clusters (a cluster is
 // one player's one game, which is what the observations are correlated on).
@@ -175,73 +209,72 @@ const medianLogit = (votes) => median(votes.map((v) => v.logit));
 // The weighted consensus
 // ---------------------------------------------------------------------------
 
-// A source's weight, falling back to its prior when it has no record. The
-// projection's fallback is zero; every book's is PRIOR_WEIGHT.
+// A book's weight, falling back to its prior when it has no record.
 export function weightOf(weights, key) {
   const given = weights?.[key];
-  if (Number.isFinite(given)) return key === PROJECTION_SOURCE ? Math.max(0, given) : Math.max(MIN_WEIGHT, given);
-  return key === PROJECTION_SOURCE ? PROJECTION_PRIOR_WEIGHT : PRIOR_WEIGHT;
+  return Number.isFinite(given) ? Math.max(MIN_WEIGHT, given) : PRIOR_WEIGHT;
 }
 
-// The weighted average of the sources' logits, as a probability. Same contract
-// as consensusProb — null when no BOOK produced a usable price, which a caller
-// must treat as "this market has no market prior" — plus what the weighting
-// did, so a report can say how far it moved the number.
+// The books' weighted consensus, with the projection's share of the price on top.
+// Same contract as consensusProb — null when no BOOK produced a usable price,
+// which a caller must treat as "this market has no market prior" — plus what the
+// weighting did, so a report can say how far it moved the number.
 //
-// `projectionProb` is our own P(over). It is a vote like any other, with
-// whatever weight the projection has earned (zero until it has earned some),
-// and it can never create a consensus by itself.
+// `projectionProb` is our own P(over) and `projectionShare` how much of the
+// price it has earned (0 until it has earned some). The projection can never
+// create a consensus by itself.
 export function weightedConsensusProb(
   rows,
-  { weights = {}, holdByStat = new Map(), stat, method = DEFAULT_DEVIG_METHOD, setName = "all", projectionProb = null } = {}
+  { weights = {}, holdByStat = new Map(), stat, method = DEFAULT_DEVIG_METHOD, setName = "all", projectionProb = null, projectionShare = 0 } = {}
 ) {
   const assumedHold = holdByStat.get?.(stat) ?? DEFAULT_ASSUMED_HOLD;
-  return poolVotes(bookVotes(rows, { assumedHold, method, setName }), { weights, projectionProb });
+  return poolVotes(bookVotes(rows, { assumedHold, method, setName }), { weights, projectionProb, projectionShare });
 }
 
 // The pooling itself, on votes already drawn from a market. Split out so a
 // report that has the votes (and not the original odds) prices through exactly
 // the code the live path does.
-export function poolVotes(books, { weights = {}, projectionProb = null } = {}) {
+export function poolVotes(books, { weights = {}, projectionProb = null, projectionShare = 0 } = {}) {
   if (!books || books.length === 0) return null;
 
-  const votes = [...books];
-  if (projectionProb !== null && projectionProb !== undefined && Number.isFinite(projectionProb) && projectionProb > 0 && projectionProb < 1) {
-    votes.push({ book: PROJECTION_SOURCE, key: PROJECTION_SOURCE, twoSided: true, logit: clipLogit(projectionProb) });
-  }
-
-  // Votes are drawn in to the median of the BOOKS: the reference the projection
-  // is also measured against, so a wild projection is bounded by what the
-  // market says rather than by itself.
+  // 1. the books: a weighted mean of logits, each drawn in to the median so one
+  //    wild price cannot drag it further than MAX_DEVIATION.
   const centre = medianLogit(books);
   let sw = 0;
   let sl = 0;
   let sw2 = 0;
-  let projW = 0;
-  for (const v of votes) {
+  for (const v of books) {
     const w = weightOf(weights, v.key);
-    if (w <= 0) continue;
     const l = clip(v.logit, centre - MAX_DEVIATION, centre + MAX_DEVIATION);
     sw += w;
     sl += w * l;
     sw2 += w * w;
-    if (v.key === PROJECTION_SOURCE) projW = w;
   }
-  const prob = sw > 0 ? sigmoid(sl / sw) : sigmoid(centre);
+  const lBooks = sl / sw;
+
+  // 2. the projection's share, drawn in to the same distance from the books, so
+  //    a projection that is confidently far from the market is bounded by what
+  //    the market says rather than by itself.
+  const hasProj = projectionProb !== null && projectionProb !== undefined && Number.isFinite(projectionProb) && projectionProb > 0 && projectionProb < 1;
+  const beta = hasProj ? clip(Number.isFinite(projectionShare) ? projectionShare : 0, 0, MAX_PROJECTION_SHARE) : 0;
+  const lProj = hasProj ? clip(clipLogit(projectionProb), centre - MAX_DEVIATION, centre + MAX_DEVIATION) : lBooks;
+  const prob = sigmoid((1 - beta) * lBooks + beta * lProj);
 
   const devigged = books.filter((v) => v.twoSided).length;
   const holds = books.map((v) => v.hold).filter(Number.isFinite);
   return {
     prob,
+    // What the books alone said, before the projection had its share.
+    booksProb: sigmoid(lBooks),
     bookCount: books.length,
     deviggedCount: devigged,
     probSource: devigged === books.length ? "devig" : devigged > 0 ? "mixed" : "assumed-hold",
     meanHold: holds.length ? holds.reduce((a, b) => a + b, 0) / holds.length : null,
     assumedHold: devigged === books.length ? null : books[0].assumedHold ?? null,
-    // Kish effective number of sources: 7 books at equal weight is 7; one book
-    // carrying nearly everything is close to 1.
-    effectiveSources: sw > 0 ? (sw * sw) / sw2 : books.length,
-    projectionShare: sw > 0 ? projW / sw : 0,
+    // Kish effective number of books: 7 at equal weight is 7; one book carrying
+    // nearly everything is close to 1.
+    effectiveSources: (sw * sw) / sw2,
+    projectionShare: beta,
     unweighted: sigmoid(centre),
   };
 }
@@ -371,25 +404,32 @@ export function assessSources(pairs, opts = {}) {
 // From assessment to weights
 // ---------------------------------------------------------------------------
 
-// A source's weight is its measured lead, pulled toward its prior in proportion
+// A book's weight is its measured lead, pulled toward its prior in proportion
 // to how little evidence there is:
 //
 //     w = (clusters·lead + K·prior) / (clusters + K)
 //
-// A source with no assessment keeps its prior. A negative lead is read as "no
+// A book with no assessment keeps its prior. A negative lead is read as "no
 // information" rather than "do the opposite": the market moving AWAY from a
 // source is as consistent with noise as with anti-skill at these sample sizes,
 // and a negative weight is a claim far beyond the evidence.
-export function fitSourceWeights(assessment, { priorClusters = PRIOR_CLUSTERS, priorWeight = PRIOR_WEIGHT, projectionPrior = PROJECTION_PRIOR_WEIGHT } = {}) {
+//
+// The projection's lead is returned in `detail` for the report but is NOT a
+// weight: its share of the price comes from fitProjectionShare, for the reason
+// in the header.
+export function fitSourceWeights(assessment, { priorClusters = PRIOR_CLUSTERS, priorWeight = PRIOR_WEIGHT } = {}) {
   const weights = {};
   const detail = {};
   for (const [key, s] of Object.entries(assessment)) {
-    const prior = key === PROJECTION_SOURCE ? projectionPrior : priorWeight;
-    const evidence = Number.isFinite(s.lead) ? Math.max(0, s.lead) : prior;
+    if (key === PROJECTION_SOURCE) {
+      detail[key] = { ...s, prior: 0, weight: null };
+      continue;
+    }
+    const evidence = Number.isFinite(s.lead) ? Math.max(0, s.lead) : priorWeight;
     const c = Number.isFinite(s.clusters) ? s.clusters : 0;
-    const w = (c * evidence + priorClusters * prior) / (c + priorClusters);
-    weights[key] = key === PROJECTION_SOURCE ? Math.max(0, w) : Math.max(MIN_WEIGHT, w);
-    detail[key] = { ...s, prior, weight: weights[key] };
+    const w = (c * evidence + priorClusters * priorWeight) / (c + priorClusters);
+    weights[key] = Math.max(MIN_WEIGHT, w);
+    detail[key] = { ...s, prior: priorWeight, weight: weights[key] };
   }
   return { weights, detail };
 }
@@ -404,3 +444,133 @@ export function weightsAsOf(pairs, week, opts = {}) {
   const fit = fitSourceWeights(assessment, opts);
   return { ...fit, assessment, weeksUsed: [...new Set(prior.map((p) => p.week))].sort((a, b) => a - b) };
 }
+
+// ---------------------------------------------------------------------------
+// The projection's share of the price
+// ---------------------------------------------------------------------------
+
+export const shareKey = (stat, slot) => `${stat}|${slot}`;
+
+// One observation per market on a point-in-time board: the books' pooled logit,
+// the projection's logit, and what happened. `quotes` are readPropRow() outputs,
+// `weightsFor(week)` the books' weights AS OF that week (a market priced in
+// week 3 is judged against the pool as it stood in week 3), and `outcomeOf(q)`
+// returns 1, 0 or null for a quote's market.
+export function buildShareSamples(quotes, { weightsFor = () => ({}), outcomeOf, holdByStat = new Map(), method = DEFAULT_DEVIG_METHOD, pointInTime = isPointInTime } = {}) {
+  const groups = new Map();
+  for (const q of quotes) {
+    const key = [q.slot, q.week, q.playerId, q.stat, q.line].join("|");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(q);
+  }
+
+  const out = [];
+  for (const rows of groups.values()) {
+    const first = rows[0];
+    // The projection is only a source where it was the projection we had.
+    const withProj = rows.find((q) => pointInTime(q) && isProjectionPrice(q));
+    if (!withProj) continue;
+    const y = outcomeOf(first);
+    if (y === null || y === undefined) continue;
+
+    const assumedHold = holdByStat.get?.(first.stat) ?? DEFAULT_ASSUMED_HOLD;
+    const books = bookVotes(rows, { assumedHold, method });
+    if (books.length < MIN_OTHERS + 1) continue;
+    const pooled = poolVotes(books, { weights: weightsFor(first.week) });
+    if (Math.abs(pooled.prob - 0.5) > SHARE_BAND) continue;
+
+    out.push({
+      stat: first.stat,
+      slot: first.slot,
+      week: first.week,
+      cluster: `${first.week}|${first.playerId}`,
+      lBooks: clipLogit(pooled.prob),
+      lProj: clipLogit(withProj.probOver),
+      y,
+    });
+  }
+  return out;
+}
+
+// The projection's share for one cell, from observations of
+//     logit P(over) = lBooks + share · (lProj − lBooks)
+// by penalised maximum likelihood, with errors clustered on player-week.
+//
+// The prior is 0 and is worth `priorClusters` player-weeks of information: the
+// penalty is that many clusters' average Fisher information, so the same K means
+// the same thing in a sparse cell and a dense one. The returned `share` is the
+// shrunk estimate, marked down by `caution` standard errors (SHARE_CAUTION),
+// floored at zero and capped at MAX_PROJECTION_SHARE; `raw` is the shrunk
+// estimate before any of that, because a report should say a cell is NEGATIVE
+// (the projection is anti-informative there) rather than just "zero".
+export function fitProjectionShare(obs, { priorClusters = PRIOR_CLUSTERS, cap = MAX_PROJECTION_SHARE, caution = SHARE_CAUTION } = {}) {
+  const n = obs.length;
+  const clusters = new Set(obs.map((o) => o.cluster)).size;
+  if (n === 0) return { n: 0, clusters: 0, share: 0, raw: 0, se: null, z: null };
+
+  const x = obs.map((o) => o.lProj - o.lBooks);
+  const info = (b) => {
+    let h = 0;
+    for (let i = 0; i < n; i++) {
+      const p = sigmoid(obs[i].lBooks + b * x[i]);
+      h += p * (1 - p) * x[i] * x[i];
+    }
+    return h;
+  };
+  // Penalty: K clusters' worth of the information at b = 0.
+  const lambda = clusters > 0 ? (priorClusters * info(0)) / clusters : 0;
+
+  let b = 0;
+  for (let it = 0; it < 60; it++) {
+    let g = 0;
+    let h = 0;
+    for (let i = 0; i < n; i++) {
+      const p = sigmoid(obs[i].lBooks + b * x[i]);
+      g += (obs[i].y - p) * x[i];
+      h += p * (1 - p) * x[i] * x[i];
+    }
+    g -= lambda * b;
+    h += lambda;
+    if (!(h > 0)) break;
+    const step = g / h;
+    b += step;
+    if (Math.abs(step) < 1e-9) break;
+  }
+
+  // Cluster-robust SE of the UNpenalised score, for the report.
+  let h = info(b);
+  const byCluster = new Map();
+  for (let i = 0; i < n; i++) {
+    const p = sigmoid(obs[i].lBooks + b * x[i]);
+    byCluster.set(obs[i].cluster, (byCluster.get(obs[i].cluster) ?? 0) + (obs[i].y - p) * x[i]);
+  }
+  const G = byCluster.size;
+  let ss = 0;
+  for (const v of byCluster.values()) ss += v * v;
+  const se = G > 1 && h > 0 ? Math.sqrt(ss * (G / (G - 1))) / h : null;
+
+  // With no standard error (a single cluster) there is no evidence to use.
+  const used = se === null ? 0 : clip(b - caution * se, 0, cap);
+  return { n, clusters, share: used, raw: b, se, z: se ? b / se : null };
+}
+
+// Every cell's share, from a set of observations.
+export function fitProjectionShares(samples, opts = {}) {
+  const cells = new Map();
+  for (const o of samples) {
+    const k = shareKey(o.stat, o.slot);
+    if (!cells.has(k)) cells.set(k, []);
+    cells.get(k).push(o);
+  }
+  const out = {};
+  for (const [k, obs] of cells) out[k] = fitProjectionShare(obs, opts);
+  return out;
+}
+
+// The shares going INTO `week`: fitted on weeks strictly before it.
+export function sharesAsOf(samples, week, opts = {}) {
+  return fitProjectionShares(samples.filter((o) => o.week < week), opts);
+}
+
+// A cell's share, or zero. A cell with no record prices on the books alone.
+export const shareFor = (shares, stat, slot) => shares?.[shareKey(stat, slot)]?.share ?? 0;

@@ -93,6 +93,9 @@ export function readPropRow(row, slot) {
   const odds = num(row.Odds);
   const opposite = num(row.OppositeOdds);
   const ourProb = num(row.OurProb);
+  const priceModel = row.PriceModel ?? "";
+  const projRaw = num(row.ProjProb);
+  const projProb = Number.isFinite(projRaw) ? projRaw : !priceModel || priceModel === "projection" ? ourProb : NaN;
   if (!Number.isFinite(line) || !Number.isFinite(odds) || !Number.isFinite(ourProb)) return null;
 
   const overOdds = side === "over" ? odds : opposite;
@@ -117,7 +120,9 @@ export function readPropRow(row, slot) {
     lineSource: row.LineSource ?? "",
     // Which model produced OurProb on this row; blank on every row captured
     // before the column existed, all of which were the projection price.
-    priceModel: row.PriceModel ?? "",
+    priceModel,
+    // The fixture's id leads with its date (YYYYMMDD…): when the game was played.
+    fixtureId: row.FixtureID ?? "",
     stat,
     line,
     side,
@@ -141,7 +146,13 @@ export function readPropRow(row, slot) {
     proj: Number.isFinite(num(row.Proj)) ? num(row.Proj) : num(row.RwProj),
     // P(over) regardless of which side the row was written from, so a mirrored
     // Under row lands on the same scale as everything else.
-    probOver: clampStoredProb(side === "over" ? ourProb : 1 - ourProb),
+    // What the projection ALONE said, as P(over); NaN when the row cannot say.
+    // ProjProb is that where it exists. A row from before the column is a
+    // projection price in OurProb if no re-pricing model ran, and otherwise has
+    // no projection probability at all — OurProb is then mostly the books'.
+    probOver: Number.isFinite(projProb) ? clampStoredProb(side === "over" ? projProb : 1 - projProb) : NaN,
+    // The price we would have bet at, from whichever model priced the row.
+    ourProbOver: clampStoredProb(side === "over" ? ourProb : 1 - ourProb),
   };
 }
 
@@ -160,16 +171,16 @@ export function isPointInTime(quote) {
   return !quote.lineSource || quote.lineSource === "live";
 }
 
-// Is the probability on this quote a pure projection price?
+// Can this quote say what the projection said?
 //
-// Everything downstream that wants "what the projection said" reads OurProb,
-// and OurProb is only that when the capture priced from the projection alone.
-// A row priced off the blend or the weighted pool carries a number that is
-// already mostly the books': fitting a model, or assessing the projection as a
-// source, on it would measure the market agreeing with itself and credit the
-// projection for it.
+// Everything downstream that wants "what the projection said" reads `probOver`,
+// which is ProjProb where the capture recorded it and OurProb only for a row
+// priced from the projection alone. A row priced off the blend or the weighted
+// pool, from before ProjProb existed, carries an OurProb that is already mostly
+// the books': fitting a model, or assessing the projection as a source, on it
+// would measure the market agreeing with itself and credit the projection for it.
 export function isProjectionPrice(quote) {
-  return !quote.priceModel || quote.priceModel === "projection";
+  return Number.isFinite(quote.probOver);
 }
 
 // The actual result for one market, or null when the actuals feed cannot grade

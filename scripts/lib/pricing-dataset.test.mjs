@@ -257,23 +257,40 @@ test("isPointInTime: a live capture is, a reconstruction is not", () => {
   assert.equal(isPointInTime({ lineSource: "closing" }), false);
 });
 
-test("isProjectionPrice: only a row priced from the projection alone says what the projection said", () => {
-  assert.equal(isProjectionPrice({ priceModel: "" }), true);
-  assert.equal(isProjectionPrice({ priceModel: "projection" }), true);
-  assert.equal(isProjectionPrice({ priceModel: "blend" }), false);
-  assert.equal(isProjectionPrice({ priceModel: "pool" }), false);
+test("what the projection said: ProjProb where recorded, OurProb only for a projection-priced row", () => {
+  // A row priced off the pool carries an OurProb that is mostly the books'. Once
+  // the capture records ProjProb alongside it the projection is recoverable;
+  // before that, a re-priced row has no projection probability to give.
+  const pooledWith = readPropRow({ ...CURRENT, PriceModel: "pool", OurProb: "0.5000", ProjProb: "0.4432" });
+  assert.equal(pooledWith.probOver, 0.4432);
+  assert.equal(pooledWith.ourProbOver, 0.5);
+  assert.equal(isProjectionPrice(pooledWith), true);
+
+  const pooledWithout = readPropRow({ ...CURRENT, PriceModel: "pool", OurProb: "0.5000" });
+  assert.ok(Number.isNaN(pooledWithout.probOver));
+  assert.equal(isProjectionPrice(pooledWithout), false);
+  assert.ok(Number.isNaN(readPropRow({ ...CURRENT, PriceModel: "blend" }).probOver));
+
+  // Rows from before either column, and rows priced from the projection.
+  assert.equal(isProjectionPrice(readPropRow(CURRENT)), true);
+  assert.equal(readPropRow({ ...CURRENT, PriceModel: "projection" }).probOver, 0.4432);
 });
 
-test("buildSamples will not take a blend- or pool-priced OurProb for the projection", () => {
+test("ProjProb is stated for the row's own side, like OurProb", () => {
+  const under = readPropRow({ ...CURRENT, Side: "under", OurProb: "0.5568", ProjProb: "0.5568" });
+  assert.ok(Math.abs(under.probOver - 0.4432) < 1e-9);
+});
+
+test("buildSamples will not take a re-priced row with no ProjProb for the projection", () => {
   // Fitting on such a row would train the model on a number that is already the
   // books' — the market agreeing with itself, credited to the projection.
-  const pooled = [{ ...quote(0.55), priceModel: "pool" }, { ...quote(0.55), book: "FanDuel", priceModel: "pool" }];
+  const pooled = [{ ...quote(0.55), probOver: NaN }, { ...quote(0.55), book: "FanDuel", probOver: NaN }];
   const { samples, dropped } = buildSamples(pooled, actuals(60));
   assert.equal(samples.length, 0);
   assert.equal(dropped.notProjectionPrice, 1);
 
-  // A market with one projection-priced quote still has its projection.
-  const mixed = [{ ...quote(0.4), priceModel: "projection" }, { ...quote(0.55), book: "FanDuel", priceModel: "pool" }];
+  // A market with one row that can say what the projection said still has it.
+  const mixed = [{ ...quote(0.4), probOver: 0.4 }, { ...quote(0.55), book: "FanDuel", probOver: NaN }];
   const kept = buildSamples(mixed, actuals(60));
   assert.equal(kept.samples.length, 1);
   assert.equal(kept.samples[0].pProj, 0.4);

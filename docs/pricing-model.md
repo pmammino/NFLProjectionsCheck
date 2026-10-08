@@ -215,20 +215,23 @@ minimise  −Σ [ y·log p + (1−y)·log(1−p) ] + (λ/2)·‖θ − θ₀‖�
   sides cannot drift into arbitrage against ourselves. A market with no
   consensus keeps its projection price.
 
-### 4b. Weighting the books, and the projection as a source
+### 4b. The books as the pricing guide, the projection alongside
 
-**Plain English.** The equal-weight "middle value" across books treats a
-one-sided Hard Rock price as exactly as informed as a two-sided Pinnacle one.
-Looking at how the market *moved* between the first posted price and the close,
-that isn't true: Pinnacle, BetMGM and Circa open close to where everyone ends up;
-Hard Rock and FanDuel open off the pack and then correct. So each source — every
-book, and our projection as if it were one more book — is graded every week on
-how much of its early disagreement the others adopted by the close, and the
-consensus is weighted by that record. New sources start equal; the projection
-starts at zero and has to earn a vote.
+**Plain English.** The price is now a weighted average of every book, with the
+projection taking whatever share of the price it has earned. The books are not
+treated as equals: a one-sided Hard Rock price is not as informed as a two-sided
+Pinnacle one. Looking at how the market *moved* between the first posted price and
+the close, Pinnacle, BetMGM and Circa open close to where everyone ends up; Hard
+Rock and FanDuel open off the pack and then correct. So each book is graded every
+week on how much of its early disagreement the others adopted by the close, and
+weighted by that record. The projection is graded every week too — but on a
+different test, because "did the market later follow it" can only fail a
+projection that is written daily and read on Tuesday. Its test is: at the moment
+of the price, how much of the price should come from it? It starts at zero and
+earns a share per stat, per capture slot.
 
-**Stats.** For source `s`, with `L0` the median logit of the *other* books at the
-early board and `Lc` the same at the close:
+**Stats — the books.** For book `s`, with `L0` the median logit of the *other*
+books at the early board and `Lc` the same at the close:
 
 ```
 (Lc − L0) = lead_s · (L_s − L0) + ε          slope through the origin,
@@ -242,27 +245,70 @@ excluded from its own target (a frozen price would otherwise "lead" because its
 close is inside the target). A source is a book *and* whether it quoted both sides.
 
 ```
-w_s = (clusters·lead_s + K·prior_s) / (clusters + K)      K = 150 player-weeks
-prior = 0.15 per book, 0 for the projection;  w ≥ 0.01 for books
-pool: logit p = Σ w_s·clip(L_s, median ± 1.5) / Σ w_s
+w_s = (clusters·lead_s + K·prior) / (clusters + K)      K = 150 player-weeks, prior 0.15, w ≥ 0.01
+L_books = Σ w_s·clip(L_s, median ± 1.5) / Σ w_s
 ```
 
-Weights are fitted **as of a week** (strictly earlier weeks only). The projection
-is assessed **point in time**: against the snapshot it actually had at the start of
-the week its lead is ~0.8% (z ≈ 2; 0.01, z 0.4 on live captures); against the
-week's final snapshot it is ~8% (z ≈ 10), which is the projection reading the same
-late news as the market, not leading it. On 2026 weeks 1–4 the weights are
-Pinnacle 0.72, BetMGM 0.47, Circa 0.37, theScore 0.36, Caesars 0.34, DraftKings
-0.25, BetRivers 0.19, Hard Rock 0.09, FanDuel 0.06, projection 0.002.
+**Stats — the projection.** One parameter per (stat, slot), fitted against
+outcomes with the books as the offset:
 
-What it does and does not show: weighted retail books predict Pinnacle's close
-better than the equal median (MSE 0.0174 → 0.0165, z −3.9) — partly circular, and
-not reproduced against Circa's close (z +1.4). Against outcomes it makes no
+```
+logit P(over) = L_books + share · (L_proj − L_books)
+share = clip( shrunk_estimate − 1·SE , 0, 0.75 )       prior 0, worth 150 player-weeks
+```
+
+Both are fitted **as of a week** (strictly earlier weeks only), on live captures for
+the projection (a backfilled board's projection is the week's *final* snapshot: against
+it the market appears to follow the projection by ~8%, z ≈ 10; against the one it had on
+Tuesday, ~0.8%, z ≈ 2 — the same news, not a lead). `ProjProb` records what the
+projection alone said on every row, because `OurProb` is the pool's after re-pricing.
+
+2026 weeks 1–4: weights Pinnacle 0.72, BetMGM 0.47, Circa 0.37, theScore 0.36,
+Caesars 0.34, DraftKings 0.25, BetRivers 0.19, Hard Rock 0.09, FanDuel 0.06. On the
+live Tuesday captures every projection share is inside its own error bar, so every
+share used is zero and the price is currently the weighted books.
+
+**What this does to the ledger.** Rows clearing the 3% edge bar on the Tuesday
+boards fall from 1,057 / 4,203 / 4,176 (weeks 3 / 4 / 5) to 7 / 3 / 6. Almost every
+edge the projection-only ledger found was the projection disagreeing with a price
+that already carried the news. What survives is stale outliers bettable after the
+margin. `--price-model projection` restores the old price.
+
+What the weighting does and does not show: weighted retail books predict Pinnacle's
+close better than the equal median (MSE 0.0174 → 0.0165, z −3.9) — partly circular,
+and not reproduced against Circa's close (z +1.4). Against outcomes it makes no
 detectable difference (Brier −0.00003, z −0.4), which four weeks cannot resolve in
 either direction. The weights describe an **early** board only, and live Tuesday
 captures carry no Pinnacle yet (0 rows in week 5), so on a Tuesday drop the pool is
-the weighted retail books. See the README
-section "Weighting the books" and `npm run source-weights`.
+the weighted retail books.
+
+### 4c. Why the projection earns so little
+
+**Plain English.** Four things could make a projection lose to the books: it is
+*late* (the books priced news it hasn't read), its *middle* is in the wrong place,
+its *band* is too narrow (too sure of itself), or its *tails* are too thin. Tested
+separately on weeks 2–4 against the book at the same moment, near the money:
+
+| cause | result |
+|---|---|
+| **late** | the biggest. Gap to the closing book **+0.0178** on Tuesday's snapshot, **+0.0073** on the last snapshot before the game: the projection gets better every day |
+| **band too narrow** | second. Widening 1.75× (pre-kickoff) takes +0.0073 → +0.0041; 2.5× on Tuesday's, +0.0178 → +0.0119 |
+| **tails too thin** | negligible: Student-t with the same quartiles moves the gap ≤ 0.0003. The tail miscalibration is real (the projection says 2%, the book and the outcomes 9–12%) but small in Brier terms |
+| **middle in the wrong place** | rushing and receiving yards only; about a quarter of the gap (median correction) |
+
+So the problem is not "the books have many prices and we have one"; it is that the
+books have *fresh* prices and the projection is read on Tuesday. With a fresh
+snapshot the projection earns a share on the volume stats — against outcomes
+0.53 ± 0.46 on receptions (z 2.3), 0.25 on receiving yards — and negative on
+passing yards, where the books simply know more (weather, matchup, pace). With
+Tuesday's, about nothing anywhere.
+
+**Stats.** Position on the curve is the line's distance from the median in the
+projection's own two-piece standard deviations. A heavier tail is a two-piece
+Student-t with the *same quartiles*, so only the tails move; the band multiplier
+scales both half-spreads; each is scored by the Brier gap to the book at the same
+moment, clustered on (week, player). Reproduce with `npm run projection-miss`
+(needs a full clone: the daily snapshots live in git history).
 
 ---
 
@@ -444,7 +490,8 @@ earned (the unfiltered list was 86 books).
 | Projection → probability | `scripts/lib/probability.mjs` |
 | De-vig, consensus | `scripts/lib/devig.mjs`, `consensus.mjs` |
 | Blend fit, scoring, clustering, bands | `scripts/lib/pricing.mjs`, `npm run price-model` |
-| Source weights, weighted pool | `scripts/lib/source-weights.mjs`, `npm run source-weights` |
+| Source weights, weighted pool | `scripts/lib/source-weights.mjs`, `scripts/lib/source-model.mjs`, `npm run source-weights` |
+| Where the projection loses, and why | `scripts/lib/projection-diagnosis.mjs`, `npm run projection-miss` |
 | Median correction | `scripts/lib/median-correction.mjs`, `npm run median-correction` |
 | Guards (support floor, disagreement cap) | `scripts/lib/calibration.mjs` |
 | Edges and bets | `scripts/capture-props.mjs`, `scripts/lib/personas.mjs` |

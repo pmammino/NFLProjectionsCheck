@@ -1,15 +1,17 @@
 {
   "season": 2026,
-  "generatedAt": "2026-10-08T18:19:44.814Z",
+  "generatedAt": "2026-10-08T18:40:28.266Z",
   "params": {
     "priorClusters": 150,
     "priorWeight": 0.15,
-    "projectionPriorWeight": 0
+    "maxProjectionShare": 0.75
   },
   "byWeek": {
     "1": {
       "weights": {},
-      "trainedOnWeeks": []
+      "projectionShare": {},
+      "trainedOnWeeks": [],
+      "shareWeeks": []
     },
     "2": {
       "weights": {
@@ -28,7 +30,18 @@
         "draftkings:1": 0.14437476511556022,
         "hardrock:1": 0.21169721765676305
       },
+      "projectionShare": {
+        "passYds|main": 0,
+        "passAtt|main": 0,
+        "completions|main": 0,
+        "rushYds|main": 0,
+        "receptions|main": 0,
+        "recYds|main": 0
+      },
       "trainedOnWeeks": [
+        1
+      ],
+      "shareWeeks": [
         1
       ]
     },
@@ -47,12 +60,25 @@
         "betrivers:1": 0.13025027447917079,
         "draftkings:1": 0.1394727602616145,
         "thescore:1": 0.19367005443397833,
-        "projection": 0.0024648469924310385,
         "fanduel:2": 0.12048139699629902,
         "hardrock:1": 0.2234826129544966,
         "pinnacle:1": 0.15
       },
+      "projectionShare": {
+        "passYds|main": 0,
+        "passAtt|main": 0,
+        "completions|main": 0,
+        "rushYds|main": 0,
+        "receptions|main": 0,
+        "recYds|main": 0,
+        "rushAtt|main": 0,
+        "passTD|main": 0
+      },
       "trainedOnWeeks": [
+        1,
+        2
+      ],
+      "shareWeeks": [
         1,
         2
       ]
@@ -72,12 +98,26 @@
         "betrivers:1": 0.12770321493031758,
         "draftkings:1": 0.12580659994099425,
         "thescore:1": 0.2346590678146528,
-        "projection": 0.006349221098022393,
         "fanduel:2": 0.07220509564612188,
         "hardrock:1": 0.22528751375360176,
         "pinnacle:1": 0.15
       },
+      "projectionShare": {
+        "passYds|main": 0,
+        "passAtt|main": 0,
+        "completions|main": 0,
+        "rushYds|main": 0,
+        "receptions|main": 0,
+        "recYds|main": 0,
+        "rushAtt|main": 0,
+        "passTD|main": 0
+      },
       "trainedOnWeeks": [
+        1,
+        2,
+        3
+      ],
+      "shareWeeks": [
         1,
         2,
         3
@@ -98,12 +138,27 @@
         "betrivers:1": 0.17457681951381254,
         "draftkings:1": 0.09434098334005034,
         "thescore:1": 0.2688663400820671,
-        "projection": 0.00186253611905281,
         "fanduel:2": 0.06228973678819425,
         "hardrock:1": 0.22170160213639004,
         "pinnacle:1": 0.15
       },
+      "projectionShare": {
+        "passYds|main": 0,
+        "passAtt|main": 0,
+        "completions|main": 0,
+        "rushYds|main": 0,
+        "receptions|main": 0,
+        "recYds|main": 0,
+        "rushAtt|main": 0,
+        "passTD|main": 0
+      },
       "trainedOnWeeks": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "shareWeeks": [
         1,
         2,
         3,
@@ -222,7 +277,7 @@
       "lead": 0.005228565249871141,
       "se": 0.01257969510405263,
       "z": 0.415635292161153,
-      "weight": 0.00186253611905281
+      "weight": null
     },
     "fanduel:2": {
       "n": 2466,
@@ -247,6 +302,72 @@
       "se": null,
       "z": null,
       "weight": 0.15
+    }
+  },
+  "projectionShares": {
+    "passYds|main": {
+      "n": 179,
+      "clusters": 39,
+      "share": 0,
+      "raw": -0.5336372530740352,
+      "se": 1.0405726473985215,
+      "z": -0.5128303674021726
+    },
+    "passAtt|main": {
+      "n": 35,
+      "clusters": 35,
+      "share": 0,
+      "raw": 0.0587182808915485,
+      "se": 1.1376156803595672,
+      "z": 0.051615217604058836
+    },
+    "completions|main": {
+      "n": 44,
+      "clusters": 38,
+      "share": 0,
+      "raw": 0.26856284166213235,
+      "se": 1.2051093017802645,
+      "z": 0.22285351317543906
+    },
+    "rushYds|main": {
+      "n": 226,
+      "clusters": 95,
+      "share": 0,
+      "raw": -0.06886880375550682,
+      "se": 0.21321427332036014,
+      "z": -0.3230027834582613
+    },
+    "receptions|main": {
+      "n": 289,
+      "clusters": 197,
+      "share": 0,
+      "raw": 0.0999391169223884,
+      "se": 0.24454385968168302,
+      "z": 0.40867563410701374
+    },
+    "recYds|main": {
+      "n": 454,
+      "clusters": 192,
+      "share": 0,
+      "raw": 0.01450898563052592,
+      "se": 0.25405121404498265,
+      "z": 0.05711047548057353
+    },
+    "rushAtt|main": {
+      "n": 17,
+      "clusters": 10,
+      "share": 0,
+      "raw": -0.06283515428678352,
+      "se": 0.8009281482064565,
+      "z": -0.078452922933839
+    },
+    "passTD|main": {
+      "n": 31,
+      "clusters": 20,
+      "share": 0,
+      "raw": 0.19436315465346707,
+      "se": 1.0553321286305588,
+      "z": 0.1841724982879849
     }
   }
 }

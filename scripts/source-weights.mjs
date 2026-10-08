@@ -15,7 +15,7 @@
 //   node scripts/source-weights.mjs [--season 2026]
 //                                   [--prior-clusters 150] [--prior-weight 0.15]
 //                                   [--include-retired]
-//                                   [--write]   persist weights for capture-props
+//                                   [--write]   persist data/pricing/{season}/source-weights.json
 //                                   [--json]
 //
 // Reads data/props/ and data/actuals/ directly.
@@ -25,19 +25,19 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadSeason, availableSeasons, actualFor } from "./lib/pricing-dataset.mjs";
 import { gradeOutcome } from "./lib/grading.mjs";
-import { estimateHoldByStat, bookInSet, median, sigmoid } from "./lib/consensus.mjs";
-import { isBettableStat } from "./lib/markets.mjs";
+import { bookInSet, median, sigmoid } from "./lib/consensus.mjs";
 import { pairedBrierDiff, NEAR_MONEY_MAX } from "./lib/pricing.mjs";
+import { buildSourceModel } from "./lib/source-model.mjs";
 import {
   PROJECTION_SOURCE,
   PRIOR_WEIGHT,
   PRIOR_CLUSTERS,
-  PROJECTION_PRIOR_WEIGHT,
-  buildLeadPairs,
+  MAX_PROJECTION_SHARE,
   assessSources,
   fitSourceWeights,
-  weightsAsOf,
   poolVotes,
+  shareFor,
+  fitProjectionShares,
 } from "./lib/source-weights.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -89,31 +89,32 @@ const lpad = (s, w) => String(s).padStart(w);
 // Analysis
 // ---------------------------------------------------------------------------
 
-const EARLY_SLOTS = null; // every slot but the close
-
 function analyse(quotes, actualsByWeek, a) {
-  const usable = a.includeRetired ? quotes : quotes.filter((q) => isBettableStat(q.stat));
-  const holdByStat = estimateHoldByStat(usable);
-  const pairs = buildLeadPairs(usable, { earlySlots: EARLY_SLOTS, holdByStat });
-  const weeks = [...new Set(pairs.map((p) => p.week))].sort((x, y) => x - y);
+  const model = buildSourceModel(quotes, actualsByWeek, { includeRetired: a.includeRetired, priorClusters: a.priorClusters, priorWeight: a.priorWeight });
+  const { pairs, samples, weeks } = model;
   const opts = { priorClusters: a.priorClusters, priorWeight: a.priorWeight };
 
   // 1. The assessment on everything seen, and the weights it implies.
   const overall = assessSources(pairs);
   const overallFit = fitSourceWeights(overall, opts);
 
-  // 2. The same assessment as it stood going into each week.
-  const asOf = weeks.concat([Math.max(...weeks) + 1]).map((w) => ({ week: w, ...weightsAsOf(pairs, w, opts) }));
+  // 2. The model as it stood going into each week, plus the week after the last
+  //    (the live one).
+  const asOf = weeks.concat([Math.max(...weeks) + 1]).map((w) => model.at(w));
 
-  // 3. Out of sample.
+  // 3. The projection's share on everything seen.
+  const overallShares = fitProjectionShares(samples, opts);
+
+  // 4. Out of sample.
   const heldOut = evaluateHeldOut(pairs, asOf);
   const outcomes = evaluateOutcomes(pairs, asOf, actualsByWeek);
 
   const projPairs = pairs.filter((p) => p.projection !== null).length;
-  return { pairs: pairs.length, weeks, overall, overallFit, asOf, heldOut, outcomes, projPairs };
+  return { pairs: pairs.length, weeks, overall, overallFit, asOf, overallShares, shareSamples: samples.length, heldOut, outcomes, projPairs };
 }
 
 const weightsFor = (asOf, week) => asOf.find((x) => x.week === week)?.weights ?? {};
+const sharesFor = (asOf, week) => asOf.find((x) => x.week === week)?.shares ?? {};
 
 // A target that is NOT in the pool being tested. The pool is built from the
 // retail books at the early board; the target is a sharp book's own price at
@@ -199,10 +200,11 @@ function evaluateOutcomes(pairs, asOf, actualsByWeek) {
       const retail = p.early.filter((v) => bookInSet(v.book, "retail"));
       if (retail.length < 3) return { median: null, pool: null, withProj: null, proj: null, y, cluster: p.cluster };
       const w = weightsFor(asOf, p.week);
+      const share = shareFor(sharesFor(asOf, p.week), p.stat, p.slot);
       return {
         median: sigmoid(median(retail.map((v) => v.logit))),
         pool: poolVotes(p.early, { weights: w }).prob,
-        withProj: poolVotes(p.early, { weights: w, projectionProb: p.projection }).prob,
+        withProj: poolVotes(p.early, { weights: w, projectionProb: p.projection, projectionShare: share }).prob,
         proj: p.projection,
         y,
         cluster: p.cluster,
@@ -211,8 +213,8 @@ function evaluateOutcomes(pairs, asOf, actualsByWeek) {
 
   return [
     cmp("weighted books vs retail median (every early board)", booksRows, "median", "pool"),
-    cmp("weighted books + projection vs retail median (live boards)", projRows, "median", "withProj"),
-    cmp("weighted books + projection vs weighted books (live boards)", projRows, "pool", "withProj"),
+    cmp("books + projection share vs retail median (live boards)", projRows, "median", "withProj"),
+    cmp("books + projection share vs weighted books (live boards)", projRows, "pool", "withProj"),
     cmp("projection alone vs retail median (live boards)", projRows, "median", "proj"),
   ];
 }
@@ -225,10 +227,10 @@ function printReport(season, r, a) {
   console.log(`SOURCE WEIGHTS — season ${season}`);
   console.log(
     `${r.pairs.toLocaleString()} early/closing market pairs over weeks ${r.weeks.join(", ")}; ` +
-      `${r.projPairs.toLocaleString()} carry a point-in-time projection.\n`
+      `${r.shareSamples.toLocaleString()} live near-the-money markets with an outcome for the projection's share.\n`
   );
 
-  console.log("1. WHAT EACH SOURCE'S EARLY PRICE TOLD THE MARKET   (all weeks; in-sample, descriptive)");
+  console.log("1. THE BOOKS: WHAT EACH ONE'S EARLY PRICE TOLD THE MARKET   (all weeks; in-sample, descriptive)");
   console.log("   lead = share of the source's early disagreement that the OTHER books had adopted by the close.");
   console.log("   0 = ignored, 1 = fully followed. The source is excluded from its own target.\n");
   console.log(`   ${pad("source", 18)}${lpad("markets", 9)}${lpad("players", 9)}${lpad("lead", 8)}${lpad("±95%", 8)}${lpad("z", 7)}${lpad("weight", 9)}`);
@@ -242,18 +244,13 @@ function printReport(season, r, a) {
   for (const k of keys) {
     const s = r.overall[k];
     const w = r.overallFit.weights[k];
-    const flag = k === PROJECTION_SOURCE ? "  <- our projection" : "";
-    console.log(`   ${pad(k, 18)}${lpad(s.n, 9)}${lpad(s.clusters, 9)}${lpad(f(s.lead, 2), 8)}${lpad(s.se ? f(1.96 * s.se, 2) : "-", 8)}${lpad(f(s.z, 1), 7)}${lpad(f(w, 3), 9)}${flag}`);
+    const flag = k === PROJECTION_SOURCE ? "  <- our projection (diagnostic only: see 3)" : "";
+    console.log(`   ${pad(k, 18)}${lpad(s.n, 9)}${lpad(s.clusters, 9)}${lpad(f(s.lead, 2), 8)}${lpad(s.se ? f(1.96 * s.se, 2) : "-", 8)}${lpad(f(s.z, 1), 7)}${lpad(w === undefined ? "-" : f(w, 3), 9)}${flag}`);
   }
   if (thin.length) console.log(`   (not shown, under ${THIN} player-weeks: ${thin.join(", ")} — held at the prior)`);
-  console.log(
-    `\n   Prior weight ${a.priorWeight} for a book, ${PROJECTION_PRIOR_WEIGHT} for the projection; evidence outweighs the prior at ${a.priorClusters} player-weeks.`
-  );
-  if (!r.overall[PROJECTION_SOURCE]) {
-    console.log("   The projection has no point-in-time record yet: only live captures qualify (see below).");
-  }
+  console.log(`\n   Prior weight ${a.priorWeight} for a book; evidence outweighs the prior at ${a.priorClusters} player-weeks.`);
 
-  console.log("\n2. THE WEIGHTS AS THEY STOOD GOING INTO EACH WEEK   (fitted on earlier weeks only)");
+  console.log("\n2. THE BOOKS' WEIGHTS AS THEY STOOD GOING INTO EACH WEEK   (fitted on earlier weeks only)");
   const sources = Object.keys(r.overallFit.weights)
     .filter((k) => !thin.includes(k))
     .sort((x, y) => (r.overallFit.weights[y] ?? 0) - (r.overallFit.weights[x] ?? 0));
@@ -261,9 +258,31 @@ function printReport(season, r, a) {
   for (const k of sources) {
     console.log(`   ${pad(k, 18)}${r.asOf.map((x) => lpad(x.weights[k] === undefined ? "prior" : f(x.weights[k], 3), 8)).join("")}`);
   }
-  console.log(`   ${pad("(trained on weeks)", 18)}${r.asOf.map((x) => lpad(x.weeksUsed.length ? `${x.weeksUsed[0]}-${x.weeksUsed[x.weeksUsed.length - 1]}` : "-", 8)).join("")}`);
+  console.log(`   ${pad("(trained on weeks)", 18)}${r.asOf.map((x) => lpad(x.trainedOnWeeks.length ? `${x.trainedOnWeeks[0]}-${x.trainedOnWeeks[x.trainedOnWeeks.length - 1]}` : "-", 8)).join("")}`);
 
-  console.log("\n3. DOES WEIGHTING WORK?   (walk-forward: every week priced with weights fitted on earlier weeks only)");
+  console.log("\n3. THE PROJECTION'S SHARE OF THE PRICE   (per stat and capture slot; fitted against OUTCOMES)");
+  console.log("   logit P(over) = L_books + share · (L_proj − L_books). 0 = ignore the projection, 1 = believe it over the books.");
+  console.log("   Live captures only — the projection we actually had on the day. A negative fit is reported, and priced as 0.\n");
+  const cells = Object.keys(r.overallShares).sort();
+  console.log(`   ${pad("stat | slot", 24)}${lpad("markets", 9)}${lpad("players", 9)}${lpad("fitted", 9)}${lpad("±95%", 8)}${lpad("z", 7)}${lpad("used", 8)}   as-of: ${r.asOf.map((x) => lpad(`wk ${x.week}`, 7)).join("")}`);
+  for (const k of cells) {
+    const c = r.overallShares[k];
+    const [stat, slot] = k.split("|");
+    console.log(
+      `   ${pad(k.replace("|", " | "), 24)}${lpad(c.n, 9)}${lpad(c.clusters, 9)}${lpad(f(c.raw, 2), 9)}${lpad(c.se ? f(1.96 * c.se, 2) : "-", 8)}${lpad(f(c.z, 1), 7)}${lpad(f(c.share, 2), 8)}   ` +
+        `        ${r.asOf.map((x) => lpad(f(shareFor(x.shares, stat, slot), 2), 7)).join("")}`
+    );
+  }
+  const lead = r.overall[PROJECTION_SOURCE];
+  if (lead) {
+    console.log(
+      `\n   For comparison, the books' yardstick (lead) puts the projection at ${f(lead.lead, 2)} (z ${f(lead.z, 1)}) on ${lead.clusters} player-weeks:\n` +
+        `   it asks whether the market FOLLOWED the projection, which a daily-written projection read on Tuesday can only fail.`
+    );
+  }
+  console.log(`   Shares are pulled toward 0 by a prior worth ${a.priorClusters} player-weeks and capped at ${MAX_PROJECTION_SHARE}; a cell with no live data prices on the books alone.`);
+
+  console.log("\n4. DOES IT WORK?   (walk-forward: every week priced with weights and shares fitted on earlier weeks only)");
   console.log("   a) Held-out target. A pool of the RETAIL books at the early board, scored on how far it is from");
   console.log("      a sharp book's own price at the close — a price neither the pool nor its weights ever saw.");
   console.log(`      ${pad("target", 14)}${lpad("markets", 9)}${lpad("players", 9)}${lpad("MSE median", 12)}${lpad("MSE weighted", 14)}${lpad("diff", 10)}${lpad("z", 7)}`);
@@ -292,20 +311,27 @@ function printReport(season, r, a) {
 function buildPayload(season, r, a) {
   const byWeek = {};
   for (const x of r.asOf) {
-    byWeek[String(x.week)] = { weights: x.weights, trainedOnWeeks: x.weeksUsed };
+    byWeek[String(x.week)] = {
+      weights: x.weights,
+      projectionShare: Object.fromEntries(Object.entries(x.shares).map(([k, c]) => [k, c.share])),
+      trainedOnWeeks: x.trainedOnWeeks,
+      shareWeeks: x.shareWeeks,
+    };
   }
   return {
     season,
     generatedAt: new Date().toISOString(),
-    params: { priorClusters: a.priorClusters, priorWeight: a.priorWeight, projectionPriorWeight: PROJECTION_PRIOR_WEIGHT },
+    params: { priorClusters: a.priorClusters, priorWeight: a.priorWeight, maxProjectionShare: MAX_PROJECTION_SHARE },
     // One entry per week, fitted on the weeks before it. A capture for week W
-    // reads byWeek[W]; a backfill of an old week therefore prices with the
-    // weights that week could have known, never later ones. The last entry is
-    // the live one: fitted on everything so far, for the week not yet played.
+    // reads byWeek[W]; a backfill of an old week therefore prices with what that
+    // week could have known, never later ones. The last entry is the live one.
+    // capture-props computes the same thing from data/ when no file is given, so
+    // this file is for auditing or pinning, not a dependency.
     byWeek,
     sources: Object.fromEntries(
       Object.entries(r.overall).map(([k, s]) => [k, { n: s.n, clusters: s.clusters, lead: s.lead, se: s.se, z: s.z, weight: r.overallFit.weights[k] ?? null }])
     ),
+    projectionShares: r.overallShares,
   };
 }
 

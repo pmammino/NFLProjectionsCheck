@@ -444,6 +444,14 @@ would — and every row carries a `Slot` column that the ledgers and the
 `bySlot` rollup split on. Pooling two sourcing times into one ROI would
 destroy the only comparison that decides which one to keep.
 
+> **Read `bySlot` with one caveat.** A persona's dedupe keeps the single best
+> price per player-stat across *every* slot, so each bet is attributed to the
+> slot whose price won. That makes the per-slot ROI a statement about which
+> slot tended to carry the best number, not an independent trial of each slot —
+> picking the maximum across slots is a winner's curse by construction. The
+> clean comparison of slots is `board-timing` and the per-slot table in
+> `price-model`, which score each capture on its own.
+
 | Workflow | When (UTC) | Slot |
 |---|---|---|
 | `props-weekly.yml` | Tue 14:00 | `main` — softest prices, thin board |
@@ -504,9 +512,11 @@ and is rate-limited to 10 requests per 15 seconds.
 > So `--at closing` now means closing, a row with no closing price is **absent
 > from that board**, and a capture that still ends up mixed says so loudly.
 > `--allow-line-fallback` restores the old behaviour knowingly. Run each
-> endpoint as its own slot. The first backfill is kept as `closing-mixed`
-> rather than deleted, honestly labelled so it cannot be mistaken for one
-> instrument.
+> endpoint as its own slot. The first backfill, which mixed the two, was kept
+> for a while as `closing-mixed` and has since been deleted: clean `opening` and
+> `closing` slots replaced it, and left in place it pooled the same games a
+> third time into every report. It is recoverable from git history (created in
+> `f5d6066`).
 >
 > So the key has historical-odds permission and the retention window is fine;
 > what it lacks is `include_timeseries`, which is a separate OpticOdds
@@ -736,7 +746,7 @@ they are one quarterback having one game, and they resolve together.
 
 Every comparison is therefore clustered on `(week, player)`, and the report
 prints the naive `z` beside the clustered one so the size of that mistake stays
-visible. On the current data it is the difference between a finding and
+visible. On the first three weeks of data it was the difference between a finding and
 nothing:
 
 | blend vs. market, out of sample | |
@@ -744,6 +754,36 @@ nothing:
 | Brier difference | −0.00203 (negative = better) |
 | naive z (2,464 markets) | **−2.51** |
 | clustered z (49 player-weeks) | **−0.61** |
+
+### Read the band, not the average
+
+A Brier score pooled over every quoted line mostly measures how easy the board
+is. Books quote a ladder of alternate lines around each player and most rungs
+are lopsided: over 10.5 receiving yards for a player projected at 60 is a 98%
+proposition that every model gets right. About two thirds of the out-of-sample
+markets sit more than 0.25 from a coin flip, so the pooled score — and the
+market's apparent +0.37 skill over the base rate — is carried by markets where
+nobody is being asked to forecast anything.
+
+The report therefore cuts every result by how close the **market's** price is
+to 50/50 and headlines the **near-the-money** slice (within 0.25). Bands are
+defined on the market's price, never ours and never the outcome: the market's
+price is known before kickoff, so slicing on it is legitimate in the same way
+ranking fantasy relevance on *projected* points is. Slicing on our own
+probability would select the rows where we are most confident.
+
+Cut that way, the gap lives where a bet is decided (2026 weeks 1–4, retail
+consensus, 694 player-weeks, out of sample):
+
+| band | share | blend − market | projection − market |
+|---|---|---|---|
+| coin flips (< 0.10) | 13% | +0.0021 | +0.0094 |
+| near money (0.10–0.25) | 21% | +0.0015 | +0.0087 |
+| lopsided (0.25–0.40) | 34% | +0.0008 | +0.0061 |
+| extreme (≥ 0.40) | 32% | +0.0001 | +0.0017 |
+
+Positive is worse than the market. Everything looks fine in the tails because
+everything does.
 
 ### The verdict, as of 2026 week 4
 
@@ -755,13 +795,31 @@ report:
 | blend vs. `marketRaw` | is our price better than the book's? |
 | blend vs. `marketRecal` | do the **projections** contribute, or is the gain just a recalibration of the book? |
 
-The first can be comfortably positive while the second is zero — and that is a
-completely different business. On 2026 weeks 1–3 the fitted `b` is **−0.012**:
-the projections add essentially nothing on top of the multi-book consensus, and
-what improvement exists comes from `a` and `c` recalibrating the market itself.
-The clustered standard error puts the whole thing inside noise. **The honest
-answer today is "inconclusive, and it needs more player-weeks rather than a
-more complex model."**
+Near the money, out of sample, clustered by player-week:
+
+| | diff | z |
+|---|---|---|
+| blend vs. market | +0.0017 | +1.77 |
+| blend vs. recalibrated market | +0.0003 | +0.81 |
+| **projection alone vs. market** | **+0.0090** | **+3.46** |
+
+- **The raw projection is significantly worse than the book where it counts.**
+  It also leans over: on main lines it averages 53.4% where the outcome rate is
+  50.5%.
+- **The blend does not beat the market**, and the fitted disagreement weight
+  `b` is +0.04 and shrinking as training data grows (the per-fold skill goes
+  −0.027, −0.006, +0.002). The blend is converging on "price off the book".
+- **The sharp books are not better than the retail ones on main lines.** On
+  the 6,552 markets both consensuses priced, retail 0.2492, sharp 0.2494 and
+  the base rate 0.2500 are indistinguishable (z = 0.59), while the projection
+  scores 0.2552 — worse than both.
+
+So on current evidence the market, not the projection, is the better estimate
+of a near-50/50 line, and the honest default is the one already in place:
+price off the projection only where a guard says it is trustworthy, and treat
+the blend as a research tool until `b` earns its keep. What would change that
+is a fix for the over-lean, which is the most likely-fixable thing here, not
+more model.
 
 ### One caveat that is not noise
 

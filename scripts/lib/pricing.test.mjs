@@ -16,6 +16,11 @@ import {
   MAX_LOGIT,
   sigmoid,
   logit,
+  MONEY_BANDS,
+  bandOf,
+  isNearMoney,
+  distanceFromEven,
+  compareByBand,
 } from "./pricing.mjs";
 
 // Deterministic PRNG so every generated sample below is reproducible; a test
@@ -248,4 +253,105 @@ test("the blend cannot be beaten in sample by the model it nests", () => {
     return scoreProbabilities(samples.map((s) => ({ p: predict(fit, s), y: s.y }))).logLoss;
   };
   assert.ok(scoreOf("blend") <= scoreOf("marketRecal") + 1e-6);
+});
+
+// --- distance from a coin flip ---------------------------------------------
+
+test("every market lands in exactly one band", () => {
+  // The bands partition [0, 0.5] in distance, so a market can never be counted
+  // twice or fall through a gap — either would make the per-band table
+  // disagree with the pooled one.
+  for (let i = 0; i <= 1000; i++) {
+    const p = i / 1000;
+    const hits = MONEY_BANDS.filter((b) => {
+      const d = distanceFromEven(p);
+      return d >= b.lo && d < b.hi;
+    });
+    assert.equal(hits.length, 1, `p=${p} landed in ${hits.length} bands`);
+  }
+});
+
+test("band edges are stable under floating point", () => {
+  // |0.60 - 0.5| is 0.09999999999999998 in IEEE doubles. Without rounding, a
+  // market priced at exactly 60% would be a "coin flip" instead of "near
+  // money" for no reason anyone could justify.
+  assert.equal(bandOf(0.5).key, "coinflip");
+  assert.equal(bandOf(0.6).key, "near");
+  assert.equal(bandOf(0.4).key, "near");
+  assert.equal(bandOf(0.75).key, "lopsided");
+  assert.equal(bandOf(0.9).key, "extreme");
+  assert.equal(bandOf(0.01).key, "extreme");
+  assert.equal(bandOf(NaN), null);
+  assert.equal(bandOf(undefined), null);
+});
+
+test("near money is symmetric and excludes its own boundary", () => {
+  assert.equal(isNearMoney(0.5), true);
+  assert.equal(isNearMoney(0.7), true);
+  assert.equal(isNearMoney(0.3), true);
+  assert.equal(isNearMoney(0.75), false); // exactly NEAR_MONEY_MAX away
+  assert.equal(isNearMoney(0.25), false);
+  assert.equal(isNearMoney(0.98), false);
+  assert.equal(isNearMoney(null), false);
+});
+
+// Rows with one player each, so clusters === rows and nothing is dependent.
+function bandRows(n, { pMarket, p, pProj = p, yAt }) {
+  return Array.from({ length: n }, (_, i) => ({
+    week: 1,
+    playerId: `${pMarket}-${i}`,
+    pMarket,
+    p,
+    pProj,
+    y: yAt(i),
+  }));
+}
+
+test("a pooled score hides what the per-band table shows", () => {
+  // The point of banding. 2,000 lopsided markets the candidate prices exactly
+  // like the market, plus 200 coin flips where it is badly overconfident. The
+  // pooled difference is diluted ~10x; the near-money band carries it whole.
+  const rows = [
+    ...bandRows(2000, { pMarket: 0.01, p: 0.01, yAt: () => 0 }),
+    ...bandRows(200, { pMarket: 0.5, p: 0.8, yAt: (i) => (i % 2 ? 1 : 0) }),
+  ];
+  const pooled = pairedBrierDiff(rows.map((r) => ({ p: r.p, q: r.pMarket, y: r.y, cluster: clusterKey(r) })));
+  const bands = compareByBand(rows);
+  const coin = bands.find((b) => b.key === "coinflip");
+  const extreme = bands.find((b) => b.key === "extreme");
+
+  assert.ok(Math.abs(extreme.blendVsMarket.mean) < 1e-12, "no difference where the candidate matches the market");
+  assert.ok(coin.blendVsMarket.mean > 0.05, `coin-flip band should carry the damage, got ${coin.blendVsMarket.mean}`);
+  assert.ok(
+    coin.blendVsMarket.mean > pooled.mean * 8,
+    `pooled ${pooled.mean} should be a fraction of the band's ${coin.blendVsMarket.mean}`
+  );
+});
+
+test("compareByBand accounts for every row and reports thin bands instead of dropping them", () => {
+  const rows = [
+    ...bandRows(40, { pMarket: 0.5, p: 0.5, yAt: (i) => i % 2 }),
+    ...bandRows(5, { pMarket: 0.99, p: 0.99, yAt: () => 1 }),
+  ];
+  const bands = compareByBand(rows);
+  assert.equal(bands.length, MONEY_BANDS.length);
+  assert.equal(bands.reduce((s, b) => s + b.n, 0), rows.length);
+  assert.ok(Math.abs(bands.reduce((s, b) => s + b.share, 0) - 1) < 1e-12);
+  const extreme = bands.find((b) => b.key === "extreme");
+  assert.equal(extreme.n, 5);
+  assert.equal(extreme.thin, true, "5 clusters is too few to read");
+  // A band nothing fell into still appears, with no score, rather than vanishing.
+  const lopsided = bands.find((b) => b.key === "lopsided");
+  assert.equal(lopsided.n, 0);
+  assert.equal(lopsided.marketBrier, null);
+});
+
+test("bands are defined on the market's price, so the projection cannot select its own sample", () => {
+  // Two rows with the same market price but wildly different projections must
+  // land in the same band. Banding on pProj would select the rows where we
+  // are most confident and flatter the projection by construction.
+  const a = { week: 1, playerId: "a", pMarket: 0.5, p: 0.5, pProj: 0.01, y: 0 };
+  const b = { week: 1, playerId: "b", pMarket: 0.5, p: 0.5, pProj: 0.99, y: 1 };
+  const coin = compareByBand([a, b]).find((x) => x.key === "coinflip");
+  assert.equal(coin.n, 2);
 });

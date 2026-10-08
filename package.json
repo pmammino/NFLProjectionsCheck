@@ -5,6 +5,7 @@
   "scripts": {
     "build:data": "node scripts/build-data.mjs",
     "build:betting": "node scripts/build-betting-data.mjs",
+    "build:lines": "node scripts/build-lines-data.mjs",
     "calibration-report": "node scripts/calibration-report.mjs",
     "price-model": "node scripts/price-model.mjs",
     "board-timing": "node scripts/board-timing.mjs",
@@ -14,8 +15,8 @@
     "capture-closing": "node scripts/capture-props.mjs --closing",
     "simulate": "node scripts/simulate-personas.mjs",
     "optic-discover": "node scripts/optic-discover.mjs",
-    "predev": "node scripts/build-data.mjs && node scripts/build-betting-data.mjs",
-    "prebuild": "node scripts/build-data.mjs && node scripts/build-betting-data.mjs",
+    "predev": "node scripts/build-data.mjs && node scripts/build-betting-data.mjs && node scripts/build-lines-data.mjs",
+    "prebuild": "node scripts/build-data.mjs && node scripts/build-betting-data.mjs && node scripts/build-lines-data.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

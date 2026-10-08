@@ -108,6 +108,7 @@ export function readPropRow(row, slot) {
     name: row.Name,
     team: row.Team,
     pos: row.Pos,
+    opp: row.Opp ?? "",
     stat,
     line,
     side,

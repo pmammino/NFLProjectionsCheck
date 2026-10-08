@@ -444,6 +444,14 @@ would — and every row carries a `Slot` column that the ledgers and the
 `bySlot` rollup split on. Pooling two sourcing times into one ROI would
 destroy the only comparison that decides which one to keep.
 
+> **Read `bySlot` with one caveat.** A persona's dedupe keeps the single best
+> price per player-stat across *every* slot, so each bet is attributed to the
+> slot whose price won. That makes the per-slot ROI a statement about which
+> slot tended to carry the best number, not an independent trial of each slot —
+> picking the maximum across slots is a winner's curse by construction. The
+> clean comparison of slots is `board-timing` and the per-slot table in
+> `price-model`, which score each capture on its own.
+
 | Workflow | When (UTC) | Slot |
 |---|---|---|
 | `props-weekly.yml` | Tue 14:00 | `main` — softest prices, thin board |
@@ -504,9 +512,11 @@ and is rate-limited to 10 requests per 15 seconds.
 > So `--at closing` now means closing, a row with no closing price is **absent
 > from that board**, and a capture that still ends up mixed says so loudly.
 > `--allow-line-fallback` restores the old behaviour knowingly. Run each
-> endpoint as its own slot. The first backfill is kept as `closing-mixed`
-> rather than deleted, honestly labelled so it cannot be mistaken for one
-> instrument.
+> endpoint as its own slot. The first backfill, which mixed the two, was kept
+> for a while as `closing-mixed` and has since been deleted: clean `opening` and
+> `closing` slots replaced it, and left in place it pooled the same games a
+> third time into every report. It is recoverable from git history (created in
+> `f5d6066`).
 >
 > So the key has historical-odds permission and the retention window is fine;
 > what it lacks is `include_timeseries`, which is a separate OpticOdds
@@ -586,6 +596,7 @@ scripts/build-betting-data.mjs            aggregate into public/data/betting.jso
 scripts/board-timing.mjs                  compare the slots — when to source
 scripts/price-model.mjs                   score the projections AGAINST the books
                                           (Brier / log loss) — see Pricing lines
+scripts/median-correction.mjs             is the projected Median in the right place?
 ```
 
 ```bash
@@ -736,7 +747,7 @@ they are one quarterback having one game, and they resolve together.
 
 Every comparison is therefore clustered on `(week, player)`, and the report
 prints the naive `z` beside the clustered one so the size of that mistake stays
-visible. On the current data it is the difference between a finding and
+visible. On the first three weeks of data it was the difference between a finding and
 nothing:
 
 | blend vs. market, out of sample | |
@@ -744,6 +755,36 @@ nothing:
 | Brier difference | −0.00203 (negative = better) |
 | naive z (2,464 markets) | **−2.51** |
 | clustered z (49 player-weeks) | **−0.61** |
+
+### Read the band, not the average
+
+A Brier score pooled over every quoted line mostly measures how easy the board
+is. Books quote a ladder of alternate lines around each player and most rungs
+are lopsided: over 10.5 receiving yards for a player projected at 60 is a 98%
+proposition that every model gets right. About two thirds of the out-of-sample
+markets sit more than 0.25 from a coin flip, so the pooled score — and the
+market's apparent +0.37 skill over the base rate — is carried by markets where
+nobody is being asked to forecast anything.
+
+The report therefore cuts every result by how close the **market's** price is
+to 50/50 and headlines the **near-the-money** slice (within 0.25). Bands are
+defined on the market's price, never ours and never the outcome: the market's
+price is known before kickoff, so slicing on it is legitimate in the same way
+ranking fantasy relevance on *projected* points is. Slicing on our own
+probability would select the rows where we are most confident.
+
+Cut that way, the gap lives where a bet is decided (2026 weeks 1–4, retail
+consensus, 694 player-weeks, out of sample):
+
+| band | share | blend − market | projection − market |
+|---|---|---|---|
+| coin flips (< 0.10) | 13% | +0.0021 | +0.0094 |
+| near money (0.10–0.25) | 21% | +0.0015 | +0.0087 |
+| lopsided (0.25–0.40) | 34% | +0.0008 | +0.0061 |
+| extreme (≥ 0.40) | 32% | +0.0001 | +0.0017 |
+
+Positive is worse than the market. Everything looks fine in the tails because
+everything does.
 
 ### The verdict, as of 2026 week 4
 
@@ -755,13 +796,31 @@ report:
 | blend vs. `marketRaw` | is our price better than the book's? |
 | blend vs. `marketRecal` | do the **projections** contribute, or is the gain just a recalibration of the book? |
 
-The first can be comfortably positive while the second is zero — and that is a
-completely different business. On 2026 weeks 1–3 the fitted `b` is **−0.012**:
-the projections add essentially nothing on top of the multi-book consensus, and
-what improvement exists comes from `a` and `c` recalibrating the market itself.
-The clustered standard error puts the whole thing inside noise. **The honest
-answer today is "inconclusive, and it needs more player-weeks rather than a
-more complex model."**
+Near the money, out of sample, clustered by player-week:
+
+| | diff | z |
+|---|---|---|
+| blend vs. market | +0.0017 | +1.77 |
+| blend vs. recalibrated market | +0.0003 | +0.81 |
+| **projection alone vs. market** | **+0.0090** | **+3.46** |
+
+- **The raw projection is significantly worse than the book where it counts.**
+  It also leans over: on main lines it averages 53.4% where the outcome rate is
+  50.5%.
+- **The blend does not beat the market**, and the fitted disagreement weight
+  `b` is +0.04 and shrinking as training data grows (the per-fold skill goes
+  −0.027, −0.006, +0.002). The blend is converging on "price off the book".
+- **The sharp books are not better than the retail ones on main lines.** On
+  the 6,552 markets both consensuses priced, retail 0.2492, sharp 0.2494 and
+  the base rate 0.2500 are indistinguishable (z = 0.59), while the projection
+  scores 0.2552 — worse than both.
+
+So on current evidence the market, not the projection, is the better estimate
+of a near-50/50 line, and the honest default is the one already in place:
+price off the projection only where a guard says it is trustworthy, and treat
+the blend as a research tool until `b` earns its keep. What would change that
+is a fix for the over-lean, which is the most likely-fixable thing here, not
+more model.
 
 ### One caveat that is not noise
 
@@ -779,6 +838,116 @@ Fixing it needs a played/did-not-play source, which this project does not have.
 Until then the intercept carries a selection effect as well as any real market
 tilt and should not be shipped into a live price on its own. `capture-props`
 warns whenever it loads a fit with `|a| > 0.1`.
+
+### The projected "Median" is too high for rushing and receiving yards
+
+```bash
+npm run median-correction
+```
+
+The projection's tilt against the book is not spread evenly. Near the money
+it prices `recYds` overs **+5.7 ± 0.6** points above the book and `rushYds`
+overs **+5.0 ± 1.1**, and the passing stats not at all. (A tilt against the
+*outcome* is much noisier — in the coin-flip band it is +2.4 ± 3.3, inside its
+own error — so the claim rests on the comparison with the book, where the
+measurement is tight.)
+
+The cause is the middle of the band. Floor/Median/Ceiling are treated as the
+25th/50th/75th percentiles; for these two stats the "Median" is not the 50th.
+Across every player-week in 2026 weeks 1–4:
+
+| stat | P(actual ≤ M) — should be 50% | sum(actual) / sum(M) | median(actual / M) |
+|---|---|---|---|
+| `rushYds` | **63%** (z = 5.5) | 0.95 | 0.80 |
+| `recYds` | **56%** (z = 3.7) | 1.05 | 0.88 |
+| `passYds` | 50.4% | 1.00 | 0.99 |
+
+A middle value that is right on average but too high as a median is what the
+expected value of a right-skewed stat looks like, so that is the working
+explanation. **It is inferred from the pattern, not checked against RotoWire's
+own definition.** It is not the low-volume problem `calibration.mjs` already
+guards: only 6–9% of those rows are zeros, and `rushYds` sits at 60–65% below
+its median in every third of projected volume.
+
+#### What the correction does
+
+Each of F, M, C is rescaled by the multiplier that puts it on its target
+quantile (`kF` is the 25th percentile of `actual / F`, `kM` the 50th of
+`actual / M`, `kC` the 75th of `actual / C` — the same fit
+`calibration-report` section 2 prints). Three rules keep it honest:
+
+1. **Allowlist.** Only `rushYds` and `recYds` are eligible. A significance test
+   alone is not enough, and the data showed why: on the week-3 refit `passAtt`
+   cleared the z bar (2.5), and applying it took near-the-money Brier from
+   0.2332 to 0.2472 — worse, because there was no bias, only a noisy week.
+2. **Significance.** Within the allowlist a correction applies only on at least
+   100 player-weeks with `|z| ≥ 2.5`. As of week 2 neither stat qualifies; both
+   do from week 3, which is correct behaviour for a season that has not yet
+   produced the evidence.
+3. **No look-ahead.** A fit is "as of" a week and reads only weeks *strictly
+   before* it. Pricing week W with a multiplier that had seen W's result would
+   be grading with the answer in hand, and a backfill of an old week is exactly
+   where it would sneak in. It is the same loader for a live Tuesday capture and
+   a `--historical` one.
+
+The median multiplier is bounded to [0.5, 1.5] and refused outside it; the
+floor and ceiling multipliers get a looser [0.25, 2.0]. That asymmetry is a fix,
+not a tidy-up: `recYds`' floor multiplier came out at 0.48 when fitted on week 1
+alone, and a single shared bound refused the whole correction on it, although
+the median multiplier was a stable 0.83–0.86 — the noisiest of three numbers
+vetoing the most reliable one.
+
+The fitted multipliers have been stable as weeks arrived (`recYds` `kM`
+0.83 → 0.85 → 0.84; `rushYds` 0.95 on one week of data, then 0.79, 0.79), and the
+corrections that apply improve held-out weeks in `calibration-report` section 3
+(`rushYards` error 29 → 4) while the passing corrections make them worse.
+
+#### What it does and does not buy
+
+Out of sample, near the money (weeks 2–4, each priced with a fit that saw only
+earlier weeks, scored on the frozen-snapshot slots):
+
+| | Brier | vs the book | z |
+|---|---|---|---|
+| raw projection | 0.2357 | +0.0083 | +3.34 |
+| corrected | 0.2338 | +0.0063 | +2.87 |
+| the book | 0.2275 | | |
+
+It closes **about a quarter of the projection's gap to the market**. By stat,
+`recYds` goes 0.2369 → 0.2343 (book 0.2310) and `rushYds` 0.2309 → 0.2274 (book
+0.2199); `passYds` is untouched at 0.2395 against the book's 0.2261, and that
+is the largest gap on the board with no bias to remove. The rest is not a tilt a
+multiplier can fix — the projection carries less information than the book.
+**Treat this as hygiene, not an edge.** Its practical effect is to stop
+manufacturing over edges on two stats.
+
+Read the report's "lean" against the *market's* row, not against zero: the
+observed over-rate leaves out players who recorded nothing, which are the
+unders, so every price reads low against it.
+
+The Tuesday `main` slot is not scored here. Its stored prices came from an
+earlier projection snapshot than the frozen one (8,401 of its 10,944 rows differ
+from a re-pricing by more than 0.001, by up to 0.95), so re-pricing it would
+compare two projections; the report excludes and names those rows rather than
+dropping them quietly.
+
+#### Turning it on
+
+```bash
+npm run capture-props -- --median-correction auto
+```
+
+**It is off by default**, because it changes what the Tuesday drop publishes
+and that is a decision, not an upgrade. When on, the capture prints the as-of
+fit it used, and every priced row records the multiplier in a `MedianAdj`
+column (blank = uncorrected), carried through to the ledgers. It cannot be
+combined with `--price-model blend`: the blend was fitted on uncorrected
+projection probabilities, and feeding it corrected ones would change its input
+without refitting it. `price-model` says so when it finds a mix.
+
+The `Proj` column and the support floors still use the **raw** projected
+median. They ask whether a player is projected for a real role, which is a
+statement about the feed, not about the shape of the outcome.
 
 ### Using it in the betting path
 

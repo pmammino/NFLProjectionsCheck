@@ -40,6 +40,9 @@ import {
   skill,
   pairedBrierDiff,
   clusterKey,
+  compareByBand,
+  isNearMoney,
+  NEAR_MONEY_MAX,
 } from "./lib/pricing.mjs";
 import { MARKET_SET_NAMES } from "./lib/consensus.mjs";
 import { DEVIG_METHODS, DEFAULT_DEVIG_METHOD } from "./lib/devig.mjs";
@@ -197,6 +200,10 @@ function analyzeSet(quotes, actualsByWeek, a, marketSet) {
 
   const oosMarketRaw = scoreProbabilities(oosRows.map((s) => ({ p: s.pMarket, y: s.y })));
   const oosProjRaw = scoreProbabilities(oosRows.map((s) => ({ p: s.pProj, y: s.y })));
+  // The same out-of-sample rows cut by how close the market's price is to a
+  // coin flip. See compareByBand in lib/pricing.mjs for why the pooled number
+  // alone is the wrong headline.
+  const bands = compareByBand(oos.blend.pooled);
 
   return {
     marketSet,
@@ -210,6 +217,7 @@ function analyzeSet(quotes, actualsByWeek, a, marketSet) {
     oosMarketRaw,
     oosProjRaw,
     oosRows,
+    bands,
   };
 }
 
@@ -366,6 +374,17 @@ function datasetSection(res, season, weeks) {
         `  shipped into a live price on its own.`
     );
   }
+  const corrected = res.samples.filter((x) => x.medianAdj !== null && x.medianAdj !== undefined).length;
+  if (corrected > 0) {
+    console.log(
+      `\n  ${corrected} of ${res.counts.total} markets were priced with a median correction (capture-props\n` +
+        `  --median-correction auto), so their projection probability is not the raw Floor/Median/Ceiling\n` +
+        `  price. The blend below is fitted on a MIX of corrected and uncorrected rows; its disagreement\n` +
+        `  weight is not comparable across that boundary. \`npm run median-correction\` scores the\n` +
+        `  correction on its own, which is the cleaner read.`
+    );
+  }
+
   const slots = slotScores(res.samples);
   if (slots.length > 1) {
     console.log(`\n  By capture (slot) — the same games forecast at different lead times:`);
@@ -498,6 +517,32 @@ function reliabilitySection(title, pairs) {
   );
 }
 
+function bandSection(res) {
+  console.log(`\n  By distance from a coin flip — the market's own price, never ours:`);
+  console.log(
+    `  ${pad("band", 14)}${lpad("share", 7)}${lpad("clusters", 10)}${lpad("mkt Brier", 11)}` +
+      `${lpad("blend-mkt", 11)}${lpad("z", 7)}${lpad("proj-mkt", 11)}${lpad("z", 7)}`
+  );
+  console.log(`  ${"-".repeat(78)}`);
+  for (const b of res.bands) {
+    if (b.n === 0) {
+      console.log(`  ${pad(b.label, 14)}${lpad("0%", 7)}   (no markets)`);
+      continue;
+    }
+    console.log(
+      `  ${pad(b.label, 14)}${lpad(pct(b.share), 7)}${lpad(b.clusters, 10)}${lpad(num(b.marketBrier), 11)}` +
+        `${lpad(sgn(b.blendVsMarket.mean, 4), 11)}${lpad(sgn(b.blendVsMarket.z, 2), 7)}` +
+        `${lpad(sgn(b.projVsMarket.mean, 4), 11)}${lpad(sgn(b.projVsMarket.z, 2), 7)}` +
+        `${b.thin ? "  thin" : ""}`
+    );
+  }
+  console.log(
+    `  Positive = worse than the market. Bands are 0.10 / 0.25 / 0.40 from 50/50; near money\n` +
+      `  is everything inside ${NEAR_MONEY_MAX}. Every price looks fine in the tails because everything does —\n` +
+      `  the gap opens toward the middle, which is where a bet is decided.`
+  );
+}
+
 function walkForwardSection(res) {
   console.log(`\n${"-".repeat(78)}`);
   console.log(`WALK-FORWARD (out of sample) — market set "${res.marketSet}"`);
@@ -535,6 +580,8 @@ function walkForwardSection(res) {
         `${lpad(num(f.score.brier), 13)}${lpad(num(mkt.brier), 14)}${lpad(sgn(skill(f.score.brier, mkt.brier)), 9)}`
     );
   }
+
+  bandSection(res);
 }
 
 function verdictSection(res) {
@@ -551,55 +598,69 @@ function verdictSection(res) {
     return;
   }
 
+  // THE HEADLINE IS THE NEAR-THE-MONEY SLICE, and the all-markets number is
+  // shown only for contrast. A Brier score pooled over every quoted line is
+  // carried by lopsided alternate lines that every model prices correctly, so
+  // it mostly measures how easy the board is. A bet is decided near 50/50,
+  // and that is where the projection and the market actually separate — see
+  // the note on compareByBand in lib/pricing.mjs for the measured size of it.
+  const byKeyBlend = new Map(res.oos.blend.pooled.map((p2) => [p2.key, p2.p]));
+  const byKeyMktRecal = new Map(res.oos.marketRecal.pooled.map((p2) => [p2.key, p2.p]));
+  const nearRows = res.oosRows.filter((r) => isNearMoney(r.pMarket));
+
+  const diffs = (rows) => ({
+    blendVsMarket: pairedBrierDiff(
+      rows.map((r) => ({ p: byKeyBlend.get(r.key), q: r.pMarket, y: r.y, cluster: clusterKey(r) }))
+    ),
+    blendVsRecal: pairedBrierDiff(
+      rows.map((r) => ({ p: byKeyBlend.get(r.key), q: byKeyMktRecal.get(r.key), y: r.y, cluster: clusterKey(r) }))
+    ),
+    projVsMarket: pairedBrierDiff(
+      rows.map((r) => ({ p: r.pProj, q: r.pMarket, y: r.y, cluster: clusterKey(r) }))
+    ),
+  });
+  const near = diffs(nearRows);
+  const all = diffs(res.oosRows);
+
   console.log(
-    `Out of sample: blend Brier ${num(blend.brier)}, market ${num(mkt.brier)}, ` +
+    `Out of sample, all markets: blend Brier ${num(blend.brier)}, market ${num(mkt.brier)}, ` +
       `projection alone ${num(proj.brier)}.`
   );
 
-  // Two comparisons, and conflating them is the easiest way to misread this
-  // whole report.
-  //
-  //   blend vs marketRaw     — is our price better than the book's?
-  //   blend vs marketRecal   — do the PROJECTIONS contribute anything, or is
-  //                            the whole gain a recalibration of the book?
-  //
-  // The first can be comfortably positive while the second is zero, and that
-  // is a completely different business: correcting a market-wide tilt is not
-  // the same product as a projection edge, and it does not survive the market
-  // correcting itself.
-  const byKeyBlend = new Map(res.oos.blend.pooled.map((p2) => [p2.key, p2.p]));
-  const byKeyMktRecal = new Map(res.oos.marketRecal.pooled.map((p2) => [p2.key, p2.p]));
+  if (nearRows.length === 0 || !Number.isFinite(near.blendVsMarket.z)) {
+    console.log(
+      `\n  No usable near-the-money markets (within ${NEAR_MONEY_MAX} of 50/50) out of sample, so\n` +
+        `  there is no headline to give. The all-markets figures above are not a substitute.`
+    );
+    return;
+  }
 
-  const vsMarket = pairedBrierDiff(
-    res.oosRows.map((r) => ({ p: byKeyBlend.get(r.key), q: r.pMarket, y: r.y, cluster: clusterKey(r) }))
-  );
-  const vsRecal = pairedBrierDiff(
-    res.oosRows.map((r) => ({
-      p: byKeyBlend.get(r.key),
-      q: byKeyMktRecal.get(r.key),
-      y: r.y,
-      cluster: clusterKey(r),
-    }))
-  );
+  const row = (label, r, asks) =>
+    `  ${pad(label, 30)}${lpad(sgn(r.mean, 5), 11)}${lpad(num(r.se, 5), 14)}` +
+    `${lpad(sgn(r.z, 2), 8)}${lpad(sgn(r.naiveZ, 2), 10)}   ${asks}`;
 
   console.log(
-    `\n  ${pad("comparison", 30)}${lpad("diff", 11)}${lpad("clustered se", 14)}${lpad("z", 8)}${lpad("naive z", 10)}   asks`
+    `\n  ${pad("NEAR THE MONEY", 30)}${lpad("diff", 11)}${lpad("clustered se", 14)}${lpad("z", 8)}${lpad("naive z", 10)}   asks`
   );
   console.log(`  ${"-".repeat(74)}`);
-  for (const [label, r, asks] of [
-    ["blend vs market", vsMarket, "is our price better than the book's?"],
-    ["blend vs recalibrated market", vsRecal, "do the projections add anything?"],
-  ]) {
-    console.log(
-      `  ${pad(label, 30)}${lpad(sgn(r.mean, 5), 11)}${lpad(num(r.se, 5), 14)}` +
-        `${lpad(sgn(r.z, 2), 8)}${lpad(sgn(r.naiveZ, 2), 10)}   ${asks}`
-    );
-  }
+  console.log(row("blend vs market", near.blendVsMarket, "is our price better than the book's?"));
+  console.log(row("blend vs recalibrated market", near.blendVsRecal, "do the projections add anything?"));
+  console.log(row("projection alone vs market", near.projVsMarket, "is the raw projection any good here?"));
   console.log(
-    `\n  Negative diff = better. ${vsMarket.clusters} clusters (player-weeks) over ` +
-      `${vsMarket.n} markets.\n` +
-      `  The naive z ignores clustering and is shown only to make the size of that\n` +
-      `  mistake visible — it is not the number to act on.`
+    `\n  ${pad("all markets, for contrast", 30)}${lpad("diff", 11)}${lpad("clustered se", 14)}${lpad("z", 8)}`
+  );
+  console.log(
+    `  ${pad("blend vs market", 30)}${lpad(sgn(all.blendVsMarket.mean, 5), 11)}${lpad(num(all.blendVsMarket.se, 5), 14)}${lpad(sgn(all.blendVsMarket.z, 2), 8)}`
+  );
+  console.log(
+    `  ${pad("projection alone vs market", 30)}${lpad(sgn(all.projVsMarket.mean, 5), 11)}${lpad(num(all.projVsMarket.se, 5), 14)}${lpad(sgn(all.projVsMarket.z, 2), 8)}`
+  );
+
+  console.log(
+    `\n  Negative diff = better. Near the money: ${near.blendVsMarket.clusters} clusters (player-weeks) over ` +
+      `${near.blendVsMarket.n} markets,\n` +
+      `  ${pct(nearRows.length / res.oosRows.length)} of everything out of sample. The naive z ignores clustering and is shown\n` +
+      `  only to make the size of that mistake visible — it is not the number to act on.`
   );
 
   const [, globalC, globalB] = res.fits.blend.global;
@@ -609,48 +670,55 @@ function verdictSection(res) {
   );
 
   // The conclusion, stated at the confidence the clustered standard error
-  // actually supports.
-  const beatsMarket = Number.isFinite(vsMarket.z) && vsMarket.z < -2;
-  const worseThanMarket = Number.isFinite(vsMarket.z) && vsMarket.z > 2;
-  const projAdds = Number.isFinite(vsRecal.z) && vsRecal.z < -2;
+  // actually supports, and about the slice that matters.
+  const beatsMarket = Number.isFinite(near.blendVsMarket.z) && near.blendVsMarket.z < -2;
+  const worseThanMarket = Number.isFinite(near.blendVsMarket.z) && near.blendVsMarket.z > 2;
+  const projAdds = Number.isFinite(near.blendVsRecal.z) && near.blendVsRecal.z < -2;
+  const projWorse = Number.isFinite(near.projVsMarket.z) && near.projVsMarket.z > 2;
 
   console.log("");
   if (worseThanMarket) {
-    console.log(
-      `  The blend is WORSE than simply believing the books. Do not ship it.`
-    );
+    console.log(`  Near the money the blend is WORSE than simply believing the books. Do not ship it.`);
   } else if (beatsMarket && projAdds) {
     console.log(
-      `  The blend beats the market, and it still beats the market after the\n` +
-        `  market has been recalibrated — so the projections are carrying real\n` +
+      `  Near the money the blend beats the market, and it still beats the market after\n` +
+        `  the market has been recalibrated — so the projections are carrying real\n` +
         `  information. This is the result that would justify pricing off the blend.`
     );
   } else if (beatsMarket) {
     console.log(
-      `  The blend beats the raw market price, but NOT a simply recalibrated\n` +
-        `  market. So the gain is a correction to the consensus itself, not a\n` +
-        `  projection edge — and on this sample part of that correction is the\n` +
-        `  selection effect described above rather than anything about the books.\n` +
-        `  Worth knowing; not yet a reason to price props off the projections.`
+      `  Near the money the blend beats the raw market price, but NOT a simply\n` +
+        `  recalibrated market. So the gain is a correction to the consensus itself,\n` +
+        `  not a projection edge — and part of that correction is the selection effect\n` +
+        `  described above rather than anything about the books. Worth knowing; not\n` +
+        `  yet a reason to price props off the projections.`
     );
   } else {
     console.log(
-      `  Inconclusive at the sample size actually available. The blend and the\n` +
-        `  market are within 2 clustered standard errors of each other. What this\n` +
-        `  needs is more player-weeks, not a more complex model.`
+      `  Inconclusive at the sample size actually available. Near the money the blend\n` +
+        `  and the market are within 2 clustered standard errors of each other. What\n` +
+        `  this needs is more player-weeks, not a more complex model.`
+    );
+  }
+  if (projWorse) {
+    console.log(
+      `\n  Separately: on its own, the raw projection is significantly WORSE than the book\n` +
+        `  near the money (z ${sgn(near.projVsMarket.z, 2)}). Any lift the blend shows has to come from the market\n` +
+        `  term, which is why the fitted disagreement weight is the number to watch.`
     );
   }
 
-  const ev = evAtBestPrice(res.oosRows, (row) => byKeyBlend.get(row.key));
+  // The money view, restricted to the slice that matters. Over the whole
+  // board the mean EV is dragged by longshot alternate lines where best-of-N
+  // picks the most generous quote on offer — the exact distortion
+  // lib/books.mjs exists to limit.
+  const ev = evAtBestPrice(nearRows, (r) => byKeyBlend.get(r.key));
   if (ev.n) {
     console.log(
-      `\n  Money view: of ${res.oosRows.length} out-of-sample markets the blend calls\n` +
-        `  ${ev.n} +EV at the best book price, median EV ${pct(ev.medianEv)} ` +
+      `\n  Money view, near the money only: of ${nearRows.length} out-of-sample markets the blend calls\n` +
+        `  ${ev.n} +EV at the best BETTABLE book price, median EV ${pct(ev.medianEv)} ` +
         `(mean ${pct(ev.meanEv)}); those\n  bets returned ${pct(ev.realizedRoi)} over ${ev.clusters} player-weeks.\n` +
-        `  Do not read any of this as a return. The mean EV is dragged by longshot\n` +
-        `  alternate lines where best-of-N picks the most generous quote on the\n` +
-        `  board — the exact distortion lib/books.mjs exists to limit — and the\n` +
-        `  realized figure rests on ${ev.clusters} independent games.`
+        `  Do not read any of this as a return: the realized figure rests on ${ev.clusters} independent games.`
     );
   }
 }
@@ -688,6 +756,7 @@ function run() {
             outOfSample: Object.fromEntries(REPORT_MODELS.map((m) => [m, r.oos[m].score])),
             oosMarketRaw: r.oosMarketRaw,
             oosProjRaw: r.oosProjRaw,
+            bands: r.bands,
             fits: r.fits,
           })),
         },

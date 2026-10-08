@@ -76,6 +76,7 @@
 //                                  [--devig-method multiplicative]
 //                                  [--edge-basis ev|novig]
 //                                  [--price-model projection|blend]
+//                                  [--median-correction off|auto]
 //                                  [--price-model-set retail|sharp|all]
 //                                  [--price-model-file data/pricing/…/model.json]
 //                                  [--sides both|over|under]
@@ -124,6 +125,7 @@ import { edgeBucket } from "./lib/edge.mjs";
 import { SLOT_MAIN, slotDir, assertValidSlot } from "./lib/slots.mjs";
 import { consensusProb, estimateHoldByStat, MARKET_SET_NAMES } from "./lib/consensus.mjs";
 import { predict as predictPrice } from "./lib/pricing.mjs";
+import { fitFromData, adjustedPoints, multiplierFor, formatFits } from "./lib/median-correction.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -153,6 +155,7 @@ export const PROPS_COLUMNS = [
   "EdgeBasis", // which of the two the --min-edge filter was applied to
   "DevigMethod",
   "PriceModel", // which model produced OurProb: projection | blend
+  "MedianAdj", // multiplier applied to the projected median before pricing; blank = none
   "Slot", // which capture of the week this is: main (the Tuesday drop) or a later one
   "Bettable", // 1 = a bet could be placed here; 0 = reference price only, never staked
   "LineSource", // live | closing | opening — see historicalToMarkets
@@ -175,6 +178,10 @@ function parseArgs(argv) {
     // inherit by upgrading.
     priceModel: "projection",
     priceModelSet: "retail",
+    // Off by default, like the blend: it changes what the Tuesday drop
+    // publishes, so it is switched on deliberately and not by upgrading.
+    medianCorrectionMode: "off",
+    medianCorrection: null,
     historical: false,
     slot: SLOT_MAIN,
     dryRun: false,
@@ -190,6 +197,7 @@ function parseArgs(argv) {
       case "--kelly-cap": a.kellyCap = Number(next()); break;
       case "--devig-method": a.devigMethod = next(); break;
       case "--price-model": a.priceModel = next(); break;
+      case "--median-correction": a.medianCorrectionMode = next(); break;
       case "--price-model-set": a.priceModelSet = next(); break;
       case "--price-model-file": a.priceModelFile = next(); break;
       case "--edge-basis": a.edgeBasis = next(); break;
@@ -226,6 +234,18 @@ function parseArgs(argv) {
   }
   if (!["projection", "blend"].includes(a.priceModel)) {
     throw new Error("--price-model must be one of: projection, blend");
+  }
+  if (!["off", "auto"].includes(a.medianCorrectionMode)) {
+    throw new Error("--median-correction must be one of: off, auto");
+  }
+  // The blend was fitted on projection probabilities that were NOT corrected.
+  // Feeding it corrected ones would change its input distribution without
+  // refitting it, and the two corrections would be fighting over the same tilt.
+  if (a.medianCorrectionMode === "auto" && a.priceModel === "blend") {
+    throw new Error(
+      "--median-correction auto cannot be combined with --price-model blend: the blend was " +
+        "fitted on uncorrected projection probabilities. Use one or the other."
+    );
   }
   if (!MARKET_SET_NAMES.includes(a.priceModelSet)) {
     throw new Error(`--price-model-set must be one of: ${MARKET_SET_NAMES.join(", ")}`);
@@ -307,7 +327,12 @@ function sumCols(row, cols) {
 // price we will never stake is not worth computing, and refusing here means a
 // retired stat cannot reach an edge set even if a row for it arrives from an
 // archived snapshot or a market alias we did not expect.
-export function ourProbability({ line, statKey }, splits) {
+//
+// `correction` is an optional median correction (lib/median-correction.mjs):
+// for the stats it covers, F/M/C are re-centred before the distribution is
+// built. Null — the default — is exactly the long-standing price. Poisson stats
+// never take one: they use the projected count, not the F/M/C band.
+export function ourProbability({ line, statKey }, splits, correction = null) {
   const statDef = STAT_DEFS[statKey];
   if (!statDef || statDef.bet === false || !splits || !splits.M) return null;
   if (statDef.kind === "poisson") {
@@ -318,7 +343,8 @@ export function ourProbability({ line, statKey }, splits) {
   const f = sumCols(splits.F, statDef.projCols);
   const m = sumCols(splits.M, statDef.projCols);
   const c = sumCols(splits.C, statDef.projCols);
-  return probOverContinuous(line, f, m, c);
+  const pts = adjustedPoints({ F: f, M: m, C: c }, correction, statKey);
+  return probOverContinuous(line, pts.F, pts.M, pts.C);
 }
 
 // ---------------------------------------------------------------------------
@@ -456,8 +482,13 @@ function writeCsvIfChanged(path, csv, a) {
 // P(over) and P(under) sum to 1 after de-vigging, but the PRICES do not, so a
 // market can carry an edge on one side, both, or neither.
 function priceMarket(market, splits, a, reject = null) {
-  const probOver = ourProbability(market, splits);
+  const probOver = ourProbability(market, splits, a.medianCorrection);
   if (probOver === null) return [];
+  // What multiplier priced this row, if any. The support floor below still
+  // gates on the RAW projected median: it asks whether the player is projected
+  // for a real role, which is a statement about the feed, not about the shape
+  // of the outcome.
+  const medianAdj = multiplierFor(a.medianCorrection, market.statKey);
 
   const rawOver = americanToProb(market.overOdds);
   const rawUnder = market.underOdds === null ? null : americanToProb(market.underOdds);
@@ -494,6 +525,7 @@ function priceMarket(market, splits, a, reject = null) {
       oppositeOdds: market.underOdds,
       ourProb: probOver,
       bettable: market.bettable,
+      medianAdj,
       impliedProb: rawOver,
       fairProb: fair,
       hold: devigged ? devigged.hold : null,
@@ -513,6 +545,7 @@ function priceMarket(market, splits, a, reject = null) {
       oppositeOdds: market.overOdds,
       ourProb: probUnder,
       bettable: market.bettable,
+      medianAdj,
       impliedProb: rawUnder,
       fairProb: devigged.fairProbUnder,
       hold: devigged.hold,
@@ -767,6 +800,25 @@ async function main() {
   );
 
   const projections = loadProjections(a.dataDir, a.season, a.week);
+
+  // Median correction, fitted AS OF this week. loadTrainingPairs only reads
+  // weeks strictly before a.week, so pricing week W never sees W's result —
+  // which matters most for a --historical backfill of an old week, where the
+  // later results are all sitting on disk.
+  if (a.medianCorrectionMode === "auto") {
+    const { fits, weeksUsed } = fitFromData({
+      dataDir: join(ROOT, a.dataDir),
+      season: a.season,
+      beforeWeek: a.week,
+    });
+    a.medianCorrection = fits;
+    console.log(
+      weeksUsed.length
+        ? `  median correction, fitted on weeks ${weeksUsed.join(", ")} (strictly before week ${a.week}):`
+        : `  median correction: no completed weeks before week ${a.week} to fit on — nothing applied.`
+    );
+    for (const line of formatFits(fits)) console.log(`    ${line}`);
+  }
   const playerIndex = buildPlayerIndex(loadRoster(a.dataDir, a.season));
   console.log(`  roster: ${playerIndex.size} players available to join against.`);
 
@@ -1006,6 +1058,7 @@ async function main() {
     EdgeBasis: a.edgeBasis,
     DevigMethod: p.oneSided ? "none" : a.devigMethod,
     PriceModel: p.priceModel ?? "projection",
+    MedianAdj: p.medianAdj === null || p.medianAdj === undefined ? "" : p.medianAdj.toFixed(4),
     Slot: a.slot,
     Bettable: p.bettable === false ? 0 : 1,
     LineSource: p.lineSource ?? "live",
@@ -1261,6 +1314,18 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                                    consensus. Only turn this on once the
                                    report shows the blend beating the market
                                    out of sample; see README.
+  --median-correction <m>  off | auto (default: off)
+                           auto = re-centre the projected F/M/C for rushYds
+                                   and recYds before pricing. For those stats
+                                   the projected "Median" is too high as a
+                                   median (about 63% / 56% of actuals land at or
+                                   below it, against a 50% target) while the
+                                   totals are right. Fitted on weeks strictly
+                                   BEFORE the one priced; applied only where
+                                   the shortfall is statistically solid. Each
+                                   row records the multiplier in MedianAdj.
+                                   Cannot be combined with --price-model blend.
+                                   See lib/median-correction.mjs.
   --price-model-set <s>    which fitted market set to price off (default: retail)
   --price-model-file <p>   fit to load (default: data/pricing/{season}/model.json)
   --sides <s>              both | over | under (default: both)

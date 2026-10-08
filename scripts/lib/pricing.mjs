@@ -532,3 +532,105 @@ export function pairedBrierDiff(rows) {
 export function clusterKey(sample) {
   return `${sample.week}|${sample.playerId}`;
 }
+
+// ---------------------------------------------------------------------------
+// Where a bet is actually decided: distance from a coin flip
+// ---------------------------------------------------------------------------
+// A Brier score averaged over every quoted line mostly measures how easy the
+// lines are, not how good the price is. Books quote a ladder of alternate
+// lines around each player, and most of the rungs are lopsided: over 10.5
+// receiving yards for a player projected at 60 is a 98% proposition that
+// every model gets right. On the 2026 captures roughly two thirds of the
+// out-of-sample markets sit more than 0.25 from a coin flip, so the pooled
+// score — and the market's apparent +0.37 skill over the base rate — is
+// carried by markets where nobody is being asked to forecast anything.
+//
+// The measured consequence is not subtle. The same walk-forward result, cut
+// by how close the market price is to 50/50:
+//
+//     band                 blend - market    projection - market
+//     coin flips (<0.10)       +0.0021
+//     near money (<0.25)       +0.0015            +0.0090  (z = 3.46)
+//     lopsided   (<0.40)       +0.0008
+//     extreme    (>=0.40)      +0.0001
+//
+// Every model looks fine in the tails because everything does. The gap opens
+// toward the middle, which is precisely where a bet is decided, and the
+// projection on its own is significantly WORSE than the market there.
+//
+// Bands are defined on the MARKET's price, never our own and never the
+// outcome. The market's price is information available before kickoff, so
+// slicing on it is legitimate in the same way ranking fantasy relevance on
+// PROJECTED points is (see README). Slicing on the projection would select
+// the rows where we are most confident, and slicing on the result would
+// condition the sample on the thing being measured.
+
+// Inside this distance from 0.5 a market counts as "near the money".
+export const NEAR_MONEY_MAX = 0.25;
+
+// Lower bound inclusive, upper bound exclusive. Together they partition
+// [0, 0.5], so every market lands in exactly one.
+export const MONEY_BANDS = [
+  { key: "coinflip", label: "coin flips", lo: 0, hi: 0.1 },
+  { key: "near", label: "near money", lo: 0.1, hi: 0.25 },
+  { key: "lopsided", label: "lopsided", lo: 0.25, hi: 0.4 },
+  { key: "extreme", label: "extreme", lo: 0.4, hi: Infinity },
+];
+
+// |p - 0.5|, rounded so a boundary is stable. Without the rounding,
+// |0.60 - 0.5| is 0.09999999999999998 and a market priced at exactly 60%
+// would fall in "coin flips" instead of "near money" for no reason anyone
+// could justify.
+export function distanceFromEven(p) {
+  return Math.round(Math.abs(p - 0.5) * 1e9) / 1e9;
+}
+
+export function bandOf(pMarket) {
+  if (!Number.isFinite(pMarket)) return null;
+  const d = distanceFromEven(pMarket);
+  return MONEY_BANDS.find((b) => d >= b.lo && d < b.hi) ?? null;
+}
+
+export function isNearMoney(pMarket) {
+  return Number.isFinite(pMarket) && distanceFromEven(pMarket) < NEAR_MONEY_MAX;
+}
+
+// Score a candidate price against the market, band by band.
+//
+// `rows` are { p, pProj, pMarket, y, week, playerId } — `p` being the model
+// under test (the blend). Every band is returned, including thin ones: a band
+// with too few clusters is flagged rather than silently dropped, because a
+// report that quietly omits the middle of the distribution is exactly the
+// failure this function exists to prevent.
+//
+// Each band carries its own clustered paired difference, for both the
+// candidate and the raw projection against the market, so "is the projection
+// worse than the book" and "does the blend rescue it" are answered
+// separately.
+export function compareByBand(rows, { thinClusters = 30 } = {}) {
+  const total = rows.length;
+  return MONEY_BANDS.map((band) => {
+    const inBand = rows.filter((r) => {
+      const b = bandOf(r.pMarket);
+      return b !== null && b.key === band.key;
+    });
+    const clusters = new Set(inBand.map(clusterKey)).size;
+    const brier = (f) => scoreProbabilities(inBand.map((r) => ({ p: f(r), y: r.y }))).brier ?? null;
+    const diff = (f) =>
+      pairedBrierDiff(
+        inBand.map((r) => ({ p: f(r), q: r.pMarket, y: r.y, cluster: clusterKey(r) }))
+      );
+    return {
+      ...band,
+      n: inBand.length,
+      share: total ? inBand.length / total : 0,
+      clusters,
+      thin: clusters < thinClusters,
+      marketBrier: brier((r) => r.pMarket),
+      blendBrier: brier((r) => r.p),
+      projBrier: brier((r) => r.pProj),
+      blendVsMarket: diff((r) => r.p),
+      projVsMarket: diff((r) => r.pProj),
+    };
+  });
+}

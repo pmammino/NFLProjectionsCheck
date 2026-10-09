@@ -29,8 +29,12 @@
 // anything under a floor.
 
 import { STAT_DEFS } from "./markets.mjs";
-import { americanToDecimal } from "./odds.mjs";
+import { americanToProb } from "./odds.mjs";
 import { summarizeClv } from "./clv.mjs";
+import { canonicalBookKey } from "./books.mjs";
+import { bookLabel } from "./lines-index.mjs";
+import { bookVotes } from "./source-weights.mjs";
+import { median, sigmoid } from "./consensus.mjs";
 import { pairedBrierDiff, NEAR_MONEY_MAX } from "./pricing.mjs";
 
 // The captures taken at the time. A slot not listed is treated as a
@@ -122,7 +126,23 @@ export function summarizeBets(rows, { completeWeeks = new Set() } = {}) {
     roiBand: sd !== null && n > 1 ? (2 * sd) / Math.sqrt(n) : null,
     perBetSd: sd,
     roiConservative,
-    clv: summarizeClv(clvResults),
+    clv: clvWithBands(clvResults),
+  };
+}
+
+// The ledger's CLV summary plus how far to trust it: two standard errors of the
+// average CLV, and of the beat rate against a coin flip. A 41% beat rate over 85
+// bets is within 11 points of 50% either way, and the report should say so.
+function clvWithBands(results) {
+  const base = summarizeClv(results);
+  const probs = (results ?? []).filter((r) => r.status === "matched" && r.clvProb !== null).map((r) => r.clvProb);
+  const n = probs.length;
+  const mean = n ? probs.reduce((a, b) => a + b, 0) / n : null;
+  const sd = n > 1 ? Math.sqrt(probs.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)) : null;
+  return {
+    ...base,
+    avgBand: sd !== null ? (2 * sd) / Math.sqrt(n) : null,
+    beatBand: n > 0 ? 2 * Math.sqrt(0.25 / n) : null,
   };
 }
 
@@ -257,4 +277,94 @@ export function asProjectionPriced(row) {
     ModelEdge: (p - fair).toFixed(4),
     PriceModel: "projection",
   };
+}
+
+// ---------------------------------------------------------------------------
+// CLV by book
+// ---------------------------------------------------------------------------
+// The ledger measures a bet's CLV against the SAME book's closing price. That
+// answers "did this book move toward the price we took", and it has a blind spot
+// that matters most for the books we most want to look at: a slow book that
+// never moves has a CLV of about zero against its own close even when its price
+// was stale against everyone else, which is the entire reason to shop there.
+//
+// So each book is measured twice:
+//   own close     the ledger's number: that book's closing price, same line
+//   market close  the closing fair price of the OTHER books on the same line
+//                 (median of their de-vigged prices, at least two of them)
+// The second is the economically relevant one — what the price was worth when
+// the game started — and the first is what the ledger already reports.
+
+// Below this many measurable bets a book's CLV is shown but flagged as thin.
+export const MIN_CLV_FOR_A_BOOK = 20;
+
+// Closing quotes (readPropRow output) grouped into one list of book votes per
+// market, keyed week|player|stat|line. `holdByStat` is for one-sided quotes.
+export function indexClosingConsensus(quotes, { holdByStat = new Map() } = {}) {
+  const groups = new Map();
+  for (const q of quotes) {
+    const key = `${q.week}|${q.playerId}|${q.stat}|${q.line}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(q);
+  }
+  const index = new Map();
+  for (const [key, rows] of groups) {
+    index.set(key, bookVotes(rows, { assumedHold: holdByStat.get?.(rows[0].stat) }));
+  }
+  return index;
+}
+
+// One bet's CLV against the market's close, or null when there is no market to
+// compare with (fewer than `minOthers` other books quoted that exact line at the
+// close). The bet's own book is left out: a price is not compared with itself.
+// `bet` is a ledger row (strings). Positive = the market ended up rating our side
+// more likely than the price we paid implied.
+export function marketClv(bet, index, { minOthers = 2 } = {}) {
+  const votes = index.get(`${bet.Week}|${bet.PlayerID}|${bet.Stat}|${bet.Line}`);
+  if (!votes) return null;
+  const me = canonicalBookKey(bet.Book);
+  const others = votes.filter((v) => v.book !== me);
+  if (others.length < minOthers) return null;
+  const taken = americanToProb(Number(bet.Odds));
+  if (taken === null) return null;
+  const pOver = sigmoid(median(others.map((v) => v.logit)));
+  const pSide = bet.Side === "under" ? 1 - pOver : pOver;
+  return { clvProb: pSide - taken, others: others.length };
+}
+
+// Summarise a set of market-CLV results.
+export function summarizeMarketClv(results) {
+  const rows = (results ?? []).filter((r) => r && Number.isFinite(r.clvProb));
+  const n = rows.length;
+  if (n === 0) return { n: 0, beatRate: null, avg: null, avgBand: null, beatBand: null };
+  const mean = rows.reduce((a, r) => a + r.clvProb, 0) / n;
+  const sd = n > 1 ? Math.sqrt(rows.reduce((a, r) => a + (r.clvProb - mean) ** 2, 0) / (n - 1)) : null;
+  return {
+    n,
+    beatRate: rows.filter((r) => r.clvProb > 0).length / n,
+    avg: mean,
+    avgBand: sd !== null ? (2 * sd) / Math.sqrt(n) : null,
+    beatBand: 2 * Math.sqrt(0.25 / n),
+  };
+}
+
+// Group ledger rows by book (display names and ids drift, so on the canonical
+// key) and summarise each, with CLV against the book's own close (the ledger's)
+// and against the market's. Most bets first.
+export function summarizeByBook(rows, { completeWeeks = new Set(), closingIndex = null } = {}) {
+  const groups = new Map();
+  for (const r of rows) {
+    const key = canonicalBookKey(r.Book);
+    if (!groups.has(key)) groups.set(key, { book: key, label: r.Book, rows: [] });
+    groups.get(key).rows.push(r);
+  }
+  return [...groups.values()]
+    .map((g) => ({
+      book: g.book,
+      // One display name per book, whichever spelling the capture used.
+      label: bookLabel(g.book),
+      summary: summarizeBets(g.rows, { completeWeeks }),
+      market: closingIndex ? summarizeMarketClv(g.rows.map((r) => marketClv(r, closingIndex))) : null,
+    }))
+    .sort((x, y) => y.summary.bets - x.summary.bets || x.label.localeCompare(y.label));
 }

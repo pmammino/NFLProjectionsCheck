@@ -396,8 +396,13 @@ What it prints:
    the pool as it would have stood that week, and boards captured on the pool re-priced with the
    projection, through the same persona engine. The two directions are separate questions and are not
    added together.
-5. **Every persona**, live only.
-6. **Can you read it?** — how many settled bets it takes to see an effect of that size.
+5. **CLV by book** — each book's bets, ROI and CLV, measured two ways: against that book's *own* closing
+   price (what the ledger reports) and against the closing fair price of the *other* books on the same
+   line. They can disagree: a slow book that never moves scores about zero against its own close even
+   when its price was stale against everyone else. Books with fewer than 20 measurable bets are flagged,
+   and bets with no market close (fewer than two other books quoted that exact line) are counted, not hidden.
+6. **Every persona**, live only.
+7. **Can you read it?** — how many settled bets it takes to see an effect of that size.
 
 Most of it will be noise for a long time, and the report says so. A one-unit bet returns a standard
 deviation of roughly 2 units (longshots pay a lot), so a **5% ROI takes about 8,000 settled bets** to see

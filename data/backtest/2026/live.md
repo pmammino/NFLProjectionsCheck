@@ -49,6 +49,24 @@ By the price the board was captured under:
 | projection | 227 | 117 | +19.8% ±41% | 42% of 83, -0.4 pts |
 | pool | 22 | 2 | +164.5% ±529% | 0% of 2, +0.0 pts |
 
+## 3b. CLV by book
+
+Where the bets came from and what their prices were worth. Each bet is taken at the best price across the books, so a book appears here when it was the best price. **Own close** is the ledger's CLV: that book's closing price on the same line. **Market close** is the closing fair price of the *other* books on that line (at least two of them). They can disagree: a slow book that never moves scores about zero against its own close even when its price was stale against everyone else. † = fewer than 20 measurable bets. ±2σ.
+
+| book | bets | settled | ROI (±2σ) | own close: measurable · beat · avg | market close: measurable · beat · avg |
+| --- | --- | --- | --- | --- | --- |
+| DraftKings | 82 | 40 | +32.4% ±58% | 28 · 39% · +0.2 pts | 27 · 56% · -0.0 ±1.3 pts |
+| Hard Rock | 76 | 36 | -28.7% ±31% | 28 · 18% · -2.6 pts | 11 · 36% · -1.0 ±1.5 pts † |
+| BetRivers | 42 | 17 | -13.3% ±75% | 15 · 73% · +1.6 pts † | 16 · 56% · +0.9 ±1.8 pts † |
+| Caesars | 17 | 4 | -1.6% ±114% | 2 · 50% · +0.7 pts † | 2 · 50% · +0.9 ±2.7 pts † |
+| FanDuel | 17 | 10 | +29.2% ±118% | 8 · 50% · +0.1 pts † | 8 · 38% · +0.3 ±2.5 pts † |
+| theScore | 8 | 5 | +457.0% ±685% | 3 · 100% · +3.4 pts † | 2 · 50% · +1.4 ±2.8 pts † |
+| Betr | 3 | 3 | -36.4% ±127% | – | – |
+| BetMGM | 2 | 2 | +76.7% ±28% | 1 · 0% · -2.4 pts † | 2 · 50% · -0.5 ±3.7 pts † |
+| Circa | 2 | 2 | -4.5% ±191% | – | – |
+
+9 books. 181 of 249 bets have no market close: fewer than two other books quoted that exact line at the close, which is common for the one-sided alternate lines the slow books post.
+
 ## 4. The same live boards under the other price
 
 Each live board re-priced under the model it was *not* captured under and run through the same persona engine: boards captured on the projection price with the pool as it would have stood that week (weights fitted on earlier weeks), and boards captured on the pool with the projection price. The two directions are separate questions and are not added together.

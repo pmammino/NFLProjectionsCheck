@@ -34,7 +34,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readCsv, toCsv } from "./lib/csv.mjs";
-import { loadSeason, availableSeasons, isPointInTime, isProjectionPrice } from "./lib/pricing-dataset.mjs";
+import { loadSeason, availableSeasons, isPointInTime, isProjectionPrice, readPropRow } from "./lib/pricing-dataset.mjs";
 import { slotDir } from "./lib/slots.mjs";
 import { PERSONAS } from "./lib/personas.mjs";
 import { median, sigmoid } from "./lib/consensus.mjs";
@@ -54,6 +54,9 @@ import {
   projectionProbOf,
   asProjectionPriced,
   MIN_BETS_FOR_A_VERDICT,
+  MIN_CLV_FOR_A_BOOK,
+  indexClosingConsensus,
+  summarizeByBook,
 } from "./lib/backtest-live.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -282,6 +285,15 @@ function main() {
     [...new Set(firehose.map((r) => r.PriceModel || "projection"))].map((m) => [m, summarizeBets(firehose.filter((r) => (r.PriceModel || "projection") === m), { completeWeeks })])
   );
 
+  // 3b. CLV by book. The closing prices are the live daily closing captures in
+  // data/closing/, which is a different file from the backfilled closing board.
+  const closingDir = join(ROOT, a.dataDir, "closing", String(season));
+  const closingQuotes = weekFiles(closingDir).flatMap((w) =>
+    readCsv(join(closingDir, `week-${pad2(w)}.csv`)).map((row) => readPropRow(row, "closing")).filter(Boolean)
+  );
+  const closingIndex = indexClosingConsensus(closingQuotes, { holdByStat: model.holdByStat });
+  const byBook = summarizeByBook(firehose, { completeWeeks, closingIndex });
+
   // 4. Counterfactual
   let cf = null;
   if (a.counterfactual && boards.length > 0) {
@@ -307,7 +319,7 @@ function main() {
   // 5. Personas
   const personas = PERSONAS.map((p) => ({ id: p.id, label: p.label, summary: summarizeBets(live(loadLedger(a.dataDir, p.id, season)), { completeWeeks }) }));
 
-  const result = { season, minEdge: a.minEdge, liveSlots: a.liveSlots, latestWeek, completeWeeks: [...completeWeeks], boards: boardRows, accuracy, betsByWeek, total, byModel, counterfactual: cf, personas };
+  const result = { season, minEdge: a.minEdge, liveSlots: a.liveSlots, latestWeek, completeWeeks: [...completeWeeks], boards: boardRows, accuracy, betsByWeek, total, byModel, byBook, counterfactual: cf, personas };
   const markdown = render(result);
 
   if (a.json) console.log(JSON.stringify(result, null, 2));
@@ -406,6 +418,29 @@ function render(r) {
       out.push("", "By the price the board was captured under:", "");
       out.push(table(["price", "bets", "settled", "ROI (±2σ)", "CLV: beat the close"], Object.entries(r.byModel).map(([m, s]) => [m, s.bets, s.settled, roiCell(s), clvCell(s)])));
     }
+  }
+
+  out.push("", "## 3b. CLV by book", "");
+  if (r.byBook.length === 0) out.push("No live bets yet.");
+  else {
+    out.push(
+      "Where the bets came from and what their prices were worth. Each bet is taken at the best price across the books, so a book appears here when it was the best price. " +
+        "**Own close** is the ledger's CLV: that book's closing price on the same line. **Market close** is the closing fair price of the *other* books on that line (at least two of them). " +
+        "They can disagree: a slow book that never moves scores about zero against its own close even when its price was stale against everyone else. " +
+        "† = fewer than " + MIN_CLV_FOR_A_BOOK + " measurable bets. ±2σ.",
+      ""
+    );
+    const own = (s) => (s.clv.nMatched === 0 ? "–" : `${s.clv.nMatched} · ${(100 * s.clv.beatRate).toFixed(0)}% · ${s.clv.avgClvProb >= 0 ? "+" : ""}${(100 * s.clv.avgClvProb).toFixed(1)} pts${s.clv.nMatched < MIN_CLV_FOR_A_BOOK ? " †" : ""}`);
+    const mkt = (m) => (!m || m.n === 0 ? "–" : `${m.n} · ${(100 * m.beatRate).toFixed(0)}% · ${m.avg >= 0 ? "+" : ""}${(100 * m.avg).toFixed(1)} ±${m.avgBand === null ? "?" : (100 * m.avgBand).toFixed(1)} pts${m.n < MIN_CLV_FOR_A_BOOK ? " †" : ""}`);
+    out.push(
+      table(
+        ["book", "bets", "settled", "ROI (±2σ)", "own close: measurable · beat · avg", "market close: measurable · beat · avg"],
+        r.byBook.map((b) => [b.label, b.summary.bets, b.summary.settled, roiCell(b.summary), own(b.summary), mkt(b.market)])
+      )
+    );
+    const nBooks = r.byBook.length;
+    const noMarket = r.byBook.reduce((a, b) => a + b.summary.bets - (b.market?.n ?? 0), 0);
+    out.push("", `${nBooks} book${nBooks === 1 ? "" : "s"}. ${noMarket} of ${r.total.bets} bets have no market close: fewer than two other books quoted that exact line at the close, which is common for the one-sided alternate lines the slow books post.`);
   }
 
   out.push("", "## 4. The same live boards under the other price", "");

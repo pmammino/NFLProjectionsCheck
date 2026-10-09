@@ -12,6 +12,11 @@ import {
   projectionProbOf,
   asProjectionPriced,
   MIN_BETS_FOR_A_VERDICT,
+  MIN_CLV_FOR_A_BOOK,
+  indexClosingConsensus,
+  marketClv,
+  summarizeMarketClv,
+  summarizeByBook,
 } from "./backtest-live.mjs";
 
 const bet = (o = {}) => ({
@@ -193,4 +198,100 @@ test("asProjectionPriced rewrites the price and the edges and keeps everything e
   assert.equal(out.Book, "DraftKings");
   assert.equal(out.Slot, "main");
   assert.equal(asProjectionPriced({ ...row, ProjProb: "", PriceModel: "pool" }), null);
+});
+
+// --- CLV by book ----------------------------------------------------------------
+
+test("CLV carries two standard errors, and the beat rate its distance from a coin flip", () => {
+  const rows = [];
+  for (let i = 0; i < 100; i++) rows.push(bet({ ClvStatus: "matched", ClvProb: i % 2 ? "0.05" : "-0.03", ClvPct: "0" }));
+  const c = summarizeBets(rows).clv;
+  assert.equal(c.nMatched, 100);
+  assert.ok(Math.abs(c.avgClvProb - 0.01) < 1e-9);
+  // sd of +0.05/-0.03 is ~0.0402, so two se is ~0.008.
+  assert.ok(Math.abs(c.avgBand - (2 * 0.04019) / 10) < 1e-3, `band ${c.avgBand}`);
+  assert.ok(Math.abs(c.beatBand - 0.1) < 1e-12, "2 * sqrt(0.25/100)");
+  assert.equal(summarizeBets([]).clv.avgBand, null);
+  assert.equal(summarizeBets([]).clv.beatBand, null);
+});
+
+// A closing quote as readPropRow gives it.
+const cq = (book, overOdds, underOdds, o = {}) => ({ book, week: 3, playerId: "p1", stat: "recYds", line: 50.5, side: "over", overOdds, underOdds, ...o });
+const closing = [cq("DraftKings", -110, -110), cq("FanDuel", -120, 100), cq("Caesars", -105, -115), cq("Hard Rock", -110, -110)];
+const mbet = (o = {}) => ({ Week: "3", PlayerID: "p1", Stat: "recYds", Line: "50.5", Side: "over", Odds: "120", Book: "Hard Rock", ...o });
+
+test("market CLV compares the price taken with the OTHER books' closing fair price", () => {
+  const idx = indexClosingConsensus(closing);
+  const r = marketClv(mbet(), idx);
+  // Taking +120 (45.5% implied) when the market closed near 51% is worth about 5 points.
+  assert.equal(r.others, 3, "Hard Rock's own closing quote is left out");
+  assert.ok(r.clvProb > 0.03 && r.clvProb < 0.08, `got ${r.clvProb}`);
+});
+
+test("market CLV leaves out the bet's own book however it is spelled", () => {
+  const idx = indexClosingConsensus(closing);
+  assert.equal(marketClv(mbet({ Book: "Hard Rock" }), idx).others, 3);
+  assert.equal(marketClv(mbet({ Book: "hardrockbet" }), idx).others, 3);
+  assert.equal(marketClv(mbet({ Book: "DraftKings" }), idx).others, 3);
+});
+
+test("an under is the mirror of the over", () => {
+  // A lopsided market, so a bet on the wrong side cannot pass by accident: the
+  // fair price of the over is ~60%.
+  const idx = indexClosingConsensus([cq("DraftKings", -150, 130), cq("FanDuel", -145, 125), cq("Caesars", -155, 135), cq("Hard Rock", -150, 130)]);
+  const over = marketClv(mbet({ Side: "over", Odds: "-110" }), idx);
+  const under = marketClv(mbet({ Side: "under", Odds: "-110" }), idx);
+  // Taking -110 on each side of the same market: the two CLVs add up to what the
+  // margin costs, 1 - 2 * 0.5238 = -4.76 points, whatever the market's fair price is.
+  assert.ok(Math.abs(over.clvProb + under.clvProb - (1 - 2 * (110 / 210))) < 1e-9, `got ${over.clvProb + under.clvProb}`);
+  // And the over is worth much more than the under when the market favours the over.
+  assert.ok(over.clvProb > 0.05 && under.clvProb < -0.1, `over ${over.clvProb}, under ${under.clvProb}`);
+});
+
+test("no market, no CLV: too few other books, a different line, or a different week", () => {
+  const idx = indexClosingConsensus(closing);
+  assert.equal(marketClv(mbet({ Line: "49.5" }), idx), null, "a different line is a different market");
+  assert.equal(marketClv(mbet({ Week: "4" }), idx), null);
+  assert.equal(marketClv(mbet({ PlayerID: "p9" }), idx), null);
+  const thin = indexClosingConsensus([cq("Hard Rock", -110, -110), cq("DraftKings", -110, -110)]);
+  assert.equal(marketClv(mbet(), thin), null, "one other book is not a market");
+  assert.ok(marketClv(mbet(), thin, { minOthers: 1 }) !== null, "unless asked for");
+  assert.equal(marketClv(mbet({ Odds: "x" }), idx), null);
+});
+
+test("market CLV is not the book's own closing price: a book that never moves still shows the gap", () => {
+  // Hard Rock closed exactly where it opened (+120) while everyone else moved to
+  // ~-110/-110. Against its OWN close that bet is worth zero; against the market it
+  // is worth about five points. That difference is the whole reason to report both.
+  const idx = indexClosingConsensus([cq("Hard Rock", 120, -140), cq("DraftKings", -110, -110), cq("FanDuel", -115, -105), cq("Caesars", -105, -115)]);
+  const r = marketClv(mbet({ Odds: "120" }), idx);
+  assert.ok(r.clvProb > 0.03, `got ${r.clvProb}`);
+});
+
+test("summarizeMarketClv: beat rate, average, and bands; empty is null not NaN", () => {
+  const s = summarizeMarketClv([{ clvProb: 0.04 }, { clvProb: -0.02 }, { clvProb: 0.03 }, null, { clvProb: NaN }]);
+  assert.equal(s.n, 3);
+  assert.ok(Math.abs(s.beatRate - 2 / 3) < 1e-12);
+  assert.ok(Math.abs(s.avg - 0.01666667) < 1e-6);
+  assert.ok(s.avgBand > 0 && s.beatBand > 0);
+  assert.deepEqual(summarizeMarketClv([]), { n: 0, beatRate: null, avg: null, avgBand: null, beatBand: null });
+});
+
+test("bets are grouped by book on the canonical key, most bets first, with both CLVs", () => {
+  const idx = indexClosingConsensus(closing);
+  const rows = [
+    mbet({ Book: "Hard Rock", StakeUnits: "1", Status: "won", PnlUnits: "1.2", ClvStatus: "matched", ClvProb: "0", ClvPct: "0" }),
+    mbet({ Book: "hardrockbet", StakeUnits: "1", Status: "lost", PnlUnits: "-1", ClvStatus: "matched", ClvProb: "0", ClvPct: "0" }),
+    mbet({ Book: "DraftKings", Odds: "130", StakeUnits: "1", Status: "lost", PnlUnits: "-1" }),
+  ];
+  const by = summarizeByBook(rows, { closingIndex: idx });
+  assert.deepEqual(by.map((b) => b.book), ["hardrock", "draftkings"]);
+  assert.deepEqual(by.map((b) => b.label), ["Hard Rock", "DraftKings"], "one display name per book, whichever spelling the capture used");
+  assert.equal(by[0].summary.bets, 2, "the two spellings are one book");
+  assert.equal(by[0].summary.settled, 2);
+  assert.equal(by[0].summary.clv.nMatched, 2, "the ledger's own-close CLV");
+  assert.equal(by[0].market.n, 2, "and the market's");
+  assert.ok(by[0].market.avg > 0.03);
+  assert.equal(summarizeByBook(rows)[0].market, null, "no closing data, no market CLV");
+  assert.equal(MIN_CLV_FOR_A_BOOK, 20);
 });

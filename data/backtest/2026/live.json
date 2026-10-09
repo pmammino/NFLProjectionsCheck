@@ -589,7 +589,9 @@
           "avgClvProb": null,
           "avgClvPct": null,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": null,
+          "beatBand": null
         }
       }
     },
@@ -622,7 +624,9 @@
           "avgClvProb": -0.009,
           "avgClvPct": 0.0223,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": 0.015011397455647776,
+          "beatBand": 0.3535533905932738
         }
       }
     },
@@ -655,7 +659,9 @@
           "avgClvProb": 0.0034,
           "avgClvPct": 0.0783,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": 0.014162454998302636,
+          "beatBand": 0.22360679774997896
         }
       }
     },
@@ -688,7 +694,9 @@
           "avgClvProb": -0.0184,
           "avgClvPct": 0.0235,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": 0.017717781716759917,
+          "beatBand": 0.19245008972987526
         }
       }
     },
@@ -721,7 +729,9 @@
           "avgClvProb": 0.0051,
           "avgClvPct": 0.067,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": 0.012296006747517511,
+          "beatBand": 0.1889822365046136
         }
       }
     },
@@ -754,7 +764,9 @@
           "avgClvProb": 0,
           "avgClvPct": 0,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": 0,
+          "beatBand": 0.7071067811865476
         }
       }
     }
@@ -783,7 +795,9 @@
       "avgClvProb": -0.0042,
       "avgClvPct": 0.0501,
       "lineMovedToward": 0,
-      "lineMovedAgainst": 0
+      "lineMovedAgainst": 0,
+      "avgBand": 0.008028696554473592,
+      "beatBand": 0.10846522890932808
     }
   },
   "byModel": {
@@ -811,7 +825,9 @@
         "avgClvProb": -0.0043,
         "avgClvPct": 0.0513,
         "lineMovedToward": 0,
-        "lineMovedAgainst": 0
+        "lineMovedAgainst": 0,
+        "avgBand": 0.008222036613577456,
+        "beatBand": 0.10976425998969035
       }
     },
     "pool": {
@@ -838,10 +854,374 @@
         "avgClvProb": 0,
         "avgClvPct": 0,
         "lineMovedToward": 0,
-        "lineMovedAgainst": 0
+        "lineMovedAgainst": 0,
+        "avgBand": 0,
+        "beatBand": 0.7071067811865476
       }
     }
   },
+  "byBook": [
+    {
+      "book": "draftkings",
+      "label": "DraftKings",
+      "summary": {
+        "bets": 82,
+        "settled": 40,
+        "won": 20,
+        "lost": 20,
+        "push": 0,
+        "unplayed": 39,
+        "noLine": 0,
+        "noSource": 3,
+        "staked": 40,
+        "pnl": 12.976300000000002,
+        "roi": 0.32440750000000007,
+        "roiBand": 0.5843540956886302,
+        "perBetSd": 1.847889902424051,
+        "roiConservative": 0.32440750000000007,
+        "clv": {
+          "n": 77,
+          "nMatched": 28,
+          "nLineMoved": 9,
+          "nNotFound": 40,
+          "beatRate": 0.3929,
+          "avgClvProb": 0.0017,
+          "avgClvPct": 0.0275,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0,
+          "avgBand": 0.009674125963203467,
+          "beatBand": 0.1889822365046136
+        }
+      },
+      "market": {
+        "n": 27,
+        "beatRate": 0.5555555555555556,
+        "avg": -0.0004084426498745956,
+        "avgBand": 0.013112965008810882,
+        "beatBand": 0.19245008972987526
+      }
+    },
+    {
+      "book": "hardrock",
+      "label": "Hard Rock",
+      "summary": {
+        "bets": 76,
+        "settled": 36,
+        "won": 16,
+        "lost": 20,
+        "push": 0,
+        "unplayed": 37,
+        "noLine": 3,
+        "noSource": 0,
+        "staked": 36,
+        "pnl": -10.339999999999996,
+        "roi": -0.2872222222222221,
+        "roiBand": 0.3095275179818543,
+        "perBetSd": 0.9285825539455629,
+        "roiConservative": -0.2872222222222221,
+        "clv": {
+          "n": 75,
+          "nMatched": 28,
+          "nLineMoved": 8,
+          "nNotFound": 39,
+          "beatRate": 0.1786,
+          "avgClvProb": -0.0265,
+          "avgClvPct": 0.0294,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0,
+          "avgBand": 0.016774266049866853,
+          "beatBand": 0.1889822365046136
+        }
+      },
+      "market": {
+        "n": 11,
+        "beatRate": 0.36363636363636365,
+        "avg": -0.010316279726447412,
+        "avgBand": 0.015176178364272033,
+        "beatBand": 0.30151134457776363
+      }
+    },
+    {
+      "book": "betrivers",
+      "label": "BetRivers",
+      "summary": {
+        "bets": 42,
+        "settled": 17,
+        "won": 5,
+        "lost": 12,
+        "push": 0,
+        "unplayed": 18,
+        "noLine": 0,
+        "noSource": 7,
+        "staked": 17,
+        "pnl": -2.2529000000000003,
+        "roi": -0.13252352941176473,
+        "roiBand": 0.7512420905973793,
+        "perBetSd": 1.5487252449714135,
+        "roiConservative": -0.13252352941176473,
+        "clv": {
+          "n": 40,
+          "nMatched": 15,
+          "nLineMoved": 2,
+          "nNotFound": 23,
+          "beatRate": 0.7333,
+          "avgClvProb": 0.0156,
+          "avgClvPct": 0.1108,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0,
+          "avgBand": 0.014393007120412813,
+          "beatBand": 0.2581988897471611
+        }
+      },
+      "market": {
+        "n": 16,
+        "beatRate": 0.5625,
+        "avg": 0.008650100508384634,
+        "avgBand": 0.017853403117081043,
+        "beatBand": 0.25
+      }
+    },
+    {
+      "book": "caesars",
+      "label": "Caesars",
+      "summary": {
+        "bets": 17,
+        "settled": 4,
+        "won": 2,
+        "lost": 2,
+        "push": 0,
+        "unplayed": 11,
+        "noLine": 1,
+        "noSource": 1,
+        "staked": 4,
+        "pnl": -0.06359999999999988,
+        "roi": -0.01589999999999997,
+        "roiBand": 1.1422238134446332,
+        "perBetSd": 1.1422238134446332,
+        "roiConservative": -0.21271999999999996,
+        "clv": {
+          "n": 14,
+          "nMatched": 2,
+          "nLineMoved": 0,
+          "nNotFound": 12,
+          "beatRate": 0.5,
+          "avgClvProb": 0.0067,
+          "avgClvPct": 0.083,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0,
+          "avgBand": 0.0417,
+          "beatBand": 0.7071067811865476
+        }
+      },
+      "market": {
+        "n": 2,
+        "beatRate": 0.5,
+        "avg": 0.009024415049971257,
+        "avgBand": 0.026584328782253475,
+        "beatBand": 0.7071067811865476
+      }
+    },
+    {
+      "book": "fanduel",
+      "label": "FanDuel",
+      "summary": {
+        "bets": 17,
+        "settled": 10,
+        "won": 4,
+        "lost": 6,
+        "push": 0,
+        "unplayed": 7,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 10,
+        "pnl": 2.9197,
+        "roi": 0.29197,
+        "roiBand": 1.1835547826780137,
+        "perBetSd": 1.871364424424062,
+        "roiConservative": 0.29197,
+        "clv": {
+          "n": 16,
+          "nMatched": 8,
+          "nLineMoved": 1,
+          "nNotFound": 7,
+          "beatRate": 0.5,
+          "avgClvProb": 0.0015,
+          "avgClvPct": 0.0387,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0,
+          "avgBand": 0.019318826402538757,
+          "beatBand": 0.3535533905932738
+        }
+      },
+      "market": {
+        "n": 8,
+        "beatRate": 0.375,
+        "avg": 0.003462996728208368,
+        "avgBand": 0.02491611631177709,
+        "beatBand": 0.3535533905932738
+      }
+    },
+    {
+      "book": "thescore",
+      "label": "theScore",
+      "summary": {
+        "bets": 8,
+        "settled": 5,
+        "won": 4,
+        "lost": 1,
+        "push": 0,
+        "unplayed": 2,
+        "noLine": 1,
+        "noSource": 0,
+        "staked": 5,
+        "pnl": 22.849999999999998,
+        "roi": 4.569999999999999,
+        "roiBand": 6.849277334142632,
+        "perBetSd": 7.657724857945733,
+        "roiConservative": 4.569999999999999,
+        "clv": {
+          "n": 7,
+          "nMatched": 3,
+          "nLineMoved": 1,
+          "nNotFound": 3,
+          "beatRate": 1,
+          "avgClvProb": 0.0339,
+          "avgClvPct": 0.1682,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0,
+          "avgBand": 0.02784177516690422,
+          "beatBand": 0.5773502691896257
+        }
+      },
+      "market": {
+        "n": 2,
+        "beatRate": 0.5,
+        "avg": 0.013949626625855985,
+        "avgBand": 0.028342801974152978,
+        "beatBand": 0.7071067811865476
+      }
+    },
+    {
+      "book": "betr",
+      "label": "Betr",
+      "summary": {
+        "bets": 3,
+        "settled": 3,
+        "won": 1,
+        "lost": 2,
+        "push": 0,
+        "unplayed": 0,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 3,
+        "pnl": -1.0909,
+        "roi": -0.3636333333333333,
+        "roiBand": 1.2727333333333333,
+        "perBetSd": 1.1022193989099145,
+        "roiConservative": -0.3636333333333333,
+        "clv": {
+          "n": 0,
+          "nMatched": 0,
+          "nLineMoved": 0,
+          "nNotFound": 0,
+          "beatRate": null,
+          "avgClvProb": null,
+          "avgClvPct": null,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0,
+          "avgBand": null,
+          "beatBand": null
+        }
+      },
+      "market": {
+        "n": 0,
+        "beatRate": null,
+        "avg": null,
+        "avgBand": null,
+        "beatBand": null
+      }
+    },
+    {
+      "book": "betmgm",
+      "label": "BetMGM",
+      "summary": {
+        "bets": 2,
+        "settled": 2,
+        "won": 2,
+        "lost": 0,
+        "push": 0,
+        "unplayed": 0,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 2,
+        "pnl": 1.5341,
+        "roi": 0.76705,
+        "roiBand": 0.28409999999999996,
+        "perBetSd": 0.20088903653509815,
+        "roiConservative": 0.76705,
+        "clv": {
+          "n": 2,
+          "nMatched": 1,
+          "nLineMoved": 1,
+          "nNotFound": 0,
+          "beatRate": 0,
+          "avgClvProb": -0.0238,
+          "avgClvPct": 0.0211,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0,
+          "avgBand": null,
+          "beatBand": 1
+        }
+      },
+      "market": {
+        "n": 2,
+        "beatRate": 0.5,
+        "avg": -0.00499821320690641,
+        "avgBand": 0.036604704841071804,
+        "beatBand": 0.7071067811865476
+      }
+    },
+    {
+      "book": "circasports",
+      "label": "Circa",
+      "summary": {
+        "bets": 2,
+        "settled": 2,
+        "won": 1,
+        "lost": 1,
+        "push": 0,
+        "unplayed": 0,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 2,
+        "pnl": -0.09089999999999998,
+        "roi": -0.04544999999999999,
+        "roiBand": 1.9090999999999998,
+        "perBetSd": 1.3499375559632378,
+        "roiConservative": -0.04544999999999999,
+        "clv": {
+          "n": 0,
+          "nMatched": 0,
+          "nLineMoved": 0,
+          "nNotFound": 0,
+          "beatRate": null,
+          "avgClvProb": null,
+          "avgClvPct": null,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0,
+          "avgBand": null,
+          "beatBand": null
+        }
+      },
+      "market": {
+        "n": 0,
+        "beatRate": null,
+        "avg": null,
+        "avgBand": null,
+        "beatBand": null
+      }
+    }
+  ],
   "counterfactual": {
     "used": [
       {
@@ -914,7 +1294,9 @@
             "avgClvProb": -0.0043,
             "avgClvPct": 0.0513,
             "lineMovedToward": 0,
-            "lineMovedAgainst": 0
+            "lineMovedAgainst": 0,
+            "avgBand": 0.008222036613577456,
+            "beatBand": 0.10976425998969035
           }
         },
         "other": {
@@ -941,7 +1323,9 @@
             "avgClvProb": 0.0346,
             "avgClvPct": 0.2046,
             "lineMovedToward": 0,
-            "lineMovedAgainst": 0
+            "lineMovedAgainst": 0,
+            "avgBand": 0.02495734542993487,
+            "beatBand": 0.30151134457776363
           }
         }
       },
@@ -973,7 +1357,9 @@
             "avgClvProb": 0,
             "avgClvPct": 0,
             "lineMovedToward": 0,
-            "lineMovedAgainst": 0
+            "lineMovedAgainst": 0,
+            "avgBand": 0,
+            "beatBand": 0.7071067811865476
           }
         },
         "other": {
@@ -1000,7 +1386,9 @@
             "avgClvProb": -0.0132,
             "avgClvPct": 0,
             "lineMovedToward": 0,
-            "lineMovedAgainst": 0
+            "lineMovedAgainst": 0,
+            "avgBand": 0.0054978830361796,
+            "beatBand": 0.16012815380508713
           }
         }
       }
@@ -1034,7 +1422,9 @@
           "avgClvProb": -0.0042,
           "avgClvPct": 0.0501,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": 0.008028696554473592,
+          "beatBand": 0.10846522890932808
         }
       }
     },
@@ -1065,7 +1455,9 @@
           "avgClvProb": 0.0316,
           "avgClvPct": 0.0392,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": 0.09209999999999999,
+          "beatBand": 0.7071067811865476
         }
       }
     },
@@ -1096,7 +1488,9 @@
           "avgClvProb": 0.0449,
           "avgClvPct": 0.1616,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": null,
+          "beatBand": 1
         }
       }
     },
@@ -1127,7 +1521,9 @@
           "avgClvProb": 0.0203,
           "avgClvPct": 0.1756,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": 0.021979970680396987,
+          "beatBand": 0.408248290463863
         }
       }
     },
@@ -1158,7 +1554,9 @@
           "avgClvProb": 0.0449,
           "avgClvPct": 0.1616,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": null,
+          "beatBand": 1
         }
       }
     },
@@ -1189,7 +1587,9 @@
           "avgClvProb": 0.025,
           "avgClvPct": 0.1238,
           "lineMovedToward": 0,
-          "lineMovedAgainst": 0
+          "lineMovedAgainst": 0,
+          "avgBand": 0.026407153912865692,
+          "beatBand": 0.5773502691896257
         }
       }
     }

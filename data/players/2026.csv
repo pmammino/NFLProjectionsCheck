@@ -32,6 +32,7 @@ PlayerID,Name,Team,Pos
 10854,Tyler Higbee,LAR,TE
 10856,Carson Wentz,MIN,QB
 10919,Jacoby Brissett,ARI,QB
+10949,Nick Vannett,BAL,TE
 10988,Sterling Shepard,NYJ,WR
 10994,Chris Moore,BAL,WR
 11008,Dak Prescott,DAL,QB
@@ -240,6 +241,7 @@ PlayerID,Name,Team,Pos
 16039,Grant Calcaterra,PHI,TE
 16042,Chig Okonkwo,WAS,TE
 16069,John Metchie,CAR,WR
+16102,Pierre Strong,GB,RB
 16104,Isiah Pacheco,DET,RB
 16108,Ronnie Rivers,LAR,RB
 16163,Jordan Mason,MIN,RB

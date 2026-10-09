@@ -125,7 +125,7 @@ import { edgeBucket } from "./lib/edge.mjs";
 import { SLOT_MAIN, slotDir, assertValidSlot } from "./lib/slots.mjs";
 import { consensusProb, estimateHoldByStat, MARKET_SET_NAMES } from "./lib/consensus.mjs";
 import { predict as predictPrice } from "./lib/pricing.mjs";
-import { weightedConsensusProb, shareFor } from "./lib/source-weights.mjs";
+import { weightedConsensusProb, shareFor, weightsForStat } from "./lib/source-weights.mjs";
 import { loadSourceModel } from "./lib/source-model.mjs";
 import { fitFromData, adjustedPoints, multiplierFor, formatFits } from "./lib/median-correction.mjs";
 
@@ -479,7 +479,7 @@ function loadPriceModel(a) {
 //
 // It keeps both invariants of the blend, for the same reasons: only the Over is
 // pooled and the Under is its complement, and a market with no book price keeps
-// its projection price. `model` is { weights, shares } for THIS week (see
+// its projection price. `model` is { weights, statWeights, shares } for THIS week (see
 // loadSourceModelFor): a capture must never price with a record that has seen
 // its own outcome. `slot` selects the share, because a Thursday projection is
 // not a Tuesday one.
@@ -508,7 +508,9 @@ export function repriceWithPool(priced, model, { devigMethod, slot = SLOT_MAIN }
     const projOver = over ? over.ourProb : 1 - group[0].ourProb;
 
     const pooled = weightedConsensusProb(quotes, {
-      weights: model.weights,
+      // This stat's own weights where it has them: sharp books lead on some stats
+      // and not on others (see lib/source-weights.mjs, fitStatWeights).
+      weights: weightsForStat(model, stat),
       holdByStat,
       stat,
       method: devigMethod,
@@ -549,10 +551,10 @@ export function loadSourceModelFor(a) {
     // No captures yet (a new season): every book at its prior, no projection
     // share. The pool is then an equal-weight average of the books.
     console.warn(`  source model: no history to learn from (${err.message}); pricing on equal weights.`);
-    return { weights: {}, shares: {}, trainedOnWeeks: [], shareWeeks: [] };
+    return { weights: {}, statWeights: {}, shares: {}, trainedOnWeeks: [], shareWeeks: [] };
   }
   const m = model.at(a.week);
-  return { weights: m.weights, shares: m.shares, trainedOnWeeks: m.trainedOnWeeks, shareWeeks: m.shareWeeks };
+  return { weights: m.weights, statWeights: m.statWeights ?? {}, shares: m.shares, trainedOnWeeks: m.trainedOnWeeks, shareWeeks: m.shareWeeks };
 }
 
 function fromFile(path, a) {
@@ -572,7 +574,7 @@ function fromFile(path, a) {
   }
   // The file stores each cell's share as a number; the model wants { share }.
   const shares = Object.fromEntries(Object.entries(entry.projectionShare ?? {}).map(([k, v]) => [k, { share: v }]));
-  return { weights: entry.weights ?? {}, shares, trainedOnWeeks: entry.trainedOnWeeks ?? [], shareWeeks: entry.shareWeeks ?? [] };
+  return { weights: entry.weights ?? {}, statWeights: entry.statWeights ?? {}, shares, trainedOnWeeks: entry.trainedOnWeeks ?? [], shareWeeks: entry.shareWeeks ?? [] };
 }
 
 const csvRowCount = (csv) => Math.max(0, csv.trim().split("\n").length - 1);
@@ -1197,7 +1199,7 @@ async function main() {
       `  re-priced ${changed} of ${priced.length} candidates off the weighted pool ` +
         `(books weighted on weeks ${model.trainedOnWeeks.join(", ") || "none — equal weights"}).`
     );
-    console.log(`    heaviest books: ${heaviest || "none yet"}`);
+    console.log(`    heaviest books: ${heaviest || "none yet"} (global; ${Object.keys(model.statWeights ?? {}).length} stats also carry their own weights)`);
     console.log(`    projection's share of the price (${a.slot} capture): ${earned || "none earned yet — priced on the books alone"}`);
   }
 

@@ -1121,6 +1121,19 @@ about 40% of markets and carries by far the most volume, so under the median it
 pulled the consensus the most while telling it the least. A book with no record
 keeps a prior weight (0.15); evidence outweighs the prior at 150 player-weeks.
 
+**The weights are per stat.** A book's lead is not one number. On receptions the sharp
+books lead hard (Pinnacle 0.99, Circa 1.05, BetMGM 0.73) and the retail books barely do
+(Caesars 0.10, DraftKings 0.18, Hard Rock −0.04); on receiving yards the retail books
+lead almost as much as the sharp ones (0.59–0.70 against 0.64–0.76). One weight per book
+averages the two and is wrong for both. So each (stat, book) has its own lead, pulled
+toward that book's *global* weight by the same prior (`fitStatWeights`): a stat with
+little data prices like the global model and departs from it only as evidence arrives.
+Out of sample (every week priced with weights fitted on earlier weeks) the per-stat
+weights predict a sharp book's close better than the global ones: against Pinnacle MSE
+0.0165 → 0.0160 (z −3.6), against Circa 0.0112 → 0.0109 (z −2.3), and by stat most on
+receptions. Against outcomes they make no detectable difference (Brier −0.00002, z −0.9),
+as with the global weights. `npm run source-weights` prints the leads by stat (§2b).
+
 These weights describe an **early** board — Tuesday or Thursday, hours to days
 before kickoff. At the close the books agree with each other and there is nothing
 left for them to lead. And **live Tuesday captures carry no Pinnacle yet** (0 rows

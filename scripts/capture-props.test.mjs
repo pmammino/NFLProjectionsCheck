@@ -228,7 +228,7 @@ test("repriceWithBlend is a no-op without a fit", () => {
 // share it has earned. As with the blend, the point is the wiring — which prices
 // go in, which invariants hold.
 
-const modelOf = (weights = {}, shares = {}) => ({ weights, shares });
+const modelOf = (weights = {}, shares = {}, statWeights = {}) => ({ weights, statWeights, shares });
 const earned = (stat, slot, share) => ({ [`${stat}|${slot}`]: { share } });
 
 test("repriceWithPool prices off the books and relabels the row", () => {
@@ -272,6 +272,23 @@ test("repriceWithPool: a share is for one stat on one kind of capture", () => {
   const matching = mk();
   repriceWithPool(matching, modelOf({}, earned("rushYds", "thursday", 0.5)), { slot: "thursday" });
   assert.ok(matching[0].ourProb > base[0].ourProb);
+});
+
+test("repriceWithPool prices each stat with that stat's own book weights", () => {
+  // The same two books for two stats. Globally DraftKings is trusted; on rushYds
+  // (the candidate's stat) Pinnacle is. The price must follow the stat.
+  const mk = (statKey) => [
+    { ...candidate({ odds: -110, oppositeOdds: -110, book: "DraftKings" }), statKey },
+    { ...candidate({ odds: 140, oppositeOdds: -170, book: "Pinnacle" }), statKey },
+  ];
+  const w = { "draftkings:2": 0.9, "pinnacle:2": 0.05 };
+  const sw = { rushYds: { "draftkings:2": 0.05, "pinnacle:2": 0.9 } };
+  const rush = mk("rushYds");
+  const rec = mk("receptions");
+  repriceWithPool(rush, modelOf(w, {}, sw));
+  repriceWithPool(rec, modelOf(w, {}, sw));
+  // Pinnacle quotes the over as the underdog; trusting it lowers the price.
+  assert.ok(rush[0].ourProb < rec[0].ourProb - 0.03, `rushYds ${rush[0].ourProb} vs receptions ${rec[0].ourProb}`);
 });
 
 test("repriceWithPool keeps the two sides of a market complementary", () => {
@@ -330,10 +347,12 @@ const load = (path, week) => loadSourceModelFor({ sourceWeightsFile: path, week,
 
 test("a pinned file is read for the week being priced, with the projection's shares", () => {
   const path = weightsFile({
-    "2": { weights: { "a:2": 0.2 }, projectionShare: { "recYds|main": 0.1 }, trainedOnWeeks: [1], shareWeeks: [1] },
+    "2": { weights: { "a:2": 0.2 }, statWeights: { recYds: { "a:2": 0.4 } }, projectionShare: { "recYds|main": 0.1 }, trainedOnWeeks: [1], shareWeeks: [1] },
     "3": { weights: { "a:2": 0.3 }, projectionShare: { "recYds|main": 0.2 }, trainedOnWeeks: [1, 2], shareWeeks: [1, 2] },
   });
   assert.deepEqual(load(path, 2).weights, { "a:2": 0.2 });
+  assert.deepEqual(load(path, 2).statWeights, { recYds: { "a:2": 0.4 } });
+  assert.deepEqual(load(path, 3).statWeights, {}, "an entry from before per-stat weights loads as none");
   assert.equal(load(path, 3).shares["recYds|main"].share, 0.2);
   assert.deepEqual(load(path, 3).trainedOnWeeks, [1, 2]);
 });
@@ -369,7 +388,7 @@ test("with no history at all the model is empty and pricing proceeds on equal we
   console.warn = () => {};
   try {
     const m = loadSourceModelFor({ dataDir: dir, season: 2031, week: 1 });
-    assert.deepEqual(m, { weights: {}, shares: {}, trainedOnWeeks: [], shareWeeks: [] });
+    assert.deepEqual(m, { weights: {}, statWeights: {}, shares: {}, trainedOnWeeks: [], shareWeeks: [] });
   } finally {
     console.warn = warn;
   }

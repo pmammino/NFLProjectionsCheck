@@ -249,6 +249,11 @@ w_s = (clusters·lead_s + K·prior) / (clusters + K)      K = 150 player-weeks, 
 L_books = Σ w_s·clip(L_s, median ± 1.5) / Σ w_s
 ```
 
+The weights are **per stat**: each (stat, book) lead is pulled toward that book's global weight by the same
+`K = 150` prior, `w_{stat,s} = (clusters·lead_{stat,s} + K·w_s) / (clusters + K)`, so a thin stat prices like the
+global model. Out of sample this predicts the sharp close better than global weights (Pinnacle MSE −0.0005,
+z −3.6; Circa −0.0002, z −2.3); against outcomes it changes nothing detectable.
+
 **Stats — the projection.** One parameter per (stat, slot), fitted against
 outcomes with the books as the offset:
 
@@ -334,7 +339,7 @@ pocket of value in the extreme discrepancies. (Splitting by whether the projecti
 asymmetric, +0.27 vs −0.40, but that is the missing-zero-row tilt again: it makes over disagreements look
 informative and under ones anti-informative.)
 
-**The books should be weighted by stat; the projection earns a share on one.**
+**The books should be weighted by stat (now built); the projection earns a share on one.**
 - *Books.* Each book's lead differs by stat. On receptions the sharp books lead hard (Pinnacle 0.99, Circa
   1.05, BetMGM 0.73) while the retail books barely do (Caesars 0.10, DraftKings 0.18, FanDuel 0.03–0.09,
   Hard Rock −0.04). On receiving yards the retail books lead almost as much as the sharp ones (0.59–0.70 vs

@@ -434,15 +434,66 @@ export function fitSourceWeights(assessment, { priorClusters = PRIOR_CLUSTERS, p
   return { weights, detail };
 }
 
+// ---------------------------------------------------------------------------
+// Weights by stat
+// ---------------------------------------------------------------------------
+// A book's lead is not one number. On 2026 weeks 1-4 the sharp books lead hard on
+// receptions (Pinnacle 0.99, Circa 1.05, BetMGM 0.73) while the retail books
+// barely do (Caesars 0.10, DraftKings 0.18); on receiving yards the retail books
+// lead almost as much as the sharp ones (0.59-0.70 against 0.64-0.76). A single
+// weight per book averages those and is wrong for both.
+//
+// So each (stat, book) gets its own lead, pulled toward that book's GLOBAL weight
+// by the same prior as before:
+//
+//     w = (clusters·lead + K·global) / (clusters + K)
+//
+// The global weight is the prior rather than a flat 0.15, so a stat with little
+// data prices like the global model and only departs from it as evidence
+// arrives. Weights fitted this way predicted a sharp book's closing price better
+// than global weights in every stat tested, out of sample (receptions MSE −0.0022,
+// z −3.7; all stats −0.0007 against Pinnacle, z −4.1, and −0.0004 against Circa,
+// z −3.1).
+export function fitStatWeights(pairs, globalWeights = {}, { priorClusters = PRIOR_CLUSTERS, priorWeight = PRIOR_WEIGHT } = {}) {
+  const byStat = new Map();
+  for (const p of pairs) {
+    if (!byStat.has(p.stat)) byStat.set(p.stat, []);
+    byStat.get(p.stat).push(p);
+  }
+  const out = {};
+  for (const [stat, ps] of byStat) {
+    const assessment = assessSources(ps);
+    const w = {};
+    for (const [key, s] of Object.entries(assessment)) {
+      if (key === PROJECTION_SOURCE) continue;
+      const base = Number.isFinite(globalWeights[key]) ? globalWeights[key] : priorWeight;
+      const evidence = Number.isFinite(s.lead) ? Math.max(0, s.lead) : base;
+      const c = Number.isFinite(s.clusters) ? s.clusters : 0;
+      w[key] = Math.max(MIN_WEIGHT, (c * evidence + priorClusters * base) / (c + priorClusters));
+    }
+    if (Object.keys(w).length > 0) out[stat] = w;
+  }
+  return out;
+}
+
+// The weights to price one stat with: the stat's own where it has them, the
+// global weight for any book it has not seen, and the prior for any book neither
+// has. `model` is anything carrying `weights` and (optionally) `statWeights`.
+export function weightsForStat(model, stat) {
+  return { ...(model?.weights ?? {}), ...(model?.statWeights?.[stat] ?? {}) };
+}
+
 // The weights as they stood going INTO `week`: fitted on weeks strictly before
 // it and on nothing else. This is the only way a weight may be used to price
 // or to score a week, for the reason median-correction.mjs gives — a weight
-// that had seen the week it prices is grading with the answer in hand.
+// that had seen the week it prices is grading with the answer in hand. Returns
+// the global weights and the per-stat ones, both from the same earlier weeks.
 export function weightsAsOf(pairs, week, opts = {}) {
   const prior = pairs.filter((p) => p.week < week);
   const assessment = assessSources(prior);
   const fit = fitSourceWeights(assessment, opts);
-  return { ...fit, assessment, weeksUsed: [...new Set(prior.map((p) => p.week))].sort((a, b) => a - b) };
+  const statWeights = fitStatWeights(prior, fit.weights, opts);
+  return { ...fit, statWeights, assessment, weeksUsed: [...new Set(prior.map((p) => p.week))].sort((a, b) => a - b) };
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +504,7 @@ export const shareKey = (stat, slot) => `${stat}|${slot}`;
 
 // One observation per market on a point-in-time board: the books' pooled logit,
 // the projection's logit, and what happened. `quotes` are readPropRow() outputs,
-// `weightsFor(week)` the books' weights AS OF that week (a market priced in
+// `weightsFor(week, stat)` the books' weights AS OF that week (a market priced in
 // week 3 is judged against the pool as it stood in week 3), and `outcomeOf(q)`
 // returns 1, 0 or null for a quote's market.
 export function buildShareSamples(quotes, { weightsFor = () => ({}), outcomeOf, holdByStat = new Map(), method = DEFAULT_DEVIG_METHOD, pointInTime = isPointInTime } = {}) {
@@ -476,7 +527,7 @@ export function buildShareSamples(quotes, { weightsFor = () => ({}), outcomeOf, 
     const assumedHold = holdByStat.get?.(first.stat) ?? DEFAULT_ASSUMED_HOLD;
     const books = bookVotes(rows, { assumedHold, method });
     if (books.length < MIN_OTHERS + 1) continue;
-    const pooled = poolVotes(books, { weights: weightsFor(first.week) });
+    const pooled = poolVotes(books, { weights: weightsFor(first.week, first.stat) });
     if (Math.abs(pooled.prob - 0.5) > SHARE_BAND) continue;
 
     out.push({

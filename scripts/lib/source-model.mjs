@@ -16,7 +16,7 @@ import { loadSeason, actualFor, isPointInTime } from "./pricing-dataset.mjs";
 import { gradeOutcome } from "./grading.mjs";
 import { estimateHoldByStat } from "./consensus.mjs";
 import { isBettableStat } from "./markets.mjs";
-import { buildLeadPairs, buildShareSamples, weightsAsOf, sharesAsOf } from "./source-weights.mjs";
+import { buildLeadPairs, buildShareSamples, weightsAsOf, sharesAsOf, weightsForStat } from "./source-weights.mjs";
 
 // 1, 0, or null when the market cannot be graded (no actuals row, or a push).
 export function outcomeFrom(actualsByWeek, q) {
@@ -39,7 +39,7 @@ export function buildSourceModel(quotes, actualsByWeek, { includeRetired = false
   const pairs = buildLeadPairs(usable, { holdByStat });
 
   // A market priced in week w is judged against the books' pool as it stood
-  // going into week w, not against the final one.
+  // going into week w (with that stat's weights), not against the final one.
   const memo = new Map();
   const weightsAt = (week) => {
     if (!memo.has(week)) memo.set(week, weightsAsOf(pairs, week, opts));
@@ -48,7 +48,7 @@ export function buildSourceModel(quotes, actualsByWeek, { includeRetired = false
 
   // Only a live capture's projection is the one we had at the time.
   const samples = buildShareSamples(usable.filter(isPointInTime), {
-    weightsFor: (w) => weightsAt(w).weights,
+    weightsFor: (w, stat) => weightsForStat(weightsAt(w), stat),
     outcomeOf: (q) => outcomeFrom(actualsByWeek, q),
     holdByStat,
   });
@@ -68,6 +68,7 @@ export function buildSourceModel(quotes, actualsByWeek, { includeRetired = false
       return {
         week,
         weights: w.weights,
+        statWeights: w.statWeights,
         detail: w.detail,
         assessment: w.assessment,
         trainedOnWeeks: w.weeksUsed,

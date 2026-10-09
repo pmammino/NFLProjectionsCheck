@@ -260,7 +260,7 @@ share = clip( shrunk_estimate − 1·SE , 0, 0.75 )       prior 0, worth 150 pla
 Both are fitted **as of a week** (strictly earlier weeks only), on live captures for
 the projection (a backfilled board's projection is the week's *final* snapshot: against
 it the market appears to follow the projection by ~8%, z ≈ 10; against the one it had on
-Tuesday, ~0.8%, z ≈ 2 — the same news, not a lead). `ProjProb` records what the
+Tuesday, ~0.8%, z ≈ 2 — it has caught up with the market, not led it). `ProjProb` records what the
 projection alone said on every row, because `OurProb` is the pool's after re-pricing.
 
 2026 weeks 1–4: weights Pinnacle 0.72, BetMGM 0.47, Circa 0.37, theScore 0.36,
@@ -285,19 +285,19 @@ the weighted retail books.
 ### 4c. Why the projection earns so little
 
 **Plain English.** Four things could make a projection lose to the books: it is
-*late* (the books priced news it hasn't read), its *middle* is in the wrong place,
+*early* (read before it has settled), its *middle* is in the wrong place,
 its *band* is too narrow (too sure of itself), or its *tails* are too thin. Tested
 separately on weeks 2–4 against the book at the same moment, near the money:
 
 | cause | result |
 |---|---|
-| **late** | the biggest. Gap to the closing book **+0.0178** on Tuesday's snapshot, **+0.0073** on the last snapshot before the game: the projection gets better every day |
+| **late** | the biggest. Gap to the closing book **+0.0178** on Tuesday's snapshot, **+0.0073** on the last snapshot before the game: the projection gets better every day. It is not shown to be news the books priced: the Tuesday gap is as large where the book barely moved after the open (+0.0194) as where it moved a lot (+0.0145) |
 | **band too narrow** | second. Widening 1.75× (pre-kickoff) takes +0.0073 → +0.0041; 2.5× on Tuesday's, +0.0178 → +0.0119 |
 | **tails too thin** | negligible: Student-t with the same quartiles moves the gap ≤ 0.0003. The tail miscalibration is real (the projection says 2%, the book and the outcomes 9–12%) but small in Brier terms |
 | **middle in the wrong place** | rushing and receiving yards only; about a quarter of the gap (median correction) |
 
 So the problem is not "the books have many prices and we have one"; it is that the
-books have *fresh* prices and the projection is read on Tuesday. With a fresh
+projection is worse early in the week than late, and it is read on Tuesday. With a fresh
 snapshot the projection earns a share on the volume stats — against outcomes
 0.53 ± 0.46 on receptions (z 2.3), 0.25 on receiving yards — and negative on
 passing yards, where the books simply know more (weather, matchup, pace). With

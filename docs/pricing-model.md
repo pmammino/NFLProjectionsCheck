@@ -310,6 +310,57 @@ scales both half-spreads; each is scored by the Brier gap to the book at the sam
 moment, clustered on (week, player). Reproduce with `npm run projection-miss`
 (needs a full clone: the daily snapshots live in git history).
 
+### 4d. Is there value in big disagreements, in stat-specific weights, or in a two-stage blend?
+
+Research on 2026 weeks 2–4, point-in-time (Tuesday's snapshot against the opening book; the last
+snapshot before the game against the closing book). These are ad-hoc analyses, not scripts in the
+repo. Shares are fitted against outcomes **with an intercept**, which absorbs a +0.1 to +0.5 logit tilt
+that the actuals feed's missing zero-stat rows put into outcomes. The tilt barely moves the shares
+(receptions 0.54 → 0.51, receiving yards 0.24 → 0.11, all stats 0.11 → 0.02), so the earlier receptions
+share stands and the receiving-yards share was partly that bias.
+
+**Large disagreements carry no extra information.** The projection's share, by how far it sits from the book:
+
+| disagreement (logit; ≈ prob. points) | Tuesday vs open | pre-kickoff vs close |
+|---|---|---|
+| 0.25–0.5 (≈ 8) | −0.10 ± 0.42 | −0.12 ± 0.42 |
+| 0.5–1 (≈ 13) | +0.07 ± 0.29 | +0.11 ± 0.28 |
+| above 1 (≈ 13–20) | **−0.02 ± 0.12** | **−0.01 ± 0.15** |
+
+The trend with size is flat (slope +0.00 ± 0.08). The biggest disagreements are about as reliable as the
+smallest, which is to say not at all, and they are measured with decent precision. That supports the
+20-point market-disagreement cap in `calibration.mjs`: a big gap from the book is our error. There is no
+pocket of value in the extreme discrepancies. (Splitting by whether the projection says over or under looks
+asymmetric, +0.27 vs −0.40, but that is the missing-zero-row tilt again: it makes over disagreements look
+informative and under ones anti-informative.)
+
+**The books should be weighted by stat; the projection earns a share on one.**
+- *Books.* Each book's lead differs by stat. On receptions the sharp books lead hard (Pinnacle 0.99, Circa
+  1.05, BetMGM 0.73) while the retail books barely do (Caesars 0.10, DraftKings 0.18, FanDuel 0.03–0.09,
+  Hard Rock −0.04). On receiving yards the retail books lead almost as much as the sharp ones (0.59–0.70 vs
+  0.64–0.76). Rushing sits between; passing yards is too thin to read (73 player-weeks). Weights fitted per
+  stat, shrunk toward the global weights, predict the sharp close better than global weights in every cell I
+  could test, out of sample: receptions −0.0022 MSE (z −3.7), receiving yards −0.0004 (z −4.0), all stats
+  −0.0007 against Pinnacle (z −4.1) and −0.0004 against Circa (z −3.1). Real and modest.
+- *Projection.* With a fresh snapshot: receptions **0.51 ± 0.47**, receiving yards 0.11 ± 0.39, rushing yards
+  0.41 ± 0.66, passing yards −1.4 ± 1.4. With Tuesday's: about 0 everywhere. Receptions is the only cell
+  distinguishable from zero, and it is also the stat where the retail books are slowest, which is consistent
+  with the projection's volume signal adding something there. That is a coincidence to watch, not a result.
+
+**The two-stage blend is the same model.** "Treat the projection as a book, weight it, then blend that into the
+market as another book" is, in logit space, `L_M + γ·(L_B − L_M)` with `L_B = L_M + β·(L_P − L_M)`, which
+equals `L_M + (γβ)·(L_P − L_M)`: one share, checked numerically to 1e-12. Assessing the blend as a book by
+lead gives the projection's own lead back, rescaled. Walk-forward (weeks 3–4, trained on earlier weeks), the
+single-stage and two-stage versions, in logit and in probability space, are identical to the market, because
+after one or two weeks every fitted share is still zero. The one variant that differed, a fitted blend that
+also recalibrates the market (intercept `a`, slope `c`), was **worse**: +0.009 Brier (z 2.1) on Tuesday and
++0.007 (z 1.7) pre-kickoff, because the intercept learns the missing-zero tilt and bets overs. Do not add it.
+
+**The ceiling is small whatever the structure.** Fitting the best per-stat shares on the same weeks they are
+scored on, an upper bound, gains 0.0004 Brier overall on Tuesday's snapshot and 0.0006 pre-kickoff
+(receptions +0.0018, receiving yards +0.0008, rushing and passing about 0). No arrangement of weights can
+extract more than that from the current projection. A better projection is the lever, not a cleverer blend.
+
 ---
 
 ## 5. How we decide whether it works

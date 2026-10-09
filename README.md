@@ -364,6 +364,54 @@ closing-line value is for.
    question — using the books' prices as an *input* to our own, and scoring the
    result with Brier and log loss — see **Pricing lines** below.
 
+### The live backtest — the only one worth reading
+
+```bash
+npm run backtest-live                   # prints the report
+npm run backtest-live -- --write        # data/backtest/{season}/live.md + live.json
+```
+
+`.github/workflows/backtest-weekly.yml` regenerates it every Tuesday morning and commits
+`data/backtest/{season}/live.md`. It refreshes the actuals first, re-runs the persona replay (the
+report reads the ledgers), then reports.
+
+**Only the captures taken at the time count** — the Tuesday, Thursday and Saturday drops. A
+backfilled board (opening, closing) is a reconstruction with hindsight in it, in two ways: each
+book's "opening" price is its first-ever price, posted at a different moment, so one book's first price
+against another's later first price looks like an edge nobody could have seen; and it is priced from
+the week's *final* projection, which has read everything since. On the 2026 backfills the pool's ROI
+was +19.5% on the opening board and +7.4% on the closing one, and none of that is a trading result.
+Backfills are excluded by slot (`--live-slots` changes the list); a "live" file that contains anything
+but live rows is flagged in the report.
+
+What it prints:
+
+1. **Boards** — what each live capture contained: rows, markets, books, Pinnacle rows, how much was
+   one-sided, which price it was captured under.
+2. **Pricing on live boards** — Brier of the book, the projection and the pool against what happened,
+   near the money, clustered by player-week.
+3. **Bets** — the Firehose (every bettable edge of at least 3%, one unit, best price) by week and slot:
+   settled and pending bets, ROI with a two-sigma band, ROI if every no-stat-line over lost, and CLV.
+4. **The same boards under the other price** — boards captured on the projection price re-priced with
+   the pool as it would have stood that week, and boards captured on the pool re-priced with the
+   projection, through the same persona engine. The two directions are separate questions and are not
+   added together.
+5. **Every persona**, live only.
+6. **Can you read it?** — how many settled bets it takes to see an effect of that size.
+
+Most of it will be noise for a long time, and the report says so. A one-unit bet returns a standard
+deviation of roughly 2 units (longshots pay a lot), so a **5% ROI takes about 8,000 settled bets** to see
+at two sigma, and the report refuses a verdict under 200. CLV resolves much faster because it is a price
+difference rather than a coin flip, but it is partly mechanical (a slow book's off-market price stays
+off-market until the close). Pending bets in a finished week have no stat line — for an over, almost
+always a loss the settlement cannot see, because the actuals feed omits all-zero rows — so the report
+shows ROI with those counted as losses alongside the ledger's.
+
+As of 2026 week 5 it has 119 settled live bets (+22.2% ±41%, "too few to say"), the projection price on
+five Tuesday boards and the pool on one Thursday board. Re-priced with the pool, the five projection-priced
+boards leave **12 bets where the projection price left 227**: the pool finds almost nothing at the edge bar
+on a Tuesday board.
+
 ### The personas
 
 Nobody tails four hundred edges a week. `scripts/lib/personas.mjs` defines
@@ -692,6 +740,7 @@ scripts/median-correction.mjs             is the projected Median in the right p
 scripts/source-weights.mjs                the books' weights and the projection's share
                                           of the price, as of each week
 scripts/projection-miss.mjs               where, and why, the projection loses to the books
+scripts/backtest-live.mjs                 the live-only backtest: ledger, pricing, counterfactual
 scripts/build-lines-data.mjs              compact the captured board for the Line Pricer tab
 ```
 
@@ -709,6 +758,7 @@ npm run simulate -- --persona kelly --dry-run      # one persona, no writes
 | `ingest-weekly.yml` | daily **13:00** | RotoWire projections + actuals, the player roster, then replays personas |
 | `props-weekly.yml` | **Tue 14:00** | The drop: publish edges (slot `main`), replay personas |
 | `props-midweek.yml` | **Thu 15:00** | The second drop: the same once the books have posted the board (slot `thursday`) |
+| `backtest-weekly.yml` | **Tue 12:30** | Refresh actuals, replay personas, regenerate the live backtest report (`data/backtest/`) |
 | `props-saturday.yml` | **Sat 15:00** | The late-week drop: refreshes projections, then the same, leaving out games already played (slot `saturday`) |
 | `closing-lines.yml` | daily **15:00** | Record closing lines for games kicking off soon |
 | `props-backfill.yml` | manual | Rebuild a past week's board at a chosen moment |

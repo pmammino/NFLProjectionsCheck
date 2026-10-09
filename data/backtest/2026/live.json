@@ -1,0 +1,1197 @@
+{
+  "season": 2026,
+  "minEdge": 0.03,
+  "liveSlots": [
+    "main",
+    "thursday",
+    "saturday"
+  ],
+  "latestWeek": 5,
+  "completeWeeks": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "boards": [
+    {
+      "slot": "main",
+      "week": 1,
+      "path": "/home/user/NFLProjectionsCheck/data/props/2026/week-01.csv",
+      "stats": {
+        "rows": 5382,
+        "markets": 1351,
+        "books": 9,
+        "pinnacleRows": 0,
+        "oneSidedShare": 0,
+        "bettable": 5382,
+        "edges": 1606,
+        "priceModels": {
+          "projection": 5382
+        },
+        "lineSources": {
+          "live": 5382
+        }
+      }
+    },
+    {
+      "slot": "main",
+      "week": 2,
+      "path": "/home/user/NFLProjectionsCheck/data/props/2026/week-02.csv",
+      "stats": {
+        "rows": 2982,
+        "markets": 1046,
+        "books": 7,
+        "pinnacleRows": 0,
+        "oneSidedShare": 0.5727699530516432,
+        "bettable": 2982,
+        "edges": 564,
+        "priceModels": {
+          "projection": 2982
+        },
+        "lineSources": {
+          "live": 2982
+        }
+      }
+    },
+    {
+      "slot": "main",
+      "week": 3,
+      "path": "/home/user/NFLProjectionsCheck/data/props/2026/week-03.csv",
+      "stats": {
+        "rows": 4641,
+        "markets": 1594,
+        "books": 7,
+        "pinnacleRows": 0,
+        "oneSidedShare": 0.4865330747683689,
+        "bettable": 4641,
+        "edges": 1057,
+        "priceModels": {
+          "projection": 4641
+        },
+        "lineSources": {
+          "live": 4641
+        }
+      }
+    },
+    {
+      "slot": "main",
+      "week": 4,
+      "path": "/home/user/NFLProjectionsCheck/data/props/2026/week-04.csv",
+      "stats": {
+        "rows": 20550,
+        "markets": 8993,
+        "books": 7,
+        "pinnacleRows": 0,
+        "oneSidedShare": 0.21722627737226277,
+        "bettable": 20550,
+        "edges": 4203,
+        "priceModels": {
+          "projection": 20550
+        },
+        "lineSources": {
+          "live": 20550
+        }
+      }
+    },
+    {
+      "slot": "main",
+      "week": 5,
+      "path": "/home/user/NFLProjectionsCheck/data/props/2026/week-05.csv",
+      "stats": {
+        "rows": 23197,
+        "markets": 10066,
+        "books": 7,
+        "pinnacleRows": 0,
+        "oneSidedShare": 0.2257619519765487,
+        "bettable": 23197,
+        "edges": 4176,
+        "priceModels": {
+          "projection": 23197
+        },
+        "lineSources": {
+          "live": 23197
+        }
+      }
+    },
+    {
+      "slot": "thursday",
+      "week": 5,
+      "path": "/home/user/NFLProjectionsCheck/data/props/2026/thursday/week-05.csv",
+      "stats": {
+        "rows": 68002,
+        "markets": 27432,
+        "books": 9,
+        "pinnacleRows": 952,
+        "oneSidedShare": 0.2511984941619364,
+        "bettable": 67050,
+        "edges": 33,
+        "priceModels": {
+          "pool": 68002
+        },
+        "lineSources": {
+          "live": 68002
+        }
+      }
+    }
+  ],
+  "accuracy": {
+    "overall": {
+      "all": {
+        "n": 2707,
+        "clusters": 286,
+        "brierBook": 0.20035786044130657,
+        "brierProj": 0.21111024009235224,
+        "brierPool": 0.2001602244909449,
+        "projVsBook": {
+          "n": 2707,
+          "clusters": 286,
+          "mean": 0.010752379651046468,
+          "se": 0.0038711074166336793,
+          "naiveSe": 0.0018296527347136293,
+          "z": 2.7775978534836816,
+          "naiveZ": 5.876732478816201
+        },
+        "poolVsBook": {
+          "n": 2707,
+          "clusters": 286,
+          "mean": -0.00019763595036161285,
+          "se": 0.00011289443078578873,
+          "naiveSe": 0.00008290358287437618,
+          "z": -1.7506262176618501,
+          "naiveZ": -2.3839253203458126
+        },
+        "poolVsProj": {
+          "n": 2707,
+          "clusters": 286,
+          "mean": -0.010950015601408056,
+          "se": 0.003871003787322805,
+          "naiveSe": 0.001831246493569188,
+          "z": -2.8287276900292344,
+          "naiveZ": -5.9795421533154425
+        }
+      },
+      "near": {
+        "n": 1578,
+        "clusters": 285,
+        "brierBook": 0.2380416480135236,
+        "brierProj": 0.2502057370769964,
+        "brierPool": 0.23774219670955565,
+        "projVsBook": {
+          "n": 1578,
+          "clusters": 285,
+          "mean": 0.01216408906347243,
+          "se": 0.005055856201958669,
+          "naiveSe": 0.0028080613247309515,
+          "z": 2.4059404732990606,
+          "naiveZ": 4.331845945222691
+        },
+        "poolVsBook": {
+          "n": 1578,
+          "clusters": 285,
+          "mean": -0.0002994513039681889,
+          "se": 0.00014698451187803458,
+          "naiveSe": 0.00011259628942780764,
+          "z": -2.037298353017418,
+          "naiveZ": -2.6595130753414873
+        },
+        "poolVsProj": {
+          "n": 1578,
+          "clusters": 285,
+          "mean": -0.012463540367440622,
+          "se": 0.005051807773267533,
+          "naiveSe": 0.0028066883652966587,
+          "z": -2.467144619673275,
+          "naiveZ": -4.440657011140338
+        }
+      }
+    },
+    "byWeek": {
+      "1": {
+        "all": {
+          "n": 449,
+          "clusters": 178,
+          "brierBook": 0.24899694805211872,
+          "brierProj": 0.26023484932628066,
+          "brierPool": 0.24882602199566817,
+          "projVsBook": {
+            "n": 449,
+            "clusters": 178,
+            "mean": 0.011237901274161645,
+            "se": 0.007736066543898622,
+            "naiveSe": 0.0062978052772781155,
+            "z": 1.452663470562426,
+            "naiveZ": 1.7844154875202203
+          },
+          "poolVsBook": {
+            "n": 449,
+            "clusters": 178,
+            "mean": -0.000170926056450922,
+            "se": 0.00012791813342847726,
+            "naiveSe": 0.0001220342027171452,
+            "z": -1.3362144355123171,
+            "naiveZ": -1.400640579814332
+          },
+          "poolVsProj": {
+            "n": 449,
+            "clusters": 178,
+            "mean": -0.011408827330612577,
+            "se": 0.007748815263463785,
+            "naiveSe": 0.006300799121585203,
+            "z": -1.4723318265704448,
+            "naiveZ": -1.8106952960186196
+          }
+        },
+        "near": {
+          "n": 449,
+          "clusters": 178,
+          "brierBook": 0.24899694805211872,
+          "brierProj": 0.26023484932628066,
+          "brierPool": 0.24882602199566817,
+          "projVsBook": {
+            "n": 449,
+            "clusters": 178,
+            "mean": 0.011237901274161645,
+            "se": 0.007736066543898622,
+            "naiveSe": 0.0062978052772781155,
+            "z": 1.452663470562426,
+            "naiveZ": 1.7844154875202203
+          },
+          "poolVsBook": {
+            "n": 449,
+            "clusters": 178,
+            "mean": -0.000170926056450922,
+            "se": 0.00012791813342847726,
+            "naiveSe": 0.0001220342027171452,
+            "z": -1.3362144355123171,
+            "naiveZ": -1.400640579814332
+          },
+          "poolVsProj": {
+            "n": 449,
+            "clusters": 178,
+            "mean": -0.011408827330612577,
+            "se": 0.007748815263463785,
+            "naiveSe": 0.006300799121585203,
+            "z": -1.4723318265704448,
+            "naiveZ": -1.8106952960186196
+          }
+        }
+      },
+      "2": {
+        "all": {
+          "n": 245,
+          "clusters": 14,
+          "brierBook": 0.20907485698528328,
+          "brierProj": 0.23928599719387775,
+          "brierPool": 0.20906131333702688,
+          "projVsBook": {
+            "n": 245,
+            "clusters": 14,
+            "mean": 0.03021114020859427,
+            "se": 0.015019229649499415,
+            "naiveSe": 0.00667736072201306,
+            "z": 2.01149732134239,
+            "naiveZ": 4.524413382221225
+          },
+          "poolVsBook": {
+            "n": 245,
+            "clusters": 14,
+            "mean": -0.000013543648256473914,
+            "se": 0.00023230697958539706,
+            "naiveSe": 0.0002236638748057397,
+            "z": -0.0583006514941804,
+            "naiveZ": -0.06055357964372687
+          },
+          "poolVsProj": {
+            "n": 245,
+            "clusters": 14,
+            "mean": -0.03022468385685073,
+            "se": 0.015115937466676442,
+            "naiveSe": 0.006698072709831924,
+            "z": -1.9995242718807216,
+            "naiveZ": -4.5124448727594
+          }
+        },
+        "near": {
+          "n": 124,
+          "clusters": 14,
+          "brierBook": 0.25229239171822354,
+          "brierProj": 0.29794673822580664,
+          "brierPool": 0.2522067303229813,
+          "projVsBook": {
+            "n": 124,
+            "clusters": 14,
+            "mean": 0.04565434650758289,
+            "se": 0.018400944359165016,
+            "naiveSe": 0.010246034466188044,
+            "z": 2.481087145119467,
+            "naiveZ": 4.455806454511004
+          },
+          "poolVsBook": {
+            "n": 124,
+            "clusters": 14,
+            "mean": -0.00008566139524221651,
+            "se": 0.0003332609489951713,
+            "naiveSe": 0.0003048550336565104,
+            "z": -0.25704000273808764,
+            "naiveZ": -0.28099058826344936
+          },
+          "poolVsProj": {
+            "n": 124,
+            "clusters": 14,
+            "mean": -0.045740007902825085,
+            "se": 0.018457982533366012,
+            "naiveSe": 0.010231131798200883,
+            "z": -2.478061067624377,
+            "naiveZ": -4.470669404421937
+          }
+        }
+      },
+      "3": {
+        "all": {
+          "n": 462,
+          "clusters": 28,
+          "brierBook": 0.16203141186532455,
+          "brierProj": 0.1674988937229436,
+          "brierPool": 0.16217317690204822,
+          "projVsBook": {
+            "n": 462,
+            "clusters": 28,
+            "mean": 0.005467481857619265,
+            "se": 0.0073167995737933355,
+            "naiveSe": 0.0033665672267743306,
+            "z": 0.7472504614178865,
+            "naiveZ": 1.624052481155388
+          },
+          "poolVsBook": {
+            "n": 462,
+            "clusters": 28,
+            "mean": 0.0001417650367237228,
+            "se": 0.00025854138467089636,
+            "naiveSe": 0.00020439748077170943,
+            "z": 0.5483262840267487,
+            "naiveZ": 0.6935752641788159
+          },
+          "poolVsProj": {
+            "n": 462,
+            "clusters": 28,
+            "mean": -0.005325716820895546,
+            "se": 0.0073023488204399965,
+            "naiveSe": 0.003360912689585827,
+            "z": -0.7293155876076939,
+            "naiveZ": -1.584604336017978
+          }
+        },
+        "near": {
+          "n": 233,
+          "clusters": 27,
+          "brierBook": 0.23305189268508122,
+          "brierProj": 0.2397651083261803,
+          "brierPool": 0.23325456299552635,
+          "projVsBook": {
+            "n": 233,
+            "clusters": 27,
+            "mean": 0.006713215641098875,
+            "se": 0.01111813021142647,
+            "naiveSe": 0.005930609704904902,
+            "z": 0.6038079707143096,
+            "naiveZ": 1.131960451814376
+          },
+          "poolVsBook": {
+            "n": 233,
+            "clusters": 27,
+            "mean": 0.00020267031044504932,
+            "se": 0.0003951728880365197,
+            "naiveSe": 0.00032314630818109584,
+            "z": 0.5128649170545314,
+            "naiveZ": 0.6271781707358078
+          },
+          "poolVsProj": {
+            "n": 233,
+            "clusters": 27,
+            "mean": -0.0065105453306538285,
+            "se": 0.011108725353084362,
+            "naiveSe": 0.005914927669862276,
+            "z": -0.58607492072402,
+            "naiveZ": -1.100697370117701
+          }
+        }
+      },
+      "4": {
+        "all": {
+          "n": 941,
+          "clusters": 50,
+          "brierBook": 0.20812343522460128,
+          "brierProj": 0.22363547772316666,
+          "brierPool": 0.2081725292529197,
+          "projVsBook": {
+            "n": 941,
+            "clusters": 50,
+            "mean": 0.015512042498565621,
+            "se": 0.007312935669946714,
+            "naiveSe": 0.002656075623950807,
+            "z": 2.1211785798026375,
+            "naiveZ": 5.840211159158215
+          },
+          "poolVsBook": {
+            "n": 941,
+            "clusters": 50,
+            "mean": 0.00004909402831845469,
+            "se": 0.0001613901675858123,
+            "naiveSe": 0.00013324514722233097,
+            "z": 0.3041946672020837,
+            "naiveZ": 0.3684489029573219
+          },
+          "poolVsProj": {
+            "n": 941,
+            "clusters": 50,
+            "mean": -0.015462948470247128,
+            "se": 0.007309251225166415,
+            "naiveSe": 0.0026604649279676575,
+            "z": -2.1155311254054032,
+            "naiveZ": -5.812122651080896
+          }
+        },
+        "near": {
+          "n": 469,
+          "clusters": 50,
+          "brierBook": 0.23907835710704858,
+          "brierProj": 0.2562782888059701,
+          "brierPool": 0.23917610087461527,
+          "projVsBook": {
+            "n": 469,
+            "clusters": 50,
+            "mean": 0.017199931698921696,
+            "se": 0.010158193434143654,
+            "naiveSe": 0.004290391778193733,
+            "z": 1.6932077352562904,
+            "naiveZ": 4.008941977360146
+          },
+          "poolVsBook": {
+            "n": 469,
+            "clusters": 50,
+            "mean": 0.00009774376756680316,
+            "se": 0.0002095832075992059,
+            "naiveSe": 0.00019183658771465583,
+            "z": 0.4663721329894061,
+            "naiveZ": 0.5095157744996514
+          },
+          "poolVsProj": {
+            "n": 469,
+            "clusters": 50,
+            "mean": -0.017102187931354908,
+            "se": 0.010128322847665353,
+            "naiveSe": 0.0042891166719854,
+            "z": -1.6885508280669665,
+            "naiveZ": -3.987345003473275
+          }
+        }
+      },
+      "5": {
+        "all": {
+          "n": 610,
+          "clusters": 16,
+          "brierBook": 0.17810343237654386,
+          "brierProj": 0.17734332759426238,
+          "brierPool": 0.1771745316354394,
+          "projVsBook": {
+            "n": 610,
+            "clusters": 16,
+            "mean": -0.0007601047822814418,
+            "se": 0.00739048154402888,
+            "naiveSe": 0.0036746493970212482,
+            "z": -0.10284915505885628,
+            "naiveZ": -0.20685096730523447
+          },
+          "poolVsBook": {
+            "n": 610,
+            "clusters": 16,
+            "mean": -0.0009289007411042816,
+            "se": 0.0003314776262280021,
+            "naiveSe": 0.00022800192718511504,
+            "z": -2.802302983988882,
+            "naiveZ": -4.0740916209454054
+          },
+          "poolVsProj": {
+            "n": 610,
+            "clusters": 16,
+            "mean": -0.00016879595882283687,
+            "se": 0.007455517628905314,
+            "naiveSe": 0.003681308366758349,
+            "z": -0.022640407712055936,
+            "naiveZ": -0.045852165047361566
+          }
+        },
+        "near": {
+          "n": 303,
+          "clusters": 16,
+          "brierBook": 0.21820790045560928,
+          "brierProj": 0.21443571792079213,
+          "brierPool": 0.21662958245353733,
+          "projVsBook": {
+            "n": 303,
+            "clusters": 16,
+            "mean": -0.0037721825348172432,
+            "se": 0.012672223148296559,
+            "naiveSe": 0.006500116484503159,
+            "z": -0.2976733040977354,
+            "naiveZ": -0.5803253747545069
+          },
+          "poolVsBook": {
+            "n": 303,
+            "clusters": 16,
+            "mean": -0.0015783180020720474,
+            "se": 0.0004577728565948981,
+            "naiveSe": 0.0003736027104003329,
+            "z": -3.4478191079572142,
+            "naiveZ": -4.224589271263063
+          },
+          "poolVsProj": {
+            "n": 303,
+            "clusters": 16,
+            "mean": 0.002193864532745195,
+            "se": 0.012786093230901876,
+            "naiveSe": 0.0065037345093912685,
+            "z": 0.17158208477965628,
+            "naiveZ": 0.33732381442958603
+          }
+        }
+      }
+    }
+  },
+  "betsByWeek": [
+    {
+      "week": 1,
+      "slot": "main",
+      "models": "projection",
+      "edgeRows": 1606,
+      "summary": {
+        "bets": 18,
+        "settled": 18,
+        "won": 9,
+        "lost": 9,
+        "push": 0,
+        "unplayed": 0,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 18,
+        "pnl": -0.6416999999999993,
+        "roi": -0.03564999999999996,
+        "roiBand": 0.4691173172248724,
+        "perBetSd": 0.995148108545244,
+        "roiConservative": -0.03564999999999996,
+        "clv": {
+          "n": 0,
+          "nMatched": 0,
+          "nLineMoved": 0,
+          "nNotFound": 0,
+          "beatRate": null,
+          "avgClvProb": null,
+          "avgClvPct": null,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "week": 2,
+      "slot": "main",
+      "models": "projection",
+      "edgeRows": 564,
+      "summary": {
+        "bets": 10,
+        "settled": 10,
+        "won": 4,
+        "lost": 6,
+        "push": 0,
+        "unplayed": 0,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 10,
+        "pnl": 13.810300000000002,
+        "roi": 1.3810300000000002,
+        "roiBand": 3.72812705578075,
+        "perBetSd": 5.89468645138239,
+        "roiConservative": 1.3810300000000002,
+        "clv": {
+          "n": 10,
+          "nMatched": 8,
+          "nLineMoved": 2,
+          "nNotFound": 0,
+          "beatRate": 0.375,
+          "avgClvProb": -0.009,
+          "avgClvPct": 0.0223,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "week": 3,
+      "slot": "main",
+      "models": "projection",
+      "edgeRows": 1057,
+      "summary": {
+        "bets": 26,
+        "settled": 24,
+        "won": 12,
+        "lost": 12,
+        "push": 0,
+        "unplayed": 0,
+        "noLine": 0,
+        "noSource": 2,
+        "staked": 24,
+        "pnl": 5.5365,
+        "roi": 0.23068750000000002,
+        "roiBand": 0.6018053586961775,
+        "perBetSd": 1.4741160532782378,
+        "roiConservative": 0.23068750000000002,
+        "clv": {
+          "n": 26,
+          "nMatched": 20,
+          "nLineMoved": 5,
+          "nNotFound": 1,
+          "beatRate": 0.4,
+          "avgClvProb": 0.0034,
+          "avgClvPct": 0.0783,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "week": 4,
+      "slot": "main",
+      "models": "projection",
+      "edgeRows": 4203,
+      "summary": {
+        "bets": 41,
+        "settled": 34,
+        "won": 16,
+        "lost": 18,
+        "push": 0,
+        "unplayed": 0,
+        "noLine": 5,
+        "noSource": 2,
+        "staked": 34,
+        "pnl": 7.803100000000001,
+        "roi": 0.2295029411764706,
+        "roiBand": 0.5916562441090666,
+        "perBetSd": 1.7249595488424077,
+        "roiConservative": 0.19437428571428572,
+        "clv": {
+          "n": 41,
+          "nMatched": 27,
+          "nLineMoved": 8,
+          "nNotFound": 6,
+          "beatRate": 0.3333,
+          "avgClvProb": -0.0184,
+          "avgClvPct": 0.0235,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "week": 5,
+      "slot": "main",
+      "models": "projection",
+      "edgeRows": 4176,
+      "summary": {
+        "bets": 132,
+        "settled": 31,
+        "won": 13,
+        "lost": 18,
+        "push": 0,
+        "unplayed": 94,
+        "noLine": 0,
+        "noSource": 7,
+        "staked": 31,
+        "pnl": -3.3563999999999985,
+        "roi": -0.10827096774193544,
+        "roiBand": 0.551392010596801,
+        "perBetSd": 1.535010393275031,
+        "roiConservative": -0.10827096774193544,
+        "clv": {
+          "n": 132,
+          "nMatched": 28,
+          "nLineMoved": 7,
+          "nNotFound": 97,
+          "beatRate": 0.5357,
+          "avgClvProb": 0.0051,
+          "avgClvPct": 0.067,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "week": 5,
+      "slot": "thursday",
+      "models": "pool",
+      "edgeRows": 33,
+      "summary": {
+        "bets": 22,
+        "settled": 2,
+        "won": 1,
+        "lost": 1,
+        "push": 0,
+        "unplayed": 20,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 2,
+        "pnl": 3.29,
+        "roi": 1.645,
+        "roiBand": 5.289999999999999,
+        "perBetSd": 3.7405948724768363,
+        "roiConservative": 1.645,
+        "clv": {
+          "n": 22,
+          "nMatched": 2,
+          "nLineMoved": 0,
+          "nNotFound": 20,
+          "beatRate": 0,
+          "avgClvProb": 0,
+          "avgClvPct": 0,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    }
+  ],
+  "total": {
+    "bets": 249,
+    "settled": 119,
+    "won": 55,
+    "lost": 64,
+    "push": 0,
+    "unplayed": 114,
+    "noLine": 5,
+    "noSource": 11,
+    "staked": 119,
+    "pnl": 26.441799999999994,
+    "roi": 0.22219999999999995,
+    "roiBand": 0.40803600624904474,
+    "perBetSd": 2.225573662288264,
+    "roiConservative": 0.21201499999999995,
+    "clv": {
+      "n": 231,
+      "nMatched": 85,
+      "nLineMoved": 22,
+      "nNotFound": 124,
+      "beatRate": 0.4118,
+      "avgClvProb": -0.0042,
+      "avgClvPct": 0.0501,
+      "lineMovedToward": 0,
+      "lineMovedAgainst": 0
+    }
+  },
+  "byModel": {
+    "projection": {
+      "bets": 227,
+      "settled": 117,
+      "won": 54,
+      "lost": 63,
+      "push": 0,
+      "unplayed": 94,
+      "noLine": 5,
+      "noSource": 11,
+      "staked": 117,
+      "pnl": 23.151799999999994,
+      "roi": 0.19787863247863244,
+      "roiBand": 0.4085604180400859,
+      "perBetSd": 2.209628304552799,
+      "roiConservative": 0.18772711864406774,
+      "clv": {
+        "n": 209,
+        "nMatched": 83,
+        "nLineMoved": 22,
+        "nNotFound": 104,
+        "beatRate": 0.4217,
+        "avgClvProb": -0.0043,
+        "avgClvPct": 0.0513,
+        "lineMovedToward": 0,
+        "lineMovedAgainst": 0
+      }
+    },
+    "pool": {
+      "bets": 22,
+      "settled": 2,
+      "won": 1,
+      "lost": 1,
+      "push": 0,
+      "unplayed": 20,
+      "noLine": 0,
+      "noSource": 0,
+      "staked": 2,
+      "pnl": 3.29,
+      "roi": 1.645,
+      "roiBand": 5.289999999999999,
+      "perBetSd": 3.7405948724768363,
+      "roiConservative": 1.645,
+      "clv": {
+        "n": 22,
+        "nMatched": 2,
+        "nLineMoved": 0,
+        "nNotFound": 20,
+        "beatRate": 0,
+        "avgClvProb": 0,
+        "avgClvPct": 0,
+        "lineMovedToward": 0,
+        "lineMovedAgainst": 0
+      }
+    }
+  },
+  "counterfactual": {
+    "used": [
+      {
+        "week": 1,
+        "slot": "main",
+        "asCaptured": "projection",
+        "counterfactual": "pool"
+      },
+      {
+        "week": 2,
+        "slot": "main",
+        "asCaptured": "projection",
+        "counterfactual": "pool"
+      },
+      {
+        "week": 3,
+        "slot": "main",
+        "asCaptured": "projection",
+        "counterfactual": "pool"
+      },
+      {
+        "week": 4,
+        "slot": "main",
+        "asCaptured": "projection",
+        "counterfactual": "pool"
+      },
+      {
+        "week": 5,
+        "slot": "main",
+        "asCaptured": "projection",
+        "counterfactual": "pool"
+      },
+      {
+        "week": 5,
+        "slot": "thursday",
+        "asCaptured": "pool",
+        "counterfactual": "projection"
+      }
+    ],
+    "directions": {
+      "pool": {
+        "boards": [
+          "week 1 main",
+          "week 2 main",
+          "week 3 main",
+          "week 4 main",
+          "week 5 main"
+        ],
+        "asCaptured": {
+          "bets": 227,
+          "settled": 117,
+          "won": 54,
+          "lost": 63,
+          "push": 0,
+          "unplayed": 94,
+          "noLine": 5,
+          "noSource": 11,
+          "staked": 117,
+          "pnl": 23.151799999999994,
+          "roi": 0.19787863247863244,
+          "roiBand": 0.4085604180400859,
+          "perBetSd": 2.209628304552799,
+          "roiConservative": 0.18772711864406774,
+          "clv": {
+            "n": 209,
+            "nMatched": 83,
+            "nLineMoved": 22,
+            "nNotFound": 104,
+            "beatRate": 0.4217,
+            "avgClvProb": -0.0043,
+            "avgClvPct": 0.0513,
+            "lineMovedToward": 0,
+            "lineMovedAgainst": 0
+          }
+        },
+        "other": {
+          "bets": 12,
+          "settled": 11,
+          "won": 4,
+          "lost": 7,
+          "push": 0,
+          "unplayed": 1,
+          "noLine": 0,
+          "noSource": 0,
+          "staked": 11,
+          "pnl": 14.19,
+          "roi": 1.29,
+          "roiBand": 2.1169016810595447,
+          "perBetSd": 3.5104842970735533,
+          "roiConservative": 1.29,
+          "clv": {
+            "n": 12,
+            "nMatched": 11,
+            "nLineMoved": 0,
+            "nNotFound": 1,
+            "beatRate": 0.7273,
+            "avgClvProb": 0.0346,
+            "avgClvPct": 0.2046,
+            "lineMovedToward": 0,
+            "lineMovedAgainst": 0
+          }
+        }
+      },
+      "projection": {
+        "boards": [
+          "week 5 thursday"
+        ],
+        "asCaptured": {
+          "bets": 22,
+          "settled": 2,
+          "won": 1,
+          "lost": 1,
+          "push": 0,
+          "unplayed": 20,
+          "noLine": 0,
+          "noSource": 0,
+          "staked": 2,
+          "pnl": 3.29,
+          "roi": 1.645,
+          "roiBand": 5.289999999999999,
+          "perBetSd": 3.7405948724768363,
+          "roiConservative": 1.645,
+          "clv": {
+            "n": 22,
+            "nMatched": 2,
+            "nLineMoved": 0,
+            "nNotFound": 20,
+            "beatRate": 0,
+            "avgClvProb": 0,
+            "avgClvPct": 0,
+            "lineMovedToward": 0,
+            "lineMovedAgainst": 0
+          }
+        },
+        "other": {
+          "bets": 412,
+          "settled": 36,
+          "won": 20,
+          "lost": 16,
+          "push": 0,
+          "unplayed": 355,
+          "noLine": 0,
+          "noSource": 21,
+          "staked": 36,
+          "pnl": 12.8669,
+          "roi": 0.35741388888888886,
+          "roiBand": 0.5552512718853826,
+          "perBetSd": 1.6657538156561478,
+          "roiConservative": 0.35741388888888886,
+          "clv": {
+            "n": 412,
+            "nMatched": 39,
+            "nLineMoved": 1,
+            "nNotFound": 372,
+            "beatRate": 0,
+            "avgClvProb": -0.0132,
+            "avgClvPct": 0,
+            "lineMovedToward": 0,
+            "lineMovedAgainst": 0
+          }
+        }
+      }
+    }
+  },
+  "personas": [
+    {
+      "id": "firehose",
+      "label": "The Firehose",
+      "summary": {
+        "bets": 249,
+        "settled": 119,
+        "won": 55,
+        "lost": 64,
+        "push": 0,
+        "unplayed": 114,
+        "noLine": 5,
+        "noSource": 11,
+        "staked": 119,
+        "pnl": 26.441799999999994,
+        "roi": 0.22219999999999995,
+        "roiBand": 0.40803600624904474,
+        "perBetSd": 2.225573662288264,
+        "roiConservative": 0.21201499999999995,
+        "clv": {
+          "n": 231,
+          "nMatched": 85,
+          "nLineMoved": 22,
+          "nNotFound": 124,
+          "beatRate": 0.4118,
+          "avgClvProb": -0.0042,
+          "avgClvPct": 0.0501,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "id": "disciplined",
+      "label": "The Disciplined Flat Bettor",
+      "summary": {
+        "bets": 13,
+        "settled": 5,
+        "won": 1,
+        "lost": 4,
+        "push": 0,
+        "unplayed": 8,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 5,
+        "pnl": -3.3151,
+        "roi": -0.66302,
+        "roiBand": 0.6739599999999999,
+        "perBetSd": 0.7535101870578791,
+        "roiConservative": -0.66302,
+        "clv": {
+          "n": 12,
+          "nMatched": 2,
+          "nLineMoved": 2,
+          "nNotFound": 8,
+          "beatRate": 0.5,
+          "avgClvProb": 0.0316,
+          "avgClvPct": 0.0392,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "id": "shopper",
+      "label": "The Line Shopper",
+      "summary": {
+        "bets": 10,
+        "settled": 2,
+        "won": 2,
+        "lost": 0,
+        "push": 0,
+        "unplayed": 8,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 2,
+        "pnl": 2.1397,
+        "roi": 1.06985,
+        "roiBand": 0.7603,
+        "perBetSd": 0.5376132857361321,
+        "roiConservative": 1.06985,
+        "clv": {
+          "n": 10,
+          "nMatched": 1,
+          "nLineMoved": 1,
+          "nNotFound": 8,
+          "beatRate": 1,
+          "avgClvProb": 0.0449,
+          "avgClvPct": 0.1616,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "id": "kelly",
+      "label": "The Kelly Compounder",
+      "summary": {
+        "bets": 30,
+        "settled": 8,
+        "won": 1,
+        "lost": 7,
+        "push": 0,
+        "unplayed": 22,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 48.7616,
+        "pnl": 34.71680000000001,
+        "roi": 0.7119700748129678,
+        "roiBand": 4.75,
+        "perBetSd": 6.7175144212722016,
+        "roiConservative": 0.7119700748129678,
+        "clv": {
+          "n": 30,
+          "nMatched": 6,
+          "nLineMoved": 2,
+          "nNotFound": 22,
+          "beatRate": 0.8333,
+          "avgClvProb": 0.0203,
+          "avgClvPct": 0.1756,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "id": "budget",
+      "label": "The Weekly Budget",
+      "summary": {
+        "bets": 10,
+        "settled": 2,
+        "won": 2,
+        "lost": 0,
+        "push": 0,
+        "unplayed": 8,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 4.4163,
+        "pnl": 4.8219,
+        "roi": 1.0918415868487197,
+        "roiBand": 0.7603442020353269,
+        "perBetSd": 0.537644541295054,
+        "roiConservative": 1.0918415868487197,
+        "clv": {
+          "n": 10,
+          "nMatched": 1,
+          "nLineMoved": 1,
+          "nNotFound": 8,
+          "beatRate": 1,
+          "avgClvProb": 0.0449,
+          "avgClvPct": 0.1616,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    },
+    {
+      "id": "purist",
+      "label": "The Purist",
+      "summary": {
+        "bets": 16,
+        "settled": 3,
+        "won": 3,
+        "lost": 0,
+        "push": 0,
+        "unplayed": 13,
+        "noLine": 0,
+        "noSource": 0,
+        "staked": 12.396600000000001,
+        "pnl": 14.829200000000002,
+        "roi": 1.196231224690641,
+        "roiBand": 1.4022687162715626,
+        "perBetSd": 1.2144003312233664,
+        "roiConservative": 1.196231224690641,
+        "clv": {
+          "n": 16,
+          "nMatched": 3,
+          "nLineMoved": 0,
+          "nNotFound": 13,
+          "beatRate": 0.6667,
+          "avgClvProb": 0.025,
+          "avgClvPct": 0.1238,
+          "lineMovedToward": 0,
+          "lineMovedAgainst": 0
+        }
+      }
+    }
+  ]
+}

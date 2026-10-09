@@ -37,6 +37,7 @@ import {
   fitSourceWeights,
   poolVotes,
   shareFor,
+  weightsForStat,
   fitProjectionShares,
 } from "./lib/source-weights.mjs";
 
@@ -102,6 +103,12 @@ function analyse(quotes, actualsByWeek, a) {
   //    (the live one).
   const asOf = weeks.concat([Math.max(...weeks) + 1]).map((w) => model.at(w));
 
+  // 2b. Each book's lead by stat, on everything seen (descriptive).
+  const statCounts = new Map();
+  for (const p of pairs) statCounts.set(p.stat, (statCounts.get(p.stat) ?? 0) + 1);
+  const leadStats = [...statCounts].filter(([, n]) => n >= 500).sort((x, y) => y[1] - x[1]).map(([stat]) => stat);
+  const overallByStat = Object.fromEntries(leadStats.map((stat) => [stat, assessSources(pairs.filter((p) => p.stat === stat))]));
+
   // 3. The projection's share on everything seen.
   const overallShares = fitProjectionShares(samples, opts);
 
@@ -110,10 +117,14 @@ function analyse(quotes, actualsByWeek, a) {
   const outcomes = evaluateOutcomes(pairs, asOf, actualsByWeek);
 
   const projPairs = pairs.filter((p) => p.projection !== null).length;
-  return { pairs: pairs.length, weeks, overall, overallFit, asOf, overallShares, shareSamples: samples.length, heldOut, outcomes, projPairs };
+  return { pairs: pairs.length, weeks, overall, overallFit, leadStats, overallByStat, asOf, overallShares, shareSamples: samples.length, heldOut, outcomes, projPairs };
 }
 
-const weightsFor = (asOf, week) => asOf.find((x) => x.week === week)?.weights ?? {};
+// The books' weights for a week; for a stat, that stat's own where it has them.
+const weightsFor = (asOf, week, stat = null) => {
+  const m = asOf.find((x) => x.week === week);
+  return stat === null ? m?.weights ?? {} : weightsForStat(m, stat);
+};
 const sharesFor = (asOf, week) => asOf.find((x) => x.week === week)?.shares ?? {};
 
 // A target that is NOT in the pool being tested. The pool is built from the
@@ -134,28 +145,43 @@ function evaluateHeldOut(pairs, asOf) {
       if (retail.length < 3) continue;
       const base = median(retail.map((v) => v.logit));
       if (Math.abs(sigmoid(base) - 0.5) > 0.4) continue;
-      const pooled = poolVotes(retail, { weights: weightsFor(asOf, p.week) });
-      const wl = Math.log(pooled.prob / (1 - pooled.prob));
-      rows.push({ base: (base - t.logit) ** 2, weighted: (wl - t.logit) ** 2, cluster: p.cluster });
+      const logitOf = (q) => Math.log(q / (1 - q));
+      const global = poolVotes(retail, { weights: weightsFor(asOf, p.week) });
+      const perStat = poolVotes(retail, { weights: weightsFor(asOf, p.week, p.stat) });
+      rows.push({
+        base: (base - t.logit) ** 2,
+        weighted: (logitOf(global.prob) - t.logit) ** 2,
+        statWeighted: (logitOf(perStat.prob) - t.logit) ** 2,
+        cluster: p.cluster,
+      });
     }
     if (rows.length === 0) continue;
     const n = rows.length;
-    const d = rows.map((r) => r.weighted - r.base);
-    const mean = d.reduce((x, y) => x + y, 0) / n;
-    const by = new Map();
-    rows.forEach((r, i) => by.set(r.cluster, (by.get(r.cluster) ?? 0) + d[i] - mean));
-    const G = by.size;
-    let ss = 0;
-    for (const s of by.values()) ss += s * s;
-    const se = G > 1 ? Math.sqrt(ss * (G / (G - 1))) / n : null;
+    // Paired difference of squared errors, clustered on player-week.
+    const paired = (key, ref) => {
+      const d = rows.map((r) => r[key] - r[ref]);
+      const mean = d.reduce((x, y) => x + y, 0) / n;
+      const by = new Map();
+      rows.forEach((r, i) => by.set(r.cluster, (by.get(r.cluster) ?? 0) + d[i] - mean));
+      const G = by.size;
+      let ss = 0;
+      for (const v of by.values()) ss += v * v;
+      const se = G > 1 ? Math.sqrt(ss * (G / (G - 1))) / n : null;
+      return { diff: mean, z: se ? mean / se : null };
+    };
+    const g = paired("weighted", "base");
+    const st = paired("statWeighted", "weighted");
     out.push({
       target,
       n,
-      clusters: G,
+      clusters: new Set(rows.map((r) => r.cluster)).size,
       mseMedian: rows.reduce((x, r) => x + r.base, 0) / n,
       mseWeighted: rows.reduce((x, r) => x + r.weighted, 0) / n,
-      diff: mean,
-      z: se ? mean / se : null,
+      mseStat: rows.reduce((x, r) => x + r.statWeighted, 0) / n,
+      diff: g.diff,
+      z: g.z,
+      statDiff: st.diff,
+      statZ: st.z,
     });
   }
   return out;
@@ -188,9 +214,10 @@ function evaluateOutcomes(pairs, asOf, actualsByWeek) {
   // Books only, on every early board.
   const booksRows = graded.map(({ p, y }) => {
     const retail = p.early.filter((v) => bookInSet(v.book, "retail"));
-    if (retail.length < 3) return { median: null, pool: null, y, cluster: p.cluster };
-    const pooled = poolVotes(p.early, { weights: weightsFor(asOf, p.week) });
-    return { median: sigmoid(median(retail.map((v) => v.logit))), pool: pooled.prob, y, cluster: p.cluster };
+    if (retail.length < 3) return { median: null, pool: null, globalPool: null, y, cluster: p.cluster };
+    const pooled = poolVotes(p.early, { weights: weightsFor(asOf, p.week, p.stat) });
+    const global = poolVotes(p.early, { weights: weightsFor(asOf, p.week) });
+    return { median: sigmoid(median(retail.map((v) => v.logit))), pool: pooled.prob, globalPool: global.prob, y, cluster: p.cluster };
   });
 
   // The projection as a source — only where it is the projection we had.
@@ -199,7 +226,7 @@ function evaluateOutcomes(pairs, asOf, actualsByWeek) {
     .map(({ p, y }) => {
       const retail = p.early.filter((v) => bookInSet(v.book, "retail"));
       if (retail.length < 3) return { median: null, pool: null, withProj: null, proj: null, y, cluster: p.cluster };
-      const w = weightsFor(asOf, p.week);
+      const w = weightsFor(asOf, p.week, p.stat);
       const share = shareFor(sharesFor(asOf, p.week), p.stat, p.slot);
       return {
         median: sigmoid(median(retail.map((v) => v.logit))),
@@ -212,7 +239,8 @@ function evaluateOutcomes(pairs, asOf, actualsByWeek) {
     });
 
   return [
-    cmp("weighted books vs retail median (every early board)", booksRows, "median", "pool"),
+    cmp("weighted books (per stat) vs retail median (every early board)", booksRows, "median", "pool"),
+    cmp("per-stat book weights vs global book weights (every early board)", booksRows, "globalPool", "pool"),
     cmp("books + projection share vs retail median (live boards)", projRows, "median", "withProj"),
     cmp("books + projection share vs weighted books (live boards)", projRows, "pool", "withProj"),
     cmp("projection alone vs retail median (live boards)", projRows, "median", "proj"),
@@ -260,6 +288,19 @@ function printReport(season, r, a) {
   }
   console.log(`   ${pad("(trained on weeks)", 18)}${r.asOf.map((x) => lpad(x.trainedOnWeeks.length ? `${x.trainedOnWeeks[0]}-${x.trainedOnWeeks[x.trainedOnWeeks.length - 1]}` : "-", 8)).join("")}`);
 
+  console.log("\n2b. THE SAME LEADS, BY STAT   (a book is not equally informative on every stat; player-weeks in brackets)");
+  const shown = r.leadStats.slice(0, 5);
+  console.log(`   ${pad("book", 16)}${lpad("all", 7)}${shown.map((x) => lpad(x, 13)).join("")}`);
+  for (const k of keys.filter((k) => k !== PROJECTION_SOURCE && r.overall[k].clusters >= 100)) {
+    const cells = shown.map((stat) => {
+      const x = r.overallByStat[stat]?.[k];
+      return lpad(x && x.clusters >= 25 ? `${f(x.lead, 2)}(${x.clusters})` : "-", 13);
+    });
+    console.log(`   ${pad(k, 16)}${lpad(f(r.overall[k].lead, 2), 7)}${cells.join("")}`);
+  }
+  console.log("   Each (stat, book) weight is its own lead pulled toward that book's global weight, so a stat with little data");
+  console.log("   prices like the global model and departs from it only as evidence arrives.");
+
   console.log("\n3. THE PROJECTION'S SHARE OF THE PRICE   (per stat and capture slot; fitted against OUTCOMES)");
   console.log("   logit P(over) = L_books + share · (L_proj − L_books). 0 = ignore the projection, 1 = believe it over the books.");
   console.log("   Live captures only — the projection we actually had on the day. A negative fit is reported, and priced as 0.\n");
@@ -285,11 +326,11 @@ function printReport(season, r, a) {
   console.log("\n4. DOES IT WORK?   (walk-forward: every week priced with weights and shares fitted on earlier weeks only)");
   console.log("   a) Held-out target. A pool of the RETAIL books at the early board, scored on how far it is from");
   console.log("      a sharp book's own price at the close — a price neither the pool nor its weights ever saw.");
-  console.log(`      ${pad("target", 14)}${lpad("markets", 9)}${lpad("players", 9)}${lpad("MSE median", 12)}${lpad("MSE weighted", 14)}${lpad("diff", 10)}${lpad("z", 7)}`);
+  console.log(`      ${pad("target", 14)}${lpad("markets", 9)}${lpad("players", 9)}${lpad("MSE median", 12)}${lpad("global wts", 12)}${lpad("per-stat wts", 14)}${lpad("global−median", 15)}${lpad("z", 6)}${lpad("per-stat−global", 17)}${lpad("z", 6)}`);
   for (const h of r.heldOut) {
-    console.log(`      ${pad(h.target, 14)}${lpad(h.n, 9)}${lpad(h.clusters, 9)}${lpad(f(h.mseMedian, 4), 12)}${lpad(f(h.mseWeighted, 4), 14)}${lpad(f(h.diff, 4), 10)}${lpad(f(h.z, 1), 7)}`);
+    console.log(`      ${pad(h.target, 14)}${lpad(h.n, 9)}${lpad(h.clusters, 9)}${lpad(f(h.mseMedian, 4), 12)}${lpad(f(h.mseWeighted, 4), 12)}${lpad(f(h.mseStat, 4), 14)}${lpad(f(h.diff, 4), 15)}${lpad(f(h.z, 1), 6)}${lpad(f(h.statDiff, 4), 17)}${lpad(f(h.statZ, 1), 6)}`);
   }
-  console.log("      negative diff = the weighted pool is closer to where the market went.\n");
+  console.log("      negative diff = closer to where the market went. The per-stat weights are fitted on earlier weeks too.\n");
 
   console.log("   b) Brier against what happened (paired difference, negative = better; clustered by player-week).");
   console.log(`      ${pad("comparison", 62)}${lpad("n", 7)}${lpad("diff", 10)}${lpad("z", 6)}   | near the money (market within ${NEAR_MONEY_MAX} of 50/50):${lpad("n", 7)}${lpad("diff", 10)}${lpad("z", 6)}`);
@@ -313,6 +354,7 @@ function buildPayload(season, r, a) {
   for (const x of r.asOf) {
     byWeek[String(x.week)] = {
       weights: x.weights,
+      statWeights: x.statWeights,
       projectionShare: Object.fromEntries(Object.entries(x.shares).map(([k, c]) => [k, c.share])),
       trainedOnWeeks: x.trainedOnWeeks,
       shareWeeks: x.shareWeeks,

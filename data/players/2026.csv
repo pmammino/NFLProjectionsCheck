@@ -14,7 +14,7 @@ PlayerID,Name,Team,Pos
 8986,Adam Thielen,MIN,WR
 9245,Teddy Bridgewater,DET,QB
 9253,Mike Evans,SF,WR
-9255,Odell Beckham,NYG,WR
+9255,Odell Beckham,MIN,WR
 9260,Brandin Cooks,SF,WR
 9317,Derek Carr,NO,QB
 9455,Davante Adams,LAR,WR
@@ -134,6 +134,7 @@ PlayerID,Name,Team,Pos
 14411,CeeDee Lamb,DAL,WR
 14416,Jalen Hurts,PHI,QB
 14418,J.K. Dobbins,DEN,RB
+14430,Van Jefferson,WAS,WR
 14436,Cole Kmet,CHI,TE
 14442,Joe Burrow,CIN,QB
 14446,Justin Herbert,LAC,QB
@@ -264,6 +265,7 @@ PlayerID,Name,Team,Pos
 16697,Dalton Kincaid,BUF,TE
 16701,Lew Nichols,PIT,RB
 16705,Tank Bigsby,PHI,RB
+16706,Cedric Tillman,NO,WR
 16716,Aidan O'Connell,LV,QB
 16719,Charlie Jones,NYG,WR
 16720,Payne Durham,TB,TE
@@ -331,7 +333,9 @@ PlayerID,Name,Team,Pos
 17319,Jaleel McLaughlin,CLE,RB
 17330,Brycen Tremayne,CAR,WR
 17335,Julian Hill,NE,TE
+17465,Carlos Washington,MIA,RB
 17467,Xavier Smith,LAR,WR
+17510,Zavier Scott,CHI,RB
 17555,Tyrell Shavers,BUF,WR
 17584,Jacob Saylors,DET,RB
 17593,Emanuel Wilson,SEA,RB
@@ -434,7 +438,7 @@ PlayerID,Name,Team,Pos
 18529,Brashard Smith,KC,RB
 18530,Le'Veon Moss,MIA,RB
 18532,Corey Kiner,NE,RB
-18533,Kaytron Allen,WAS,RB
+18533,Kaytron Allen,MIA,RB
 18534,Tyler Warren,IND,TE
 18535,Mason Taylor,NYJ,TE
 18536,Ben Yurosek,MIN,TE
@@ -463,6 +467,7 @@ PlayerID,Name,Team,Pos
 18641,Chimere Dike,TEN,WR
 18642,Isaac TeSlaa,DET,WR
 18643,Jaylin Lane,WAS,WR
+18645,Theo Wease,LAC,WR
 18646,Arian Smith,NYJ,WR
 18647,Jordan Watkins,SF,WR
 18650,KeAndre Lambert-Smith,LAC,WR

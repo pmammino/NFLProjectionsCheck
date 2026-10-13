@@ -295,3 +295,80 @@ test("bets are grouped by book on the canonical key, most bets first, with both 
   assert.equal(summarizeByBook(rows)[0].market, null, "no closing data, no market CLV");
   assert.equal(MIN_CLV_FOR_A_BOOK, 20);
 });
+
+// ---------------------------------------------------------------------------
+// the long-shot monitor
+// ---------------------------------------------------------------------------
+import { longshotMonitor, LONGSHOT_BAND } from "./backtest-live.mjs";
+
+function lsRng(seed) {
+  let s = seed >>> 0;
+  return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+}
+const lgt = (p) => Math.log(p / (1 - p));
+const sgm = (x) => 1 / (1 + Math.exp(-x));
+
+// Markets priced 5-12% by the books, a projection that disagrees with them, and
+// outcomes drawn at books + trueShare * (projection - books).
+function lsWorld({ trueShare, weeks = [1, 2, 3, 4], perWeek = 400, seed = 5, pBooksRange = [0.05, 0.12], only = null }) {
+  const r = lsRng(seed);
+  const out = [];
+  for (const week of weeks) {
+    for (let i = 0; i < perWeek; i++) {
+      const pBooks = pBooksRange[0] + r() * (pBooksRange[1] - pBooksRange[0]);
+      const pProj = Math.min(0.5, Math.max(0.01, sgm(lgt(pBooks) + (r() - 0.5) * 1.6)));
+      const share = only === null || only.includes(week) ? trueShare : 0;
+      const pTrue = sgm(lgt(pBooks) + share * (lgt(pProj) - lgt(pBooks)));
+      out.push({ week, y: r() < pTrue ? 1 : 0, pBooks, pProj, cluster: `${week}|${i}` });
+    }
+  }
+  return out;
+}
+
+test("long-shot monitor: a projection that carries information shows a positive share and a walk-forward win", () => {
+  const m = longshotMonitor(lsWorld({ trueShare: 0.8, perWeek: 1500 }));
+  assert.ok(m.overall.share > 0.4, `share ${m.overall.share}`);
+  assert.ok(m.walkForward.mean < 0, "the walk-forward priced better than the books");
+  assert.equal(m.status, "candidate");
+});
+
+test("long-shot monitor: a projection that carries nothing reads as no evidence", () => {
+  const m = longshotMonitor(lsWorld({ trueShare: 0, perWeek: 1500, seed: 9 }));
+  assert.ok(Math.abs(m.overall.share) < 0.4);
+  assert.equal(m.status, "no evidence");
+});
+
+test("long-shot monitor: only the long-shot band is looked at", () => {
+  const near = lsWorld({ trueShare: 0.9, pBooksRange: [0.4, 0.6] });
+  assert.equal(longshotMonitor(near).overall.n, 0);
+  const mixed = [...lsWorld({ trueShare: 0.9, perWeek: 50 }), ...near];
+  assert.equal(longshotMonitor(mixed).overall.n, 200);
+  assert.deepEqual(LONGSHOT_BAND, [0.03, 0.15]);
+  // The band is [lo, hi): 15% itself is out and 3% is in.
+  const edge = [0.03, 0.15].map((pBooks, i) => ({ week: 1, y: 0, pBooks, pProj: 0.1, cluster: `c${i}` }));
+  assert.equal(longshotMonitor(edge).overall.n, 1);
+});
+
+test("long-shot monitor: a week is priced only with the weeks before it", () => {
+  // The signal exists only in week 4. Weeks 1-3 teach nothing, so week 4 must not benefit from itself.
+  const m = longshotMonitor(lsWorld({ trueShare: 0.9, perWeek: 1500, only: [4], seed: 3 }));
+  const w4 = m.walkForward.weeks.find((w) => w.week === 4);
+  assert.ok(w4.share < 0.3, `week 4 was priced with ${w4.share}, which can only come from weeks 1-3`);
+  assert.ok(m.byWeek.find((w) => w.week === 4).share > 0.4, "but the in-sample week-4 share does see it");
+  assert.ok(!m.walkForward.weeks.some((w) => w.week === 1), "week 1 has no earlier weeks to learn from");
+});
+
+test("long-shot monitor: a negative fitted share is floored at zero when priced, and reported as negative", () => {
+  const m = longshotMonitor(lsWorld({ trueShare: -0.8, perWeek: 1500, seed: 4 }));
+  assert.ok(m.overall.share < 0);
+  assert.ok(m.walkForward.weeks.every((w) => w.share === 0));
+  assert.equal(m.status, "no evidence");
+});
+
+test("long-shot monitor: empty input is empty, not NaN", () => {
+  const m = longshotMonitor([]);
+  assert.equal(m.overall.n, 0);
+  assert.equal(m.overall.share, null);
+  assert.equal(m.walkForward.n, 0);
+  assert.equal(m.status, "no evidence");
+});

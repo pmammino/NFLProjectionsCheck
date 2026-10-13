@@ -396,6 +396,13 @@ What it prints:
    the pool as it would have stood that week, and boards captured on the pool re-priced with the
    projection, through the same persona engine. The two directions are separate questions and are not
    added together.
+   **Monitor: long-shot overs** (section 2b). Overs the books price at 3–15% — the high rungs of the
+   alternate-line ladders — are outside every share fit (those cover markets near 50/50). The monitor
+   reports the projection's share there: all weeks, week by week, and walk-forward (each week priced with
+   the share fitted on earlier weeks only, floored at 0, against the books' pool, clustered). It is not
+   a price and never reaches the pool; its status is "no evidence" until the share's interval clears zero
+   *and* the walk-forward wins. On the first look (weeks 2–5) the all-weeks share is 0.12 ±0.17 and the
+   walk-forward is slightly worse than the books.
 5. **CLV by book** — each book's bets, ROI and CLV, measured two ways: against that book's *own* closing
    price (what the ledger reports) and against the closing fair price of the *other* books on the same
    line. They can disagree: a slow book that never moves scores about zero against its own close even

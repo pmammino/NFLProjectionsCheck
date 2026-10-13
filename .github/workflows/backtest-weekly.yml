@@ -15,6 +15,8 @@ name: Weekly live backtest
 # direction of looking fine. It then re-runs the persona replay, because the
 # ledgers are what the report reads.
 #
+# It also refreshes the spread-fit report (scripts/spread-fit.mjs).
+#
 # Requires ROTOWIRE_COOKIE for the actuals refresh. No odds key: it reads only
 # what is already committed.
 
@@ -81,6 +83,17 @@ jobs:
           echo "Running: node scripts/backtest-live.mjs $args"
           node scripts/backtest-live.mjs $args
 
+      # Is the projection's band too narrow, and does fixing it earn a share of the
+      # price? Reads the projection each capture had from git history, which is
+      # why the checkout is full-depth. Writes data/pricing/{season}/spread-fit.md.
+      # A report only: nothing it computes reaches a price.
+      - name: Spread fit
+        run: |
+          args="--write"
+          if [ -n "${{ github.event.inputs.season }}" ]; then args="$args --season ${{ github.event.inputs.season }}"; fi
+          echo "Running: node scripts/spread-fit.mjs $args"
+          node scripts/spread-fit.mjs $args
+
       - name: Commit report
         if: always()
         run: |
@@ -90,7 +103,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "Nothing changed."
           else
-            git commit -m "Live backtest report + replay personas [skip ci]"
+            git commit -m "Live backtest report, spread fit + replay personas [skip ci]"
             pushed=false
             for attempt in 1 2 3; do
               if git push; then pushed=true; break; fi

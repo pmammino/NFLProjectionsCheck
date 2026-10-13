@@ -1,0 +1,13 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,6,16995,Bo Nix,DEN,QB,vs SEA,rushAtt,DraftKings,5.5,over,4.68,269,,0.2710,0.2710,,1,0.3365,0.0622,0.0655,0.0655,ev,none,pool,,main,1,live,20261016217D24AF,2026-10-13T19:58:40.789Z
+2026,6,15357,Trevor Lawrence,JAX,QB,vs HOU,rushAtt,DraftKings,5.5,over,4.93,396,,0.2016,0.2016,,1,0.2573,0.2341,0.0557,0.0557,ev,none,pool,,main,1,live,2026101851518E16,2026-10-13T19:58:40.789Z
+2026,6,12490,Sam Darnold,SEA,QB,at DEN,rushAtt,DraftKings,5.5,over,3.28,1020,,0.0893,0.0893,,1,0.1434,0.0000,0.0541,0.0541,ev,none,pool,,main,1,live,20261016217D24AF,2026-10-13T19:58:40.789Z
+2026,6,18811,Jacory Croskey-Merritt,WAS,RB,at SF,rushAtt,DraftKings,17.5,over,10.9,920,,0.0980,0.0980,,1,0.1519,0.1068,0.0539,0.0539,ev,none,pool,,main,1,live,20261020BC02533C,2026-10-13T19:58:40.789Z
+2026,6,16886,C.J. Stroud,HOU,QB,at JAX,rushAtt,DraftKings,5.5,over,2.97,535,,0.1575,0.1575,,1,0.2094,0.0038,0.0519,0.0519,ev,none,pool,,main,1,live,2026101851518E16,2026-10-13T19:58:40.789Z
+2026,6,11690,Christian McCaffrey,SF,RB,vs WAS,rushAtt,DraftKings,17.5,over,16.15,267,,0.2725,0.2725,,1,0.3222,0.2834,0.0497,0.0497,ev,none,pool,,main,1,live,20261020BC02533C,2026-10-13T19:58:40.789Z
+2026,6,18449,Woody Marks,HOU,RB,at JAX,recYds,DraftKings,49.5,over,13.77,1500,,0.0625,0.0625,,1,0.1020,0.0050,0.0395,0.0395,ev,none,pool,,main,1,live,2026101851518E16,2026-10-13T19:58:40.789Z
+2026,6,18524,Bhayshul Tuten,JAX,RB,vs HOU,recYds,DraftKings,39.5,over,14.92,1320,,0.0704,0.0704,,1,0.1096,0.0295,0.0392,0.0392,ev,none,pool,,main,1,live,2026101851518E16,2026-10-13T19:58:40.789Z
+2026,6,17968,George Holani,SEA,RB,at DEN,recYds,DraftKings,24.5,over,12.14,563,,0.1508,0.1508,,1,0.1892,0.1084,0.0384,0.0384,ev,none,pool,,main,1,live,20261016217D24AF,2026-10-13T19:58:40.789Z
+2026,6,16933,Chris Rodriguez Jr.,JAX,RB,vs HOU,rushYds,DraftKings,39.5,over,22.9,650,,0.1333,0.1333,,1,0.1689,0.2124,0.0355,0.0355,ev,none,pool,,main,1,live,2026101851518E16,2026-10-13T19:58:40.789Z
+2026,6,17692,Jayden Daniels,WAS,QB,at SF,passYds,DraftKings,249.5,over,172.24,334,,0.2304,0.2304,,1,0.2623,0.1020,0.0319,0.0319,ev,none,pool,,main,1,live,20261020BC02533C,2026-10-13T19:58:40.789Z
+2026,6,17692,Jayden Daniels,WAS,QB,at SF,passYds,DraftKings,299.5,over,172.24,1240,,0.0746,0.0746,,1,0.1050,0.0182,0.0304,0.0304,ev,none,pool,,main,1,live,20261020BC02533C,2026-10-13T19:58:40.789Z

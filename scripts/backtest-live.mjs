@@ -39,7 +39,7 @@ import { slotDir } from "./lib/slots.mjs";
 import { PERSONAS } from "./lib/personas.mjs";
 import { median, sigmoid } from "./lib/consensus.mjs";
 import { isBettableStat } from "./lib/markets.mjs";
-import { buildSourceModel, outcomeFrom } from "./lib/source-model.mjs";
+import { buildSourceModel, outcomeFrom, loadLiveClosing, withLiveClosing } from "./lib/source-model.mjs";
 import { bookVotes, poolVotes, shareFor, weightsForStat } from "./lib/source-weights.mjs";
 import { PROPS_COLUMNS, repriceWithPool } from "./capture-props.mjs";
 import {
@@ -267,7 +267,7 @@ function main() {
 
   // 2. Pricing accuracy on live boards
   const { quotes, actualsByWeek } = loadSeason(season, { dataDir: join(ROOT, a.dataDir) });
-  const model = buildSourceModel(quotes, actualsByWeek);
+  const model = buildSourceModel(withLiveClosing(quotes, loadLiveClosing({ dataDir: join(ROOT, a.dataDir), season })), actualsByWeek);
   const samples = liveSamples(quotes, actualsByWeek, model, a.liveSlots);
   const accWeeks = [...new Set(samples.map((s) => s.week))].sort((x, y) => x - y);
   const accuracy = { overall: pricingAccuracy(samples), byWeek: Object.fromEntries(accWeeks.map((w) => [w, pricingAccuracy(samples.filter((s) => s.week === w))])) };

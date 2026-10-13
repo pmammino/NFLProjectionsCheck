@@ -12,7 +12,10 @@
 // capture. `source-weights.mjs --write` still produces a file, for anyone who
 // wants to audit or pin one.
 
-import { loadSeason, actualFor, isPointInTime } from "./pricing-dataset.mjs";
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { loadSeason, actualFor, isPointInTime, readPropRow } from "./pricing-dataset.mjs";
+import { readCsv } from "./csv.mjs";
 import { gradeOutcome } from "./grading.mjs";
 import { estimateHoldByStat } from "./consensus.mjs";
 import { isBettableStat } from "./markets.mjs";
@@ -24,6 +27,42 @@ export function outcomeFrom(actualsByWeek, q) {
   if (act === null) return null;
   const o = gradeOutcome(act, q.line, "over");
   return o === "push" ? null : o === "won" ? 1 : 0;
+}
+
+// The daily near-kickoff captures in data/closing/{season}/week-NN.csv, read as
+// "closing" quotes. These are live captures of where the market stood within
+// ~24h of each game, so they are a late board the weights can learn from for
+// weeks that have no backfilled `closing` slot — which is every week the season
+// has played since the backfill was last run.
+export function loadLiveClosing({ dataDir = "data", season } = {}) {
+  const dir = join(dataDir, "closing", String(season));
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const f of readdirSync(dir).filter((x) => /^week-\d+\.csv$/.test(x)).sort()) {
+    for (const r of readCsv(join(dir, f))) {
+      const q = readPropRow(r, "closing");
+      // Labelled like the backfilled close, so it is only ever the late board:
+      // were it left "live" it would count as a point-in-time projection and
+      // open a "closing" slot in the projection's share fit, which nothing
+      // prices from.
+      if (q) out.push({ ...q, lineSource: "closing" });
+    }
+  }
+  return out;
+}
+
+// Add live closing quotes as the late board, per market, only where the market
+// has no backfilled closing quote. A market with both would count every book
+// twice, and the backfilled board is the true close, so it wins. Added quotes
+// are slot "closing", which is never point-in-time, so they can only ever be
+// the "where it ended up" side of a lead pair, never a projection's price.
+export function withLiveClosing(quotes, liveClosing) {
+  if (!liveClosing?.length) return quotes;
+  const key = (q) => [q.week, q.playerId, q.stat, q.line].join("|");
+  const covered = new Set();
+  for (const q of quotes) if (q.slot === "closing") covered.add(key(q));
+  const extra = liveClosing.filter((q) => q.slot === "closing" && !covered.has(key(q)));
+  return extra.length ? [...quotes, ...extra] : quotes;
 }
 
 // quotes: readPropRow() outputs for a season; actualsByWeek: Map week -> Map
@@ -82,5 +121,5 @@ export function buildSourceModel(quotes, actualsByWeek, { includeRetired = false
 // The same, straight from data/. Returns null when the season has no captures.
 export function loadSourceModel({ dataDir = "data", season, ...opts } = {}) {
   const { quotes, actualsByWeek } = loadSeason(season, { dataDir });
-  return buildSourceModel(quotes, actualsByWeek, opts);
+  return buildSourceModel(withLiveClosing(quotes, loadLiveClosing({ dataDir, season })), actualsByWeek, opts);
 }

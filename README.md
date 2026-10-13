@@ -1156,7 +1156,16 @@ result: **the book is left out of its own target** (otherwise a frozen price
 both sides** (a one-sided quote has an assumed margin stripped from it, and is a
 noisier statement from the same book).
 
-2026 weeks 1–4, 93,141 early/closing market pairs; weights after four weeks:
+**Where the "close" comes from.** The backfilled `closing` slot (`--historical --at
+closing`) is the true close, but it is a manual run and stops at week 4. The daily
+near-kickoff captures in `data/closing/` are live, so they are used as the late board
+for any market with no backfilled close (never both — that would count each book
+twice). They are labelled as a late board only, so they can never become a
+point-in-time projection and never enter the projection's share fit. Without this the
+weights stopped learning at week 4; `--no-live-closing` on `npm run source-weights`
+shows the difference.
+
+2026 weeks 1–4 (backfilled close only), 93,141 early/closing market pairs; weights after four weeks:
 
 | book | lead | z | weight |
 |---|---|---|---|

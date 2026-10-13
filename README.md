@@ -364,6 +364,59 @@ closing-line value is for.
    question — using the books' prices as an *input* to our own, and scoring the
    result with Brier and log loss — see **Pricing lines** below.
 
+### The live backtest — the only one worth reading
+
+```bash
+npm run backtest-live                   # prints the report
+npm run backtest-live -- --write        # data/backtest/{season}/live.md + live.json
+```
+
+`.github/workflows/backtest-weekly.yml` regenerates it every Tuesday morning and commits
+`data/backtest/{season}/live.md`. It refreshes the actuals first, re-runs the persona replay (the
+report reads the ledgers), then reports.
+
+**Only the captures taken at the time count** — the Tuesday, Thursday and Saturday drops. A
+backfilled board (opening, closing) is a reconstruction with hindsight in it, in two ways: each
+book's "opening" price is its first-ever price, posted at a different moment, so one book's first price
+against another's later first price looks like an edge nobody could have seen; and it is priced from
+the week's *final* projection, which has read everything since. On the 2026 backfills the pool's ROI
+was +19.5% on the opening board and +7.4% on the closing one, and none of that is a trading result.
+Backfills are excluded by slot (`--live-slots` changes the list); a "live" file that contains anything
+but live rows is flagged in the report.
+
+What it prints:
+
+1. **Boards** — what each live capture contained: rows, markets, books, Pinnacle rows, how much was
+   one-sided, which price it was captured under.
+2. **Pricing on live boards** — Brier of the book, the projection and the pool against what happened,
+   near the money, clustered by player-week.
+3. **Bets** — the Firehose (every bettable edge of at least 3%, one unit, best price) by week and slot:
+   settled and pending bets, ROI with a two-sigma band, ROI if every no-stat-line over lost, and CLV.
+4. **The same boards under the other price** — boards captured on the projection price re-priced with
+   the pool as it would have stood that week, and boards captured on the pool re-priced with the
+   projection, through the same persona engine. The two directions are separate questions and are not
+   added together.
+5. **CLV by book** — each book's bets, ROI and CLV, measured two ways: against that book's *own* closing
+   price (what the ledger reports) and against the closing fair price of the *other* books on the same
+   line. They can disagree: a slow book that never moves scores about zero against its own close even
+   when its price was stale against everyone else. Books with fewer than 20 measurable bets are flagged,
+   and bets with no market close (fewer than two other books quoted that exact line) are counted, not hidden.
+6. **Every persona**, live only.
+7. **Can you read it?** — how many settled bets it takes to see an effect of that size.
+
+Most of it will be noise for a long time, and the report says so. A one-unit bet returns a standard
+deviation of roughly 2 units (longshots pay a lot), so a **5% ROI takes about 8,000 settled bets** to see
+at two sigma, and the report refuses a verdict under 200. CLV resolves much faster because it is a price
+difference rather than a coin flip, but it is partly mechanical (a slow book's off-market price stays
+off-market until the close). Pending bets in a finished week have no stat line — for an over, almost
+always a loss the settlement cannot see, because the actuals feed omits all-zero rows — so the report
+shows ROI with those counted as losses alongside the ledger's.
+
+As of 2026 week 5 it has 119 settled live bets (+22.2% ±41%, "too few to say"), the projection price on
+five Tuesday boards and the pool on one Thursday board. Re-priced with the pool, the five projection-priced
+boards leave **12 bets where the projection price left 227**: the pool finds almost nothing at the edge bar
+on a Tuesday board.
+
 ### The personas
 
 Nobody tails four hundred edges a week. `scripts/lib/personas.mjs` defines
@@ -692,6 +745,7 @@ scripts/median-correction.mjs             is the projected Median in the right p
 scripts/source-weights.mjs                the books' weights and the projection's share
                                           of the price, as of each week
 scripts/projection-miss.mjs               where, and why, the projection loses to the books
+scripts/backtest-live.mjs                 the live-only backtest: ledger, pricing, counterfactual
 scripts/build-lines-data.mjs              compact the captured board for the Line Pricer tab
 ```
 
@@ -709,6 +763,7 @@ npm run simulate -- --persona kelly --dry-run      # one persona, no writes
 | `ingest-weekly.yml` | daily **13:00** | RotoWire projections + actuals, the player roster, then replays personas |
 | `props-weekly.yml` | **Tue 14:00** | The drop: publish edges (slot `main`), replay personas |
 | `props-midweek.yml` | **Thu 15:00** | The second drop: the same once the books have posted the board (slot `thursday`) |
+| `backtest-weekly.yml` | **Tue 12:30** | Refresh actuals, replay personas, regenerate the live backtest report (`data/backtest/`) |
 | `props-saturday.yml` | **Sat 15:00** | The late-week drop: refreshes projections, then the same, leaving out games already played (slot `saturday`) |
 | `closing-lines.yml` | daily **15:00** | Record closing lines for games kicking off soon |
 | `props-backfill.yml` | manual | Rebuild a past week's board at a chosen moment |
@@ -1121,6 +1176,19 @@ about 40% of markets and carries by far the most volume, so under the median it
 pulled the consensus the most while telling it the least. A book with no record
 keeps a prior weight (0.15); evidence outweighs the prior at 150 player-weeks.
 
+**The weights are per stat.** A book's lead is not one number. On receptions the sharp
+books lead hard (Pinnacle 0.99, Circa 1.05, BetMGM 0.73) and the retail books barely do
+(Caesars 0.10, DraftKings 0.18, Hard Rock −0.04); on receiving yards the retail books
+lead almost as much as the sharp ones (0.59–0.70 against 0.64–0.76). One weight per book
+averages the two and is wrong for both. So each (stat, book) has its own lead, pulled
+toward that book's *global* weight by the same prior (`fitStatWeights`): a stat with
+little data prices like the global model and departs from it only as evidence arrives.
+Out of sample (every week priced with weights fitted on earlier weeks) the per-stat
+weights predict a sharp book's close better than the global ones: against Pinnacle MSE
+0.0165 → 0.0160 (z −3.6), against Circa 0.0112 → 0.0109 (z −2.3), and by stat most on
+receptions. Against outcomes they make no detectable difference (Brier −0.00002, z −0.9),
+as with the global weights. `npm run source-weights` prints the leads by stat (§2b).
+
 These weights describe an **early** board — Tuesday or Thursday, hours to days
 before kickoff. At the close the books agree with each other and there is nothing
 left for them to lead. And **live Tuesday captures carry no Pinnacle yet** (0 rows
@@ -1146,7 +1214,7 @@ it.
 - **Point in time.** A backfilled board is priced from the week's *latest*
   snapshot, written days later. Against it the market appears to follow the
   projection by **8%** (z ≈ 10); against the snapshot from the start of the week,
-  **0.8%** (z ≈ 2). The first is the projection having read the same news as the
+  **0.8%** (z ≈ 2). The first is the projection having caught up with the
   market, not leading it. Only live captures count, via `ProjProb`.
 - **No credit on account.** A share starts at zero, is pulled toward zero by a
   prior worth 150 player-weeks, is marked down by one standard error (a couple of
@@ -1168,7 +1236,7 @@ moment (near the money, clustered by player-week):
 
 | | what it tests | result |
 |---|---|---|
-| **Timing** | the books price news the projection has not read | **the largest cause.** Gap to the closing book: **+0.0178** on Tuesday's snapshot → **+0.0073** on the last snapshot before the game. The projection improves every day; the books have been pricing the week's news since the lines opened |
+| **Timing** | the projection is read before it has settled | **the largest cause.** Gap to the closing book: **+0.0178** on Tuesday's snapshot → **+0.0073** on the last snapshot before the game. The projection improves every day. It is *not* shown to be news the books priced: the Tuesday gap is as large where the book barely moved after the open (+0.0194) as where it moved a lot (+0.0145). What improves is the projection, not a reaction to the market |
 | **Spread** | the band is too narrow, so it is overconfident | **second.** Widening the band 1.75× on the pre-kickoff snapshot takes +0.0073 → +0.0041; 2.5× on Tuesday's takes +0.0178 → +0.0119. The projection's probabilities sit too far from a coin flip given how much it differs from the book |
 | **Tails** | the far tails are too thin | **negligible.** A Student-t with the same quartiles moves the gap by ≤ 0.0003. The tail miscalibration is real (where the projection says 2% over, the book and the outcomes say 9–12%) but it is few rows at small Brier weight and not where a bet is decided |
 | **Location** | the middle is in the wrong place | rushing and receiving yards only; closes about a quarter of the gap (see the median correction above) |
@@ -1180,7 +1248,7 @@ and rushing attempts end level with the book. Receiving yards ends close
 weather, matchup, pace, a defence's coverage — than the feed does.
 
 So **no, the problem is not that the books have many prices and we have one**; it
-is that the books have *fresh* prices and we read the projection on Tuesday. With a
+is that the projection is worse early in the week than late, and we read it on Tuesday. With a
 fresh snapshot the projection earns a share of the price on the volume stats —
 fitted against outcomes it is **0.53 ± 0.46 on receptions** (z 2.3), 0.25 on
 receiving yards, ~0 on rushing yards and negative on passing yards. With Tuesday's

@@ -1,0 +1,100 @@
+name: Weekly live backtest
+
+# THE LIVE-ONLY BACKTEST. Regenerates data/backtest/{season}/live.md and live.json:
+# what the paper ledger earned on the boards we actually had at the time (the
+# Tuesday, Thursday and Saturday captures), how the projection price and the pool
+# compare on those same boards, and how much of any of it is more than noise.
+#
+# Backfilled boards are excluded by design: a reconstruction has hindsight in it
+# (each book's "opening" price is posted at a different moment, and it is priced
+# from the week's final projection). See scripts/lib/backtest-live.mjs.
+#
+# It refreshes the actuals first, for the same reason the Saturday job refreshes
+# projections: scheduled ingest runs are routinely delayed by GitHub for hours, and
+# a backtest that quietly settled against last week's stats would be wrong in the
+# direction of looking fine. It then re-runs the persona replay, because the
+# ledgers are what the report reads.
+#
+# Requires ROTOWIRE_COOKIE for the actuals refresh. No odds key: it reads only
+# what is already committed.
+
+on:
+  schedule:
+    # Tuesday 12:30 UTC ~ 08:30 ET: after Monday night's game has ended and been
+    # published, ahead of the 14:00 Tuesday drop. Gated to the season's months.
+    - cron: "30 12 * 9-12,1-2 2"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season (year), e.g. 2026. Blank = latest with captures."
+        required: false
+      refreshActuals:
+        description: "Re-ingest the latest actuals before reporting (true/false)"
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+
+concurrency:
+  # The same single group every data-writing workflow shares: they all
+  # `git add data/` and push to one branch, so two at once means the second
+  # push is rejected as a non-fast-forward.
+  group: data-commit
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Refresh actuals
+        if: github.event.inputs.refreshActuals != 'false'
+        env:
+          ROTOWIRE_COOKIE: ${{ secrets.ROTOWIRE_COOKIE }}
+          SEASON: ${{ github.event.inputs.season }}
+        run: |
+          echo "Running: node scripts/ingest.mjs --only actuals"
+          if ! node scripts/ingest.mjs --only actuals; then
+            echo "::warning::Actuals refresh failed — the report will settle against the actuals already on disk, which may be a day old."
+          fi
+
+      # The report reads the ledgers, and the ledgers are a pure function of the
+      # captures and the actuals, so regenerate them rather than trust the last run.
+      - name: Replay personas
+        run: node scripts/simulate-personas.mjs
+
+      - name: Live backtest
+        run: |
+          args="--write"
+          if [ -n "${{ github.event.inputs.season }}" ]; then args="$args --season ${{ github.event.inputs.season }}"; fi
+          echo "Running: node scripts/backtest-live.mjs $args"
+          node scripts/backtest-live.mjs $args
+
+      - name: Commit report
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "Nothing changed."
+          else
+            git commit -m "Live backtest report + replay personas [skip ci]"
+            pushed=false
+            for attempt in 1 2 3; do
+              if git push; then pushed=true; break; fi
+              echo "Push rejected (attempt $attempt) — rebasing onto $GITHUB_REF_NAME and retrying."
+              git pull --rebase origin "$GITHUB_REF_NAME" || break
+              sleep 5
+            done
+            if [ "$pushed" != "true" ]; then
+              echo "::error::Could not push after 3 attempts."
+              exit 1
+            fi
+          fi

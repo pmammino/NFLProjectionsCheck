@@ -3,7 +3,7 @@
 //
 // Four separate causes, each with a different remedy, are told apart here:
 //
-//   TIMING     the books price news the projection has not read yet. Tested by
+//   TIMING     the projection is read before it has settled. Tested by
 //              scoring every daily snapshot of a week against the same markets.
 //   LOCATION   the projected middle is in the wrong place (see median-correction).
 //   SPREAD     the band is too narrow, so the projection is overconfident.
@@ -284,8 +284,27 @@ function main() {
     });
     console.log(`   week ${w} (n ${rs.length}): ${cells.join("  ")}   | book ${brier(rs, (r) => r.pOpen).toFixed(4)} open, ${brier(rs, (r) => r.pClose).toFixed(4)} close`);
   }
-  console.log("\n   The projection improves every day, and by kickoff it has recovered much of the gap: what separates it from the book");
-  console.log("   at the Tuesday drop is largely news it has not read yet, which the books have been pricing since the lines opened.");
+  console.log("\n   The projection improves every day, and by kickoff it has recovered much of the gap.");
+
+  // Is that "news the books priced"? If it were, the gap should be concentrated in the markets where the book
+  // moved after the open, and nearly absent where it did not.
+  const lg = (p) => Math.log(p / (1 - p));
+  const moves = sample.map((r) => Math.abs(lg(r.pClose) - lg(r.pOpen))).sort((x, y) => x - y);
+  const cut1 = moves[Math.floor(moves.length / 3)];
+  const cut2 = moves[Math.floor((2 * moves.length) / 3)];
+  console.log(`\n   Is it news the books priced? Same markets, split by how far the book moved between the open and the close`);
+  console.log(`   (|Δ logit|; terciles cut at ${cut1.toFixed(3)} and ${cut2.toFixed(3)}). If the gap were news the books priced, it would be`);
+  console.log("   concentrated where the book moved.\n");
+  console.log(`   ${pad("how far the book moved", 28)}${lpad("n", 7)}${lpad("Tuesday snapshot gap", 24)}${lpad("last snapshot gap", 22)}`);
+  for (const [label, test] of [["barely (calm)", (m) => m < cut1], ["a little", (m) => m >= cut1 && m < cut2], ["a lot (news)", (m) => m >= cut2]]) {
+    const rs = sample.filter((r) => test(Math.abs(lg(r.pClose) - lg(r.pOpen))));
+    const gT = pairedBrierDiff(rs.map((r) => ({ p: probOverVariant(r.line, r.tT), q: r.pClose, y: r.y, cluster: r.cluster })));
+    const gP = pairedBrierDiff(rs.map((r) => ({ p: probOverVariant(r.line, r.tP), q: r.pClose, y: r.y, cluster: r.cluster })));
+    console.log(`   ${pad(label, 28)}${lpad(rs.length, 7)}${lpad(`${f(gT.mean)} (z ${gT.z === null ? "-" : gT.z.toFixed(1)})`, 24)}${lpad(`${f(gP.mean)} (z ${gP.z === null ? "-" : gP.z.toFixed(1)})`, 22)}`);
+  }
+  console.log("\n   It is not: the Tuesday gap is as large where the book barely moved as where it moved a lot. The projection is worse early in");
+  console.log("   the week and improves with time whether or not the market reacted, so \"fresher\" is the finding and \"news the books priced\" is not.");
+  console.log("   The mechanism is not established here (roles, depth chart and practice status resolving during the week is the obvious candidate).");
 
   // 3. What repairing each candidate recovers --------------------------------------
   console.log("\n3. WHAT WOULD REPAIRING EACH CANDIDATE RECOVER?   (gap to the closing book, Brier; smaller is better)");

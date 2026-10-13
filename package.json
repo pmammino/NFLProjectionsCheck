@@ -12,6 +12,7 @@
     "median-correction": "node scripts/median-correction.mjs",
     "source-weights": "node scripts/source-weights.mjs",
     "projection-miss": "node scripts/projection-miss.mjs",
+    "backtest-live": "node scripts/backtest-live.mjs",
     "ingest": "node scripts/ingest.mjs",
     "capture-props": "node scripts/capture-props.mjs",
     "capture-closing": "node scripts/capture-props.mjs --closing",

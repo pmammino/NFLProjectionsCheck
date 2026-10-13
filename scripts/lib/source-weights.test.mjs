@@ -17,6 +17,8 @@ import {
   leadStats,
   assessSources,
   fitSourceWeights,
+  fitStatWeights,
+  weightsForStat,
   weightsAsOf,
   fitProjectionShare,
   fitProjectionShares,
@@ -197,7 +199,7 @@ test("effectiveSources falls as one book takes over", () => {
 // A world where the true price T drifts between an early board and the close.
 // `sources` gives each book's early noise (sd, in logit); a book with sd 0 knows
 // the close. `sticky` books do not move between boards. Returns lead pairs.
-function world({ n = 600, sources, sticky = [], seed = 7, week = 1, projection = null }) {
+function world({ n = 600, sources, sticky = [], seed = 7, week = 1, projection = null, stat = "recYds" }) {
   const r = rng(seed);
   const pairs = [];
   for (let i = 0; i < n; i++) {
@@ -214,7 +216,7 @@ function world({ n = 600, sources, sticky = [], seed = 7, week = 1, projection =
     pairs.push({
       week,
       slot: "opening",
-      stat: "recYds",
+      stat,
       cluster: `${week}|${i}`,
       early,
       late,
@@ -628,4 +630,90 @@ test("a share is marked down by its own uncertainty: a cell that has not left it
   const one = fitProjectionShare(shareWorld({ trueShare: 0.5, n: 40, clusters: 1 }));
   assert.equal(one.se, null);
   assert.equal(one.share, 0);
+});
+
+// ---------------------------------------------------------------------------
+// weights by stat
+// ---------------------------------------------------------------------------
+
+test("a book can lead on one stat and not another, and each stat's weight says so", () => {
+  // 'sharp' knows the close on receptions; on rushing yards it is as noisy as the rest.
+  const rec = world({ sources: { sharp: 0.02, a: 0.4, b: 0.4, c: 0.4 }, stat: "receptions", seed: 31, n: 1500 });
+  const rush = world({ sources: { sharp: 0.4, a: 0.4, b: 0.4, c: 0.4 }, stat: "rushYds", seed: 32, n: 1500 });
+  const pairs = [...rec, ...rush].map((p, i) => ({ ...p, cluster: `${p.week}|${p.stat}|${i}` }));
+  const globalFit = fitSourceWeights(assessSources(pairs));
+  const byStat = fitStatWeights(pairs, globalFit.weights);
+  assert.ok(byStat.receptions["sharp:2"] > 2 * byStat.rushYds["sharp:2"], `${byStat.receptions["sharp:2"]} vs ${byStat.rushYds["sharp:2"]}`);
+  // And the global weight is a compromise between the two.
+  assert.ok(globalFit.weights["sharp:2"] < byStat.receptions["sharp:2"]);
+  assert.ok(globalFit.weights["sharp:2"] > byStat.rushYds["sharp:2"]);
+});
+
+test("a stat's weights are pulled toward the global weight: little data stays put, a lot departs", () => {
+  const global = { "sharp:2": 0.5, "a:2": 0.2 };
+  const few = world({ sources: { sharp: 0.9, a: 0.3, b: 0.3, c: 0.3 }, stat: "rushAtt", seed: 41, n: 20 });
+  const many = world({ sources: { sharp: 0.9, a: 0.3, b: 0.3, c: 0.3 }, stat: "rushAtt", seed: 41, n: 3000 });
+  const fewW = fitStatWeights(few, global).rushAtt["sharp:2"];
+  const manyW = fitStatWeights(many, global).rushAtt["sharp:2"];
+  assert.ok(Math.abs(fewW - 0.5) < 0.1, `with 20 player-weeks the stat is still the global model, got ${fewW}`);
+  assert.ok(manyW < 0.3, `with 3000 it has moved to what the data say, got ${manyW}`);
+});
+
+test("a book with no global weight is pulled toward the prior instead", () => {
+  const few = world({ sources: { sharp: 0.02, a: 0.4, b: 0.4, c: 0.4 }, stat: "recYds", seed: 51, n: 15 });
+  const w = fitStatWeights(few, {}).recYds["sharp:2"];
+  assert.ok(Math.abs(w - PRIOR_WEIGHT) < 0.1, `got ${w}`);
+});
+
+test("the projection never becomes a book weight, per stat either", () => {
+  const pairs = world({ sources: { a: 0.3, b: 0.3, c: 0.3 }, projection: 0.02, n: 500 });
+  const byStat = fitStatWeights(pairs, {});
+  assert.equal(byStat.recYds[PROJECTION_SOURCE], undefined);
+  assert.ok(byStat.recYds["a:2"] > 0);
+});
+
+test("weightsForStat: the stat's own weight, else the global one, else nothing (the prior applies later)", () => {
+  const model = { weights: { "a:2": 0.3, "b:2": 0.2 }, statWeights: { rushYds: { "a:2": 0.6 } } };
+  assert.deepEqual(weightsForStat(model, "rushYds"), { "a:2": 0.6, "b:2": 0.2 });
+  assert.deepEqual(weightsForStat(model, "recYds"), { "a:2": 0.3, "b:2": 0.2 });
+  assert.deepEqual(weightsForStat({ weights: { x: 1 } }, "recYds"), { x: 1 });
+  assert.deepEqual(weightsForStat(null, "recYds"), {});
+  // A book neither has keeps the prior in the pool.
+  assert.equal(weightOf(weightsForStat(model, "rushYds"), "z:2"), PRIOR_WEIGHT);
+});
+
+test("weights by stat change the price: the same books, a stat that trusts a different one", () => {
+  const rows = [row("Pinnacle", 0.6), row("DraftKings", 0.5), row("FanDuel", 0.5)];
+  const model = {
+    weights: { "pinnacle:2": 0.1, "draftkings:2": 0.5, "fanduel:2": 0.5 },
+    statWeights: { receptions: { "pinnacle:2": 0.9, "draftkings:2": 0.05, "fanduel:2": 0.05 } },
+  };
+  const generic = weightedConsensusProb(rows, { weights: weightsForStat(model, "rushYds") }).prob;
+  const rec = weightedConsensusProb(rows, { weights: weightsForStat(model, "receptions") }).prob;
+  assert.ok(rec > generic + 0.02, `receptions ${rec} vs generic ${generic}`);
+});
+
+test("per-stat weights, like the global ones, are fitted on strictly earlier weeks", () => {
+  const w1 = world({ sources: { sharp: 0.02, a: 0.4, b: 0.4, c: 0.4 }, stat: "receptions", seed: 61, week: 1, n: 1500 });
+  const w2 = world({ sources: { sharp: 0.02, a: 0.4, b: 0.4, c: 0.4 }, stat: "receptions", seed: 62, week: 2, n: 1500 });
+  // Week 3 is built so the sharp book is useless on receptions. If it reached the week-3 weights they would move.
+  const w3 = world({ sources: { sharp: 2, a: 0.4, b: 0.4, c: 0.4 }, stat: "receptions", seed: 63, week: 3, n: 1500 });
+  const into3 = weightsAsOf([...w1, ...w2, ...w3], 3);
+  const only12 = weightsAsOf([...w1, ...w2], 3);
+  assert.deepEqual(into3.statWeights, only12.statWeights);
+  assert.deepEqual(weightsAsOf([...w1], 1).statWeights, {}, "the first week has no record at all");
+  const into4 = weightsAsOf([...w1, ...w2, ...w3, ...world({ sources: { sharp: 2, a: 0.4, b: 0.4, c: 0.4 }, stat: "receptions", seed: 64, week: 4, n: 1500 })], 4);
+  assert.ok(into4.statWeights.receptions["sharp:2"] < into3.statWeights.receptions["sharp:2"], "and a week that arrives is then reflected");
+});
+
+test("share observations judge each market against the books' weights for ITS stat", () => {
+  const seen = [];
+  buildShareSamples([...liveBoard({ stat: "recYds" }), ...liveBoard({ stat: "rushYds", playerId: "p2" })], {
+    outcomeOf: () => 1,
+    weightsFor: (week, stat) => {
+      seen.push(stat);
+      return {};
+    },
+  });
+  assert.deepEqual(seen.sort(), ["recYds", "rushYds"]);
 });

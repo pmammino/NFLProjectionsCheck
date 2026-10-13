@@ -249,6 +249,11 @@ w_s = (clusters·lead_s + K·prior) / (clusters + K)      K = 150 player-weeks, 
 L_books = Σ w_s·clip(L_s, median ± 1.5) / Σ w_s
 ```
 
+The weights are **per stat**: each (stat, book) lead is pulled toward that book's global weight by the same
+`K = 150` prior, `w_{stat,s} = (clusters·lead_{stat,s} + K·w_s) / (clusters + K)`, so a thin stat prices like the
+global model. Out of sample this predicts the sharp close better than global weights (Pinnacle MSE −0.0005,
+z −3.6; Circa −0.0002, z −2.3); against outcomes it changes nothing detectable.
+
 **Stats — the projection.** One parameter per (stat, slot), fitted against
 outcomes with the books as the offset:
 
@@ -260,7 +265,7 @@ share = clip( shrunk_estimate − 1·SE , 0, 0.75 )       prior 0, worth 150 pla
 Both are fitted **as of a week** (strictly earlier weeks only), on live captures for
 the projection (a backfilled board's projection is the week's *final* snapshot: against
 it the market appears to follow the projection by ~8%, z ≈ 10; against the one it had on
-Tuesday, ~0.8%, z ≈ 2 — the same news, not a lead). `ProjProb` records what the
+Tuesday, ~0.8%, z ≈ 2 — it has caught up with the market, not led it). `ProjProb` records what the
 projection alone said on every row, because `OurProb` is the pool's after re-pricing.
 
 2026 weeks 1–4: weights Pinnacle 0.72, BetMGM 0.47, Circa 0.37, theScore 0.36,
@@ -285,19 +290,19 @@ the weighted retail books.
 ### 4c. Why the projection earns so little
 
 **Plain English.** Four things could make a projection lose to the books: it is
-*late* (the books priced news it hasn't read), its *middle* is in the wrong place,
+*early* (read before it has settled), its *middle* is in the wrong place,
 its *band* is too narrow (too sure of itself), or its *tails* are too thin. Tested
 separately on weeks 2–4 against the book at the same moment, near the money:
 
 | cause | result |
 |---|---|
-| **late** | the biggest. Gap to the closing book **+0.0178** on Tuesday's snapshot, **+0.0073** on the last snapshot before the game: the projection gets better every day |
+| **late** | the biggest. Gap to the closing book **+0.0178** on Tuesday's snapshot, **+0.0073** on the last snapshot before the game: the projection gets better every day. It is not shown to be news the books priced: the Tuesday gap is as large where the book barely moved after the open (+0.0194) as where it moved a lot (+0.0145) |
 | **band too narrow** | second. Widening 1.75× (pre-kickoff) takes +0.0073 → +0.0041; 2.5× on Tuesday's, +0.0178 → +0.0119 |
 | **tails too thin** | negligible: Student-t with the same quartiles moves the gap ≤ 0.0003. The tail miscalibration is real (the projection says 2%, the book and the outcomes 9–12%) but small in Brier terms |
 | **middle in the wrong place** | rushing and receiving yards only; about a quarter of the gap (median correction) |
 
 So the problem is not "the books have many prices and we have one"; it is that the
-books have *fresh* prices and the projection is read on Tuesday. With a fresh
+projection is worse early in the week than late, and it is read on Tuesday. With a fresh
 snapshot the projection earns a share on the volume stats — against outcomes
 0.53 ± 0.46 on receptions (z 2.3), 0.25 on receiving yards — and negative on
 passing yards, where the books simply know more (weather, matchup, pace). With
@@ -309,6 +314,57 @@ Student-t with the *same quartiles*, so only the tails move; the band multiplier
 scales both half-spreads; each is scored by the Brier gap to the book at the same
 moment, clustered on (week, player). Reproduce with `npm run projection-miss`
 (needs a full clone: the daily snapshots live in git history).
+
+### 4d. Is there value in big disagreements, in stat-specific weights, or in a two-stage blend?
+
+Research on 2026 weeks 2–4, point-in-time (Tuesday's snapshot against the opening book; the last
+snapshot before the game against the closing book). These are ad-hoc analyses, not scripts in the
+repo. Shares are fitted against outcomes **with an intercept**, which absorbs a +0.1 to +0.5 logit tilt
+that the actuals feed's missing zero-stat rows put into outcomes. The tilt barely moves the shares
+(receptions 0.54 → 0.51, receiving yards 0.24 → 0.11, all stats 0.11 → 0.02), so the earlier receptions
+share stands and the receiving-yards share was partly that bias.
+
+**Large disagreements carry no extra information.** The projection's share, by how far it sits from the book:
+
+| disagreement (logit; ≈ prob. points) | Tuesday vs open | pre-kickoff vs close |
+|---|---|---|
+| 0.25–0.5 (≈ 8) | −0.10 ± 0.42 | −0.12 ± 0.42 |
+| 0.5–1 (≈ 13) | +0.07 ± 0.29 | +0.11 ± 0.28 |
+| above 1 (≈ 13–20) | **−0.02 ± 0.12** | **−0.01 ± 0.15** |
+
+The trend with size is flat (slope +0.00 ± 0.08). The biggest disagreements are about as reliable as the
+smallest, which is to say not at all, and they are measured with decent precision. That supports the
+20-point market-disagreement cap in `calibration.mjs`: a big gap from the book is our error. There is no
+pocket of value in the extreme discrepancies. (Splitting by whether the projection says over or under looks
+asymmetric, +0.27 vs −0.40, but that is the missing-zero-row tilt again: it makes over disagreements look
+informative and under ones anti-informative.)
+
+**The books should be weighted by stat (now built); the projection earns a share on one.**
+- *Books.* Each book's lead differs by stat. On receptions the sharp books lead hard (Pinnacle 0.99, Circa
+  1.05, BetMGM 0.73) while the retail books barely do (Caesars 0.10, DraftKings 0.18, FanDuel 0.03–0.09,
+  Hard Rock −0.04). On receiving yards the retail books lead almost as much as the sharp ones (0.59–0.70 vs
+  0.64–0.76). Rushing sits between; passing yards is too thin to read (73 player-weeks). Weights fitted per
+  stat, shrunk toward the global weights, predict the sharp close better than global weights in every cell I
+  could test, out of sample: receptions −0.0022 MSE (z −3.7), receiving yards −0.0004 (z −4.0), all stats
+  −0.0007 against Pinnacle (z −4.1) and −0.0004 against Circa (z −3.1). Real and modest.
+- *Projection.* With a fresh snapshot: receptions **0.51 ± 0.47**, receiving yards 0.11 ± 0.39, rushing yards
+  0.41 ± 0.66, passing yards −1.4 ± 1.4. With Tuesday's: about 0 everywhere. Receptions is the only cell
+  distinguishable from zero, and it is also the stat where the retail books are slowest, which is consistent
+  with the projection's volume signal adding something there. That is a coincidence to watch, not a result.
+
+**The two-stage blend is the same model.** "Treat the projection as a book, weight it, then blend that into the
+market as another book" is, in logit space, `L_M + γ·(L_B − L_M)` with `L_B = L_M + β·(L_P − L_M)`, which
+equals `L_M + (γβ)·(L_P − L_M)`: one share, checked numerically to 1e-12. Assessing the blend as a book by
+lead gives the projection's own lead back, rescaled. Walk-forward (weeks 3–4, trained on earlier weeks), the
+single-stage and two-stage versions, in logit and in probability space, are identical to the market, because
+after one or two weeks every fitted share is still zero. The one variant that differed, a fitted blend that
+also recalibrates the market (intercept `a`, slope `c`), was **worse**: +0.009 Brier (z 2.1) on Tuesday and
++0.007 (z 1.7) pre-kickoff, because the intercept learns the missing-zero tilt and bets overs. Do not add it.
+
+**The ceiling is small whatever the structure.** Fitting the best per-stat shares on the same weeks they are
+scored on, an upper bound, gains 0.0004 Brier overall on Tuesday's snapshot and 0.0006 pre-kickoff
+(receptions +0.0018, receiving yards +0.0008, rushing and passing about 0). No arrangement of weights can
+extract more than that from the current projection. A better projection is the lever, not a cleverer blend.
 
 ---
 

@@ -48,6 +48,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the projection snapshots are overwritten daily, so the
+          # projection a past capture had exists only as an earlier commit
+          # (scripts/lib/projection-history.mjs). A shallow clone has none.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

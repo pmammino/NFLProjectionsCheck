@@ -11,6 +11,7 @@
     "board-timing": "node scripts/board-timing.mjs",
     "median-correction": "node scripts/median-correction.mjs",
     "source-weights": "node scripts/source-weights.mjs",
+    "spread-fit": "node scripts/spread-fit.mjs",
     "projection-miss": "node scripts/projection-miss.mjs",
     "backtest-live": "node scripts/backtest-live.mjs",
     "ingest": "node scripts/ingest.mjs",

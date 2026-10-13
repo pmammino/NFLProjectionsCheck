@@ -1290,6 +1290,33 @@ daily snapshots in git history and so needs a full clone (`git fetch --unshallow
 > The conclusion — that it is worse than the market near the money — survives
 > that advantage, and would be at least as strong on point-in-time data.
 
+#### Is the projection's band too narrow?
+
+`npm run spread-fit`. The Floor/Median/Ceiling band is treated as the 25th/50th/75th
+percentiles of a two-piece normal. On the live boards it is too narrow: on the
+alternate-line ladders (lines out to 240 yards) the projection called recYds overs it
+priced at 1% and they hit about 10% of the time, and a multiplier on the floor and
+ceiling distances from the median above 1 fits every stat and every week that has
+enough ladder to measure. How far above is not stable (1.2 to 2.5 by week), which is why
+`lib/spread-fit.mjs` is built cautiously: pooled by group (yards, counts), marked down by
+a bootstrap standard error, capped at 1.6, gated on a clustered log-loss gain, and only
+ever fitted on earlier weeks. A per-stat fit on weeks 1–4 priced week 5 *worse* than not
+fitting.
+
+What the walk-forward says (weeks 2, 3, 5): widening improves the projection's own price
+near the money by 0.0025–0.0048 Brier depending on the cap (z −2.3 to −3.9), and all rungs
+by 0.0005–0.0024. It does **not** earn a share of the price: near the money the share is
+0.00 ±0.3 as projected or widened, and the widened projection still scores 0.2410 against
+the books' 0.2332. Better calibration is not new information. In long-shot overs the share
+reads 0.24 ±0.23 as projected and 0.49 ±0.52 widened — positive, not significant, and
+shown in the weekly report's long-shot monitor.
+
+It is not wired into capture. The shares in use were fitted on the projection as it was,
+and swapping it underneath them would move them. If the share clears zero, wire the
+widening in and refit the shares on it in the same change. The projection's *history* needs
+git (the committed snapshot is overwritten daily); on a shallow clone the report says so and
+uses the latest snapshot, which has hindsight.
+
 #### Does the weighting work?
 
 | test | result |

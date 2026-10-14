@@ -27,7 +27,7 @@ import { loadSeason, availableSeasons, actualFor } from "./lib/pricing-dataset.m
 import { gradeOutcome } from "./lib/grading.mjs";
 import { bookInSet, median, sigmoid } from "./lib/consensus.mjs";
 import { pairedBrierDiff, NEAR_MONEY_MAX } from "./lib/pricing.mjs";
-import { buildSourceModel } from "./lib/source-model.mjs";
+import { buildSourceModel, loadLiveClosing, withLiveClosing } from "./lib/source-model.mjs";
 import {
   PROJECTION_SOURCE,
   PRIOR_WEIGHT,
@@ -48,6 +48,7 @@ function parseArgs(argv) {
   const a = {
     season: null,
     dataDir: join(ROOT, "data"),
+    liveClosing: true,
     priorClusters: PRIOR_CLUSTERS,
     priorWeight: PRIOR_WEIGHT,
     includeRetired: false,
@@ -59,6 +60,7 @@ function parseArgs(argv) {
     switch (argv[i]) {
       case "--season": a.season = Number(next()); break;
       case "--data-dir": a.dataDir = next(); break;
+      case "--no-live-closing": a.liveClosing = false; break;
       case "--prior-clusters": a.priorClusters = Number(next()); break;
       case "--prior-weight": a.priorWeight = Number(next()); break;
       case "--include-retired": a.includeRetired = true; break;
@@ -386,7 +388,8 @@ function main() {
   if (!season) throw new Error(`No prop captures under ${a.dataDir}/props/`);
 
   const { quotes, actualsByWeek } = loadSeason(season, { dataDir: a.dataDir });
-  const r = analyse(quotes, actualsByWeek, a);
+  const modelQuotes = a.liveClosing ? withLiveClosing(quotes, loadLiveClosing({ dataDir: a.dataDir, season })) : quotes;
+  const r = analyse(modelQuotes, actualsByWeek, a);
   if (r.pairs === 0) throw new Error("No early/closing pairs: needs a closing capture alongside an earlier one (see README, backfilling).");
 
   if (a.json) {

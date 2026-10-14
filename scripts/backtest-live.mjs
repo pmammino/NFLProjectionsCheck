@@ -39,9 +39,10 @@ import { slotDir } from "./lib/slots.mjs";
 import { PERSONAS } from "./lib/personas.mjs";
 import { median, sigmoid } from "./lib/consensus.mjs";
 import { isBettableStat } from "./lib/markets.mjs";
-import { buildSourceModel, outcomeFrom } from "./lib/source-model.mjs";
+import { buildSourceModel, outcomeFrom, loadLiveClosing, withLiveClosing } from "./lib/source-model.mjs";
 import { bookVotes, poolVotes, shareFor, weightsForStat } from "./lib/source-weights.mjs";
-import { PROPS_COLUMNS, repriceWithPool } from "./capture-props.mjs";
+import { PROPS_COLUMNS } from "./capture-props.mjs";
+import { asPoolPriced } from "./lib/pool-reprice.mjs";
 import {
   LIVE_SLOTS,
   isLiveSlot,
@@ -50,11 +51,13 @@ import {
   verdict,
   boardStats,
   pricingAccuracy,
+  longshotMonitor,
   counterfactualOf,
   projectionProbOf,
   asProjectionPriced,
   MIN_BETS_FOR_A_VERDICT,
   MIN_CLV_FOR_A_BOOK,
+  MIN_CLUSTERS_FOR_WALK_FORWARD,
   indexClosingConsensus,
   summarizeByBook,
 } from "./lib/backtest-live.mjs";
@@ -168,6 +171,8 @@ function liveSamples(quotes, actualsByWeek, model, liveSlots) {
       pBook: sigmoid(median(votes.map((v) => v.logit))),
       pProj,
       pPool: pool.prob,
+      // The books alone, weighted: what the long-shot monitor is a delta against.
+      pBooks: poolVotes(votes, { weights: weightsForStat(m, first.stat) }).prob,
       cluster: `${first.week}|${first.playerId}`,
     });
   }
@@ -177,40 +182,6 @@ function liveSamples(quotes, actualsByWeek, model, liveSlots) {
 // ---------------------------------------------------------------------------
 // The counterfactual
 // ---------------------------------------------------------------------------
-
-// Re-price a props file's rows under the pool, as it would have stood that week.
-function asPoolPriced(rows, model, slot) {
-  const cand = rows.map((r) => {
-    const proj = projectionProbOf(r);
-    return {
-      r,
-      rotowirePlayerId: r.PlayerID,
-      statKey: r.Stat,
-      line: Number(r.Line),
-      side: r.Side || "over",
-      sportsbook: r.Book,
-      odds: Number(r.Odds),
-      oppositeOdds: r.OppositeOdds === "" || r.OppositeOdds === undefined ? null : Number(r.OppositeOdds),
-      impliedProb: Number(r.ImpliedProb),
-      fairProb: Number(r.FairProb),
-      hold: r.Hold === "" || r.Hold === undefined ? null : Number(r.Hold),
-      // The pool takes the projection's own probability as its input.
-      ourProb: proj ?? Number(r.OurProb),
-      projProb: proj ?? Number(r.OurProb),
-      edge: Number(r.Edge),
-      modelEdge: Number(r.ModelEdge),
-    };
-  });
-  repriceWithPool(cand, model, { slot });
-  return cand.map((c) => ({
-    ...c.r,
-    OurProb: c.ourProb.toFixed(4),
-    ProjProb: c.projProb.toFixed(4),
-    Edge: c.edge.toFixed(4),
-    ModelEdge: c.modelEdge.toFixed(4),
-    PriceModel: c.priceModel ?? c.r.PriceModel ?? "projection",
-  }));
-}
 
 // Run the Firehose over the live boards re-priced under the other model, in a
 // throwaway data directory so nothing in data/ is touched, and return its ledger.
@@ -267,10 +238,13 @@ function main() {
 
   // 2. Pricing accuracy on live boards
   const { quotes, actualsByWeek } = loadSeason(season, { dataDir: join(ROOT, a.dataDir) });
-  const model = buildSourceModel(quotes, actualsByWeek);
+  const model = buildSourceModel(withLiveClosing(quotes, loadLiveClosing({ dataDir: join(ROOT, a.dataDir), season })), actualsByWeek);
   const samples = liveSamples(quotes, actualsByWeek, model, a.liveSlots);
   const accWeeks = [...new Set(samples.map((s) => s.week))].sort((x, y) => x - y);
   const accuracy = { overall: pricingAccuracy(samples), byWeek: Object.fromEntries(accWeeks.map((w) => [w, pricingAccuracy(samples.filter((s) => s.week === w))])) };
+
+  // 2b. Monitor: the projection on long-shot overs. Not a price.
+  const longshot = longshotMonitor(samples);
 
   // 3. Bets
   const weekSlots = [...new Set(firehose.map((r) => `${r.Week}|${r.Slot || "main"}`))].sort((x, y) => Number(x.split("|")[0]) - Number(y.split("|")[0]) || x.localeCompare(y));
@@ -319,7 +293,7 @@ function main() {
   // 5. Personas
   const personas = PERSONAS.map((p) => ({ id: p.id, label: p.label, summary: summarizeBets(live(loadLedger(a.dataDir, p.id, season)), { completeWeeks }) }));
 
-  const result = { season, minEdge: a.minEdge, liveSlots: a.liveSlots, latestWeek, completeWeeks: [...completeWeeks], boards: boardRows, accuracy, betsByWeek, total, byModel, byBook, counterfactual: cf, personas };
+  const result = { season, minEdge: a.minEdge, liveSlots: a.liveSlots, latestWeek, completeWeeks: [...completeWeeks], boards: boardRows, accuracy, longshot, betsByWeek, total, byModel, byBook, counterfactual: cf, personas };
   const markdown = render(result);
 
   if (a.json) console.log(JSON.stringify(result, null, 2));
@@ -399,6 +373,39 @@ function render(r) {
     );
     const thin = Object.entries(r.accuracy.byWeek).filter(([, x]) => x.near.clusters < 30).map(([w]) => w);
     if (thin.length) out.push("", `The z-scores use cluster-robust errors, which are unreliable under about 30 player-weeks (week${thin.length > 1 ? "s" : ""} ${thin.join(", ")}). Read the all-weeks row.`);
+  }
+
+  out.push("", "## 2b. Monitor: does the projection say anything about long-shot overs?", "");
+  const ls = r.longshot;
+  const lo = ls.overall;
+  if (lo.n === 0) out.push("No graded long-shot markets yet.");
+  else {
+    const fx2 = (x, d = 2) => (x === null || x === undefined || !Number.isFinite(x) ? "–" : x.toFixed(d));
+    out.push(
+      `Overs the books price at ${(ls.band[0] * 100).toFixed(0)}–${(ls.band[1] * 100).toFixed(0)}% (the high rungs of the alternate-line ladders). The projection's share of the price is zero everywhere near 50/50; this is the one band that showed any lean, and **it is a monitor, not a price**: nothing here reaches the pool.`,
+      "",
+      "share = how far to move the books' price toward the projection to match what happened (0 = ignore it, 1 = believe it). Unpenalised, so it is the raw number and its error, not the cautious one the price would use.",
+      ""
+    );
+    const lvl = (x) => (x === null || x === undefined || !Number.isFinite(x) ? "–" : `${(100 * x).toFixed(1)}%`);
+    const shareCell = (x) => (x.share === null ? "–" : `${fx2(x.share)} ±${x.se === null ? "–" : fx2(1.96 * x.se)}`);
+    out.push(
+      table(
+        ["", "markets", "player-weeks", "share (±95%)", "books", "projection", "happened"],
+        [...ls.byWeek.map((w) => [`week ${w.week}`, w.n.toLocaleString(), w.clusters, shareCell(w), lvl(w.meanBooks), lvl(w.meanProj), lvl(w.observed)]), ["**all weeks**", lo.n.toLocaleString(), lo.clusters, shareCell(lo), lvl(lo.meanBooks), lvl(lo.meanProj), lvl(lo.observed)]]
+      )
+    );
+    const wf = ls.walkForward;
+    out.push("");
+    if (wf.n && wf.mean !== null) {
+      out.push(`Walk-forward (each week priced with the share fitted on earlier weeks, floored at 0; weeks ${wf.weeks.map((x) => `${x.week} @ ${fx2(x.share)}`).join(", ")}): Brier ${fx(wf.mean)} against the books' pool (z ${wf.z === null ? "–" : wf.z.toFixed(1)}, ${wf.clusters} player-weeks). Positive = worse than the books, negative = better.`);
+    } else out.push(`Walk-forward: not enough earlier weeks yet (needs ${MIN_CLUSTERS_FOR_WALK_FORWARD} player-weeks before a week can be scored).`);
+    out.push(
+      "",
+      `**Status: ${ls.status}.** ${ls.status === "candidate" ? "The share's interval is above zero and the walk-forward beat the books. Worth a proper look before it is priced." : ls.status === "worth a look" ? "The all-weeks share is more than two standard errors above zero but the walk-forward does not confirm it. A result carried by one week is not a result." : "Nothing a price could use yet."}`,
+      "",
+      "\"Happened\" tends to sit above both prices: the actuals feed omits players with an all-zero line, which tilts outcomes toward overs. Read the share (a difference between two prices), not the level."
+    );
   }
 
   out.push("", "## 3. Bets: the Firehose, live only", "");

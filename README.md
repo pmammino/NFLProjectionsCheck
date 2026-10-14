@@ -396,6 +396,13 @@ What it prints:
    the pool as it would have stood that week, and boards captured on the pool re-priced with the
    projection, through the same persona engine. The two directions are separate questions and are not
    added together.
+   **Monitor: long-shot overs** (section 2b). Overs the books price at 3–15% — the high rungs of the
+   alternate-line ladders — are outside every share fit (those cover markets near 50/50). The monitor
+   reports the projection's share there: all weeks, week by week, and walk-forward (each week priced with
+   the share fitted on earlier weeks only, floored at 0, against the books' pool, clustered). It is not
+   a price and never reaches the pool; its status is "no evidence" until the share's interval clears zero
+   *and* the walk-forward wins. On the first look (weeks 2–5) the all-weeks share is 0.12 ±0.17 and the
+   walk-forward is slightly worse than the books.
 5. **CLV by book** — each book's bets, ROI and CLV, measured two ways: against that book's *own* closing
    price (what the ledger reports) and against the closing fair price of the *other* books on the same
    line. They can disagree: a slow book that never moves scores about zero against its own close even
@@ -416,6 +423,51 @@ As of 2026 week 5 it has 119 settled live bets (+22.2% ±41%, "too few to say"),
 five Tuesday boards and the pool on one Thursday board. Re-priced with the pool, the five projection-priced
 boards leave **12 bets where the projection price left 227**: the pool finds almost nothing at the edge bar
 on a Tuesday board.
+
+### Filtered Paper Trading — change the strategy and watch what happens
+
+The **Filtered Paper Trading** tab is the personas turned inside out. A persona is one
+fixed strategy; this tab holds every candidate bet on the boards we captured at the time
+and lets you choose the strategy in the browser. It came out of the #oj-projections
+thread, and each control is one of the suggestions made there:
+
+| control | what it does |
+|---|---|
+| **Odds range** (default **-400 to +200**, editable) | the range the team said most of its own betting sits in; compared as decimal odds, validated as real American prices, and the data holds -1000 to +3000 so it can be widened |
+| **Books**, "only books you can bet at", **Sharper only** | which books a bet may be placed at; Pinnacle is a reference price and is off unless you untick the box |
+| **Sharp books don't contradict the price** | the sharp books' own fair price (Pinnacle, Circa) must not be worse than the price taken, with an editable tolerance; a market no sharp book quoted cannot be confirmed, so it is dropped |
+| **Books on the exact line, at least** (default 3) | consensus lines: nothing that only one or two shops are offering |
+| **Distance from the main line** | cap how many rungs of a ladder away from the line most books quote |
+| **Ladders**: best rung vs every rung | the "conservative" bettor against the one who hammers an edge everywhere it appears |
+| **Shop for the best price** | one bet per market at the best price among the books chosen |
+| **Timing**: first capture vs every capture | a bet is placed once, at the first capture where it qualifies, or each capture counts separately (which counts one market up to three times) |
+| **Side**, stats, weeks, captures | and a per-market **over vs under** table |
+| **Edge basis** | the projection against the book's price, the pool (the live pipeline's price), or the sharp books' price alone (an edge needing no projection) |
+
+Click any row in any table to drill into it (a stat, a side, a book, a week, a capture);
+the chips above the scorecard say where you are. Four presets are starting points:
+**Realistic** (the default), **Sharp books**, **Ladders** and **Everything** (what the
+firehose reports, and the number to be most suspicious of).
+
+Three things it is careful about:
+
+- **Live captures only by default.** The reconstructed opening and closing boards are priced
+  from the week's final projection and flatter every strategy. They can be turned on (their
+  own file is fetched only then), a verdict that rests on them is labelled "not evidence", and
+  the By capture table shows the two side by side. On 2026 weeks 1-5 the Realistic filter is
+  +0.3% ±6.8% on 865 settled live bets and +4.0% ±3.7% once the reconstructions are added.
+- **The sample shrinks as the filter narrows**, so the scorecard says how many settled bets
+  the ROI it is showing would need to resolve, and which side of zero its band is on. Fewer
+  bets with a better-looking ROI is usually the filter finding noise.
+- **Pending is not hidden.** A bet in a finished week with no stat line is a loss for an over
+  and a void for an under in the conservative ROI, because the actuals feed omits all-zero lines.
+
+Under the hood: `scripts/lib/paper-data.mjs` builds every candidate (an edge of 3% or more
+under any of the three prices) with its settlement and its CLV against the other books' close;
+`scripts/build-paper-data.mjs` writes `public/data/paper.json` and `paper-recon.json` on
+predev/prebuild (about a minute and a half, so it skips itself when its output is newer than
+its inputs; `npm run build:paper -- --force` rebuilds); `scripts/lib/paper-filter.mjs` is the
+engine the browser and the tests share.
 
 ### The personas
 
@@ -1156,7 +1208,16 @@ result: **the book is left out of its own target** (otherwise a frozen price
 both sides** (a one-sided quote has an assumed margin stripped from it, and is a
 noisier statement from the same book).
 
-2026 weeks 1–4, 93,141 early/closing market pairs; weights after four weeks:
+**Where the "close" comes from.** The backfilled `closing` slot (`--historical --at
+closing`) is the true close, but it is a manual run and stops at week 4. The daily
+near-kickoff captures in `data/closing/` are live, so they are used as the late board
+for any market with no backfilled close (never both — that would count each book
+twice). They are labelled as a late board only, so they can never become a
+point-in-time projection and never enter the projection's share fit. Without this the
+weights stopped learning at week 4; `--no-live-closing` on `npm run source-weights`
+shows the difference.
+
+2026 weeks 1–4 (backfilled close only), 93,141 early/closing market pairs; weights after four weeks:
 
 | book | lead | z | weight |
 |---|---|---|---|
@@ -1273,6 +1334,33 @@ daily snapshots in git history and so needs a full clone (`git fetch --unshallow
 > informed than the Tuesday one, so those comparisons *flatter* the projection.
 > The conclusion — that it is worse than the market near the money — survives
 > that advantage, and would be at least as strong on point-in-time data.
+
+#### Is the projection's band too narrow?
+
+`npm run spread-fit`. The Floor/Median/Ceiling band is treated as the 25th/50th/75th
+percentiles of a two-piece normal. On the live boards it is too narrow: on the
+alternate-line ladders (lines out to 240 yards) the projection called recYds overs it
+priced at 1% and they hit about 10% of the time, and a multiplier on the floor and
+ceiling distances from the median above 1 fits every stat and every week that has
+enough ladder to measure. How far above is not stable (1.2 to 2.5 by week), which is why
+`lib/spread-fit.mjs` is built cautiously: pooled by group (yards, counts), marked down by
+a bootstrap standard error, capped at 1.6, gated on a clustered log-loss gain, and only
+ever fitted on earlier weeks. A per-stat fit on weeks 1–4 priced week 5 *worse* than not
+fitting.
+
+What the walk-forward says (weeks 2, 3, 5): widening improves the projection's own price
+near the money by 0.0025–0.0048 Brier depending on the cap (z −2.3 to −3.9), and all rungs
+by 0.0005–0.0024. It does **not** earn a share of the price: near the money the share is
+0.00 ±0.3 as projected or widened, and the widened projection still scores 0.2410 against
+the books' 0.2332. Better calibration is not new information. In long-shot overs the share
+reads 0.24 ±0.23 as projected and 0.49 ±0.52 widened — positive, not significant, and
+shown in the weekly report's long-shot monitor.
+
+It is not wired into capture. The shares in use were fitted on the projection as it was,
+and swapping it underneath them would move them. If the share clears zero, wire the
+widening in and refit the shares on it in the same change. The projection's *history* needs
+git (the committed snapshot is overwritten daily); on a shallow clone the report says so and
+uses the latest snapshot, which has hindsight.
 
 #### Does the weighting work?
 

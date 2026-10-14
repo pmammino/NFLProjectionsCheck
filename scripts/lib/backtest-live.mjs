@@ -33,7 +33,7 @@ import { americanToProb } from "./odds.mjs";
 import { summarizeClv } from "./clv.mjs";
 import { canonicalBookKey } from "./books.mjs";
 import { bookLabel } from "./lines-index.mjs";
-import { bookVotes } from "./source-weights.mjs";
+import { bookVotes, fitProjectionShare } from "./source-weights.mjs";
 import { median, sigmoid } from "./consensus.mjs";
 import { pairedBrierDiff, NEAR_MONEY_MAX } from "./pricing.mjs";
 
@@ -238,6 +238,76 @@ export function pricingAccuracy(samples, { band = NEAR_MONEY_MAX } = {}) {
     poolVsProj: diff(rows, "pPool", "pProj"),
   });
   return { all: block(samples), near: block(near) };
+}
+
+// ---------------------------------------------------------------------------
+// Monitor: does the projection say anything about long-shot overs?
+// ---------------------------------------------------------------------------
+// The projection's share is fitted for markets near 50/50, and every cell there
+// is zero. Long-shot overs (the books' price 3-15%: the high rungs of the
+// alternate-line ladders) were never looked at, and the one look so far gave a
+// share that was positive in one week and negative in the four before it. It is
+// a monitor, not a price: nothing here reaches the pool.
+//
+// Three views of the same markets:
+//   - the share fitted on everything (unpenalised: the monitor wants the raw
+//     number and its error, not the cautious one the price uses)
+//   - the share week by week, so a result carried by one week shows
+//   - walk-forward: each week priced with the share fitted on the EARLIER
+//     weeks only (floored at 0), against the books' pool, clustered. This is the
+//     only one of the three that could have been acted on.
+//
+// `samples` carry { week, y, pBooks, pProj, cluster }: pBooks is the books'
+// weighted pool WITHOUT the projection.
+export const LONGSHOT_BAND = [0.03, 0.15];
+export const MIN_CLUSTERS_FOR_WALK_FORWARD = 30;
+const MON_MAX_LOGIT = 6;
+const monLogit = (p) => Math.max(-MON_MAX_LOGIT, Math.min(MON_MAX_LOGIT, Math.log(p / (1 - p))));
+
+export function longshotMonitor(samples, { band = LONGSHOT_BAND, minClusters = MIN_CLUSTERS_FOR_WALK_FORWARD, cap = 0.75 } = {}) {
+  const rows = samples
+    .filter((s) => Number.isFinite(s.pBooks) && Number.isFinite(s.pProj) && s.pBooks >= band[0] && s.pBooks < band[1] && (s.y === 0 || s.y === 1))
+    .map((s) => ({ week: s.week, y: s.y, pBooks: s.pBooks, pProj: s.pProj, cluster: s.cluster, lBooks: monLogit(s.pBooks), lProj: monLogit(s.pProj) }));
+  const mean = (a, f) => (a.length ? a.reduce((t, r) => t + f(r), 0) / a.length : null);
+  const fit = (obs) => fitProjectionShare(obs, { priorClusters: 0, caution: 0, cap: Infinity });
+  const summary = (obs) => {
+    const f = fit(obs);
+    return {
+      n: obs.length,
+      clusters: f.clusters,
+      share: obs.length ? f.raw : null,
+      se: f.se,
+      z: f.z,
+      meanBooks: mean(obs, (r) => r.pBooks),
+      meanProj: mean(obs, (r) => r.pProj),
+      observed: mean(obs, (r) => r.y),
+    };
+  };
+
+  const weeks = [...new Set(rows.map((r) => r.week))].sort((a, b) => a - b);
+  const byWeek = weeks.map((w) => ({ week: w, ...summary(rows.filter((r) => r.week === w)) }));
+
+  const tested = [];
+  const used = [];
+  for (const w of weeks) {
+    const prior = rows.filter((r) => r.week < w);
+    const f = fit(prior);
+    if (f.clusters < minClusters) continue;
+    const share = Math.min(cap, Math.max(0, f.raw));
+    used.push({ week: w, share, trainedClusters: f.clusters });
+    for (const r of rows.filter((x) => x.week === w)) {
+      tested.push({ p: 1 / (1 + Math.exp(-(r.lBooks + share * (r.lProj - r.lBooks)))), q: r.pBooks, y: r.y, cluster: r.cluster });
+    }
+  }
+  const walkForward = { weeks: used, ...pairedBrierDiff(tested) };
+
+  const overall = summary(rows);
+  const lower = overall.share !== null && overall.se !== null ? overall.share - 1.96 * overall.se : null;
+  const status =
+    lower !== null && lower > 0 && walkForward.z !== null && walkForward.z < -2 ? "candidate"
+    : overall.z !== null && overall.z > 2 ? "worth a look"
+    : "no evidence";
+  return { band, overall, byWeek, walkForward, status };
 }
 
 // ---------------------------------------------------------------------------

@@ -16,3 +16,5 @@
 next-env.d.ts
 .vercel
 .env*.local
+/public/data/paper.json
+/public/data/paper-recon.json

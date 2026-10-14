@@ -424,6 +424,51 @@ five Tuesday boards and the pool on one Thursday board. Re-priced with the pool,
 boards leave **12 bets where the projection price left 227**: the pool finds almost nothing at the edge bar
 on a Tuesday board.
 
+### Filtered Paper Trading — change the strategy and watch what happens
+
+The **Filtered Paper Trading** tab is the personas turned inside out. A persona is one
+fixed strategy; this tab holds every candidate bet on the boards we captured at the time
+and lets you choose the strategy in the browser. It came out of the #oj-projections
+thread, and each control is one of the suggestions made there:
+
+| control | what it does |
+|---|---|
+| **Odds range** (default **-400 to +200**, editable) | the range the team said most of its own betting sits in; compared as decimal odds, validated as real American prices, and the data holds -1000 to +3000 so it can be widened |
+| **Books**, "only books you can bet at", **Sharper only** | which books a bet may be placed at; Pinnacle is a reference price and is off unless you untick the box |
+| **Sharp books don't contradict the price** | the sharp books' own fair price (Pinnacle, Circa) must not be worse than the price taken, with an editable tolerance; a market no sharp book quoted cannot be confirmed, so it is dropped |
+| **Books on the exact line, at least** (default 3) | consensus lines: nothing that only one or two shops are offering |
+| **Distance from the main line** | cap how many rungs of a ladder away from the line most books quote |
+| **Ladders**: best rung vs every rung | the "conservative" bettor against the one who hammers an edge everywhere it appears |
+| **Shop for the best price** | one bet per market at the best price among the books chosen |
+| **Timing**: first capture vs every capture | a bet is placed once, at the first capture where it qualifies, or each capture counts separately (which counts one market up to three times) |
+| **Side**, stats, weeks, captures | and a per-market **over vs under** table |
+| **Edge basis** | the projection against the book's price, the pool (the live pipeline's price), or the sharp books' price alone (an edge needing no projection) |
+
+Click any row in any table to drill into it (a stat, a side, a book, a week, a capture);
+the chips above the scorecard say where you are. Four presets are starting points:
+**Realistic** (the default), **Sharp books**, **Ladders** and **Everything** (what the
+firehose reports, and the number to be most suspicious of).
+
+Three things it is careful about:
+
+- **Live captures only by default.** The reconstructed opening and closing boards are priced
+  from the week's final projection and flatter every strategy. They can be turned on (their
+  own file is fetched only then), a verdict that rests on them is labelled "not evidence", and
+  the By capture table shows the two side by side. On 2026 weeks 1-5 the Realistic filter is
+  +0.3% ±6.8% on 865 settled live bets and +4.0% ±3.7% once the reconstructions are added.
+- **The sample shrinks as the filter narrows**, so the scorecard says how many settled bets
+  the ROI it is showing would need to resolve, and which side of zero its band is on. Fewer
+  bets with a better-looking ROI is usually the filter finding noise.
+- **Pending is not hidden.** A bet in a finished week with no stat line is a loss for an over
+  and a void for an under in the conservative ROI, because the actuals feed omits all-zero lines.
+
+Under the hood: `scripts/lib/paper-data.mjs` builds every candidate (an edge of 3% or more
+under any of the three prices) with its settlement and its CLV against the other books' close;
+`scripts/build-paper-data.mjs` writes `public/data/paper.json` and `paper-recon.json` on
+predev/prebuild (about a minute and a half, so it skips itself when its output is newer than
+its inputs; `npm run build:paper -- --force` rebuilds); `scripts/lib/paper-filter.mjs` is the
+engine the browser and the tests share.
+
 ### The personas
 
 Nobody tails four hundred edges a week. `scripts/lib/personas.mjs` defines

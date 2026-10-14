@@ -41,7 +41,8 @@ import { median, sigmoid } from "./lib/consensus.mjs";
 import { isBettableStat } from "./lib/markets.mjs";
 import { buildSourceModel, outcomeFrom, loadLiveClosing, withLiveClosing } from "./lib/source-model.mjs";
 import { bookVotes, poolVotes, shareFor, weightsForStat } from "./lib/source-weights.mjs";
-import { PROPS_COLUMNS, repriceWithPool } from "./capture-props.mjs";
+import { PROPS_COLUMNS } from "./capture-props.mjs";
+import { asPoolPriced } from "./lib/pool-reprice.mjs";
 import {
   LIVE_SLOTS,
   isLiveSlot,
@@ -181,40 +182,6 @@ function liveSamples(quotes, actualsByWeek, model, liveSlots) {
 // ---------------------------------------------------------------------------
 // The counterfactual
 // ---------------------------------------------------------------------------
-
-// Re-price a props file's rows under the pool, as it would have stood that week.
-function asPoolPriced(rows, model, slot) {
-  const cand = rows.map((r) => {
-    const proj = projectionProbOf(r);
-    return {
-      r,
-      rotowirePlayerId: r.PlayerID,
-      statKey: r.Stat,
-      line: Number(r.Line),
-      side: r.Side || "over",
-      sportsbook: r.Book,
-      odds: Number(r.Odds),
-      oppositeOdds: r.OppositeOdds === "" || r.OppositeOdds === undefined ? null : Number(r.OppositeOdds),
-      impliedProb: Number(r.ImpliedProb),
-      fairProb: Number(r.FairProb),
-      hold: r.Hold === "" || r.Hold === undefined ? null : Number(r.Hold),
-      // The pool takes the projection's own probability as its input.
-      ourProb: proj ?? Number(r.OurProb),
-      projProb: proj ?? Number(r.OurProb),
-      edge: Number(r.Edge),
-      modelEdge: Number(r.ModelEdge),
-    };
-  });
-  repriceWithPool(cand, model, { slot });
-  return cand.map((c) => ({
-    ...c.r,
-    OurProb: c.ourProb.toFixed(4),
-    ProjProb: c.projProb.toFixed(4),
-    Edge: c.edge.toFixed(4),
-    ModelEdge: c.modelEdge.toFixed(4),
-    PriceModel: c.priceModel ?? c.r.PriceModel ?? "projection",
-  }));
-}
 
 // Run the Firehose over the live boards re-priced under the other model, in a
 // throwaway data directory so nothing in data/ is touched, and return its ledger.

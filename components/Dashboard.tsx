@@ -20,6 +20,7 @@ import ConditionalView from "./ConditionalView";
 import TDView from "./TDView";
 import BettingView from "./BettingView";
 import LinePricerView from "./LinePricerView";
+import FilteredPaperView from "./FilteredPaperView";
 import type { LineTarget } from "@/lib/lines";
 
 type Tab =
@@ -31,6 +32,7 @@ type Tab =
   | "scatter"
   | "explorer"
   | "betting"
+  | "filtered"
   | "lines";
 
 type Scope = "weekly" | "season";
@@ -298,6 +300,7 @@ export default function Dashboard() {
             ["scatter", "Projected vs Actual"],
             ["explorer", byWeek ? "Player-week detail" : "Player detail"],
             ["betting", "Paper Trading"],
+            ["filtered", "Filtered Paper Trading"],
             ["lines", "Line Pricer"],
           ] as [Tab, string][]
         ).map(([t, label]) => (
@@ -315,7 +318,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {tab !== "simple" && tab !== "calibration" && tab !== "touchdowns" && tab !== "betting" && tab !== "lines" && selectedMetric && (
+      {tab !== "simple" && tab !== "calibration" && tab !== "touchdowns" && tab !== "betting" && tab !== "filtered" && tab !== "lines" && selectedMetric && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400">Metric:</span>
           {availableMetrics.map((m) => (
@@ -388,6 +391,7 @@ export default function Dashboard() {
         />
       )}
       {tab === "betting" && <BettingView onOpenLine={openLine} />}
+      {tab === "filtered" && <FilteredPaperView onOpenLine={openLine} />}
       {tab === "lines" && <LinePricerView target={lineTarget} onConsumed={consumeLineTarget} />}
       </main>
     </>

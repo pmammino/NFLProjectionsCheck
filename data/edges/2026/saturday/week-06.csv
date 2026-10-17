@@ -1,0 +1,42 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,6,17692,Jayden Daniels,WAS,QB,at SF,rushAtt,DraftKings,11.5,over,7.52,1000,,0.0909,0.0909,,1,0.1746,0.0000,0.0837,0.0837,ev,none,pool,,saturday,1,live,20261020BC02533C,2026-10-17T17:48:35.865Z
+2026,6,11712,Deshaun Watson,CLE,QB,vs BAL,rushAtt,DraftKings,11.5,over,3.15,1240,,0.0746,0.0746,,1,0.1468,0.0000,0.0721,0.0721,ev,none,pool,,saturday,1,live,20261018D9D10882,2026-10-17T17:48:35.865Z
+2026,6,17795,MarShawn Lloyd,GB,RB,vs DAL,rushAtt,DraftKings,17.5,over,12.13,810,,0.1099,0.1099,,1,0.1747,0.0198,0.0648,0.0648,ev,none,pool,,saturday,1,live,20261019F9CEA2D8,2026-10-17T17:48:35.865Z
+2026,6,18445,Omarion Hampton,LAC,RB,at KC,rushAtt,DraftKings,17.5,over,8.95,1560,,0.0602,0.0602,,1,0.1211,0.1706,0.0608,0.0608,ev,none,pool,,saturday,1,live,202610187F458BAD,2026-10-17T17:48:35.865Z
+2026,6,17674,Marvin Harrison Jr.,HOU,WR,at JAX,receptions,BetRivers,3.5,over,1.06,575,,0.1481,0.1481,,1,0.2085,0.0063,0.0603,0.0603,ev,none,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,18445,Omarion Hampton,LAC,RB,at KC,recYds,DraftKings,39.5,over,10.07,2100,,0.0455,0.0455,,1,0.0977,0.0003,0.0522,0.0522,ev,none,pool,,saturday,1,live,202610187F458BAD,2026-10-17T17:48:35.865Z
+2026,6,19292,Jalon Daniels,TB,QB,vs PIT,rushAtt,DraftKings,11.5,over,4.05,780,,0.1136,0.1136,,1,0.1625,0.0000,0.0488,0.0488,ev,none,pool,,saturday,1,live,20261018E67FA5EF,2026-10-17T17:48:35.865Z
+2026,6,15976,Tyler Allgeier,ARI,RB,at LAR,rushAtt,DraftKings,17.5,over,13.93,409,,0.1965,0.1965,,1,0.2436,0.2142,0.0472,0.0472,ev,none,pool,,saturday,1,live,2026101843BFE7F5,2026-10-17T17:48:35.865Z
+2026,6,17674,Marvin Harrison Jr.,HOU,WR,at JAX,receptions,Hard Rock,4.5,over,1.06,1100,-5000,0.0833,0.0783,0.0637,0,0.1284,0.0002,0.0451,0.0501,ev,multiplicative,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,15807,Kyren Williams,LAR,RB,vs ARI,rushAtt,DraftKings,17.5,over,16.85,354,,0.2203,0.2203,,1,0.2653,0.4058,0.0450,0.0450,ev,none,pool,,saturday,1,live,2026101843BFE7F5,2026-10-17T17:48:35.865Z
+2026,6,16898,Kendre Miller,NO,RB,at NYG,rushAtt,DraftKings,17.5,over,8.92,1220,,0.0758,0.0758,,1,0.1205,0.0116,0.0447,0.0447,ev,none,pool,,saturday,1,live,202610183D8FCE00,2026-10-17T17:48:35.865Z
+2026,6,15875,Dameon Pierce,PHI,RB,vs CAR,recYds,DraftKings,49.5,over,8.18,1800,,0.0526,0.0526,,1,0.0949,0.0000,0.0423,0.0423,ev,none,pool,,saturday,1,live,202610189E108163,2026-10-17T17:48:35.865Z
+2026,6,17784,Bucky Irving,TB,RB,vs PIT,recYds,DraftKings,49.5,over,20.73,1960,,0.0485,0.0485,,1,0.0896,0.0258,0.0410,0.0410,ev,none,pool,,saturday,1,live,20261018E67FA5EF,2026-10-17T17:48:35.865Z
+2026,6,15222,Kenneth Gainwell,TB,RB,vs PIT,recYds,DraftKings,49.5,over,16.76,1400,,0.0667,0.0667,,1,0.1074,0.0095,0.0408,0.0408,ev,none,pool,,saturday,1,live,20261018E67FA5EF,2026-10-17T17:48:35.865Z
+2026,6,16102,Pierre Strong Jr.,GB,RB,vs DAL,recYds,DraftKings,49.5,over,9.12,1520,,0.0617,0.0617,,1,0.1011,0.0000,0.0394,0.0394,ev,none,pool,,saturday,1,live,20261019F9CEA2D8,2026-10-17T17:48:35.865Z
+2026,6,17673,Drake Maye,NE,QB,vs NYJ,rushAtt,DraftKings,7.5,over,6.37,288,,0.2577,0.2577,,1,0.2961,0.0452,0.0383,0.0383,ev,none,pool,,saturday,1,live,202610180426655B,2026-10-17T17:48:35.865Z
+2026,6,16686,Tanner McKee,PHI,QB,vs CAR,rushYds,FanDuel,19.5,over,17.78,466,,0.1767,0.1767,,1,0.2137,0.4359,0.0370,0.0370,ev,none,pool,,saturday,1,live,202610189E108163,2026-10-17T17:48:35.865Z
+2026,6,17674,Marvin Harrison Jr.,HOU,WR,at JAX,recYds,Hard Rock,69.5,over,17.81,800,-3000,0.1111,0.1030,0.0789,0,0.1481,0.0000,0.0370,0.0452,ev,multiplicative,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,13587,Ty Johnson,BUF,RB,at LV,recYds,DraftKings,59.5,over,13.48,1440,,0.0649,0.0649,,1,0.1017,0.0033,0.0368,0.0368,ev,none,pool,,saturday,1,live,20261018ED3A4282,2026-10-17T17:48:35.865Z
+2026,6,18555,Jaylin Noel,HOU,WR,at JAX,recYds,DraftKings,69.5,over,26.84,1580,,0.0595,0.0595,,1,0.0957,0.0201,0.0362,0.0362,ev,none,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,16658,Dontayvion Wicks,PHI,WR,vs CAR,recYds,DraftKings,59.5,over,22.28,465,,0.1770,0.1770,,1,0.2130,0.0245,0.0361,0.0361,ev,none,pool,,saturday,1,live,202610189E108163,2026-10-17T17:48:35.865Z
+2026,6,16658,Dontayvion Wicks,PHI,WR,vs CAR,recYds,DraftKings,69.5,over,22.28,750,,0.1176,0.1176,,1,0.1531,0.0062,0.0355,0.0355,ev,none,pool,,saturday,1,live,202610189E108163,2026-10-17T17:48:35.865Z
+2026,6,17674,Marvin Harrison Jr.,HOU,WR,at JAX,recYds,Hard Rock,59.5,over,17.81,550,-1200,0.1538,0.1429,0.0769,0,0.1892,0.0003,0.0353,0.0463,ev,multiplicative,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,18555,Jaylin Noel,HOU,WR,at JAX,recYds,Caesars,59.5,over,26.84,1000,,0.0909,0.0909,,1,0.1259,0.0582,0.0350,0.0350,ev,none,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,19320,Ted Hurst,TB,WR,vs PIT,recYds,Caesars,39.5,over,20.53,625,,0.1379,0.1379,,1,0.1727,0.0965,0.0348,0.0348,ev,none,pool,,saturday,1,live,20261018E67FA5EF,2026-10-17T17:48:35.865Z
+2026,6,17702,Braelon Allen,NYJ,RB,at NE,recYds,DraftKings,49.5,over,12.78,1180,,0.0781,0.0781,,1,0.1127,0.0003,0.0346,0.0346,ev,none,pool,,saturday,1,live,202610180426655B,2026-10-17T17:48:35.865Z
+2026,6,10919,Jacoby Brissett,ARI,QB,at LAR,rushYds,FanDuel,19.5,over,11.84,467,,0.1764,0.1764,,1,0.2110,0.2116,0.0346,0.0346,ev,none,pool,,saturday,1,live,2026101843BFE7F5,2026-10-17T17:48:35.865Z
+2026,6,17674,Marvin Harrison Jr.,HOU,WR,at JAX,receptions,Hard Rock,3.5,over,1.06,475,-950,0.1739,0.1612,0.0787,0,0.2085,0.0063,0.0346,0.0472,ev,multiplicative,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,13590,Tony Pollard,TEN,RB,at IND,receptions,Hard Rock,4.5,over,1.64,1300,-6000,0.0714,0.0677,0.0550,0,0.1060,0.0000,0.0346,0.0383,ev,multiplicative,pool,,saturday,1,live,20261018AD468380,2026-10-17T17:48:35.865Z
+2026,6,19320,Ted Hurst,TB,WR,vs PIT,recYds,DraftKings,39.5,over,20.53,620,,0.1389,0.1389,,1,0.1727,0.0965,0.0338,0.0338,ev,none,pool,,saturday,1,live,20261018E67FA5EF,2026-10-17T17:48:35.865Z
+2026,6,16658,Dontayvion Wicks,PHI,WR,vs CAR,recYds,DraftKings,79.5,over,22.28,1160,,0.0794,0.0794,,1,0.1130,0.0012,0.0336,0.0336,ev,none,pool,,saturday,1,live,202610189E108163,2026-10-17T17:48:35.865Z
+2026,6,18555,Jaylin Noel,HOU,WR,at JAX,recYds,DraftKings,59.5,over,26.84,980,,0.0926,0.0926,,1,0.1259,0.0582,0.0333,0.0333,ev,none,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,19292,Jalon Daniels,TB,QB,vs PIT,rushAtt,Hard Rock,5.5,over,4.05,-165,,0.6226,0.6226,,1,0.6559,0.0573,0.0333,0.0333,ev,none,pool,,saturday,1,live,20261018E67FA5EF,2026-10-17T17:48:35.865Z
+2026,6,17674,Marvin Harrison Jr.,HOU,WR,at JAX,receptions,BetRivers,2.5,over,1.06,210,,0.3226,0.3226,,1,0.3555,0.0706,0.0329,0.0329,ev,none,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,18555,Jaylin Noel,HOU,WR,at JAX,recYds,Caesars,49.5,over,26.84,600,,0.1429,0.1429,,1,0.1746,0.1380,0.0317,0.0317,ev,none,pool,,saturday,1,live,2026101851518E16,2026-10-17T17:48:35.865Z
+2026,6,15875,Dameon Pierce,PHI,RB,vs CAR,recYds,DraftKings,39.5,over,8.18,980,,0.0926,0.0926,,1,0.1242,0.0000,0.0316,0.0316,ev,none,pool,,saturday,1,live,202610189E108163,2026-10-17T17:48:35.865Z
+2026,6,18445,Omarion Hampton,LAC,RB,at KC,recYds,DraftKings,49.5,over,10.07,3300,,0.0294,0.0294,,1,0.0608,0.0000,0.0314,0.0314,ev,none,pool,,saturday,1,live,202610187F458BAD,2026-10-17T17:48:35.865Z
+2026,6,16658,Dontayvion Wicks,PHI,WR,vs CAR,recYds,DraftKings,89.5,over,22.28,1760,,0.0538,0.0538,,1,0.0841,0.0002,0.0304,0.0304,ev,none,pool,,saturday,1,live,202610189E108163,2026-10-17T17:48:35.865Z
+2026,6,16025,Jalen Nailor,LV,WR,vs BUF,recYds,Caesars,69.5,over,20.37,1100,,0.0833,0.0833,,1,0.1137,0.0076,0.0303,0.0303,ev,none,pool,,saturday,1,live,20261018ED3A4282,2026-10-17T17:48:35.865Z
+2026,6,18445,Omarion Hampton,LAC,RB,at KC,recYds,DraftKings,24.5,over,10.07,680,,0.1282,0.1282,,1,0.1584,0.0469,0.0302,0.0302,ev,none,pool,,saturday,1,live,202610187F458BAD,2026-10-17T17:48:35.865Z
+2026,6,17690,Blake Corum,LAR,RB,vs ARI,rushAtt,theScore,14.5,over,9.79,700,,0.1250,0.1250,,1,0.1552,0.1527,0.0302,0.0302,ev,none,pool,,saturday,1,live,2026101843BFE7F5,2026-10-17T17:48:35.865Z

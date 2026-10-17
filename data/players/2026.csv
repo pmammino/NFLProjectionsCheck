@@ -245,12 +245,14 @@ PlayerID,Name,Team,Pos
 16069,John Metchie,CAR,WR
 16102,Pierre Strong,GB,RB
 16104,Isiah Pacheco,DET,RB
+16105,Bam Knight,ARI,RB
 16108,Ronnie Rivers,LAR,RB
 16163,Jordan Mason,MIN,RB
 16277,Drew Ogletree,IND,TE
 16282,Ko Kieft,TB,TE
 16337,Britain Covey,PHI,WR
 16418,Jake Tonges,SF,TE
+16473,Brandon Johnson,PIT,WR
 16560,Rashid Shaheed,SEA,WR
 16649,Tucker Kraft,GB,TE
 16653,Anthony Richardson,IND,QB
@@ -381,9 +383,12 @@ PlayerID,Name,Team,Pos
 17818,Dylan Laube,LV,RB
 17820,Luke McCaffrey,WAS,WR
 17821,Kimani Vidal,LAC,RB
+17830,Joe Milton,PHI,QB
 17833,Ben Sinnott,WAS,TE
 17863,Malik Washington,MIA,WR
 17908,Brevyn Spann-Ford,DAL,TE
+17909,Carson Steele,PHI,RB
+17916,Jawhar Jordan,HOU,RB
 17947,Isaac Guerendo,SF,RB
 17966,Tip Reiman,ARI,TE
 17967,Tyrone Tracy,NYG,RB
@@ -530,6 +535,7 @@ PlayerID,Name,Team,Pos
 19321,Josh Cameron,JAX,WR
 19322,Kevin Coleman,MIA,WR
 19326,Lewis Bond,HOU,WR
+19327,J. Michael Sturdivant,GB,WR
 19330,De'Zhaun Stribling,SF,WR
 19335,Eli Heidenreich,PIT,RB
 19336,Barion Brown,NO,WR

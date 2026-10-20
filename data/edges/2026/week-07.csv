@@ -1,0 +1,7 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,7,15372,Rhamondre Stevenson,NE,RB,at CHI,rushAtt,DraftKings,17.5,over,9.09,930,,0.0971,0.0971,,1,0.1525,0.0165,0.0554,0.0554,ev,none,pool,,main,1,live,2026102347A0BA18,2026-10-20T18:09:21.143Z
+2026,7,15306,Javonte Williams,DAL,RB,at PHI,recYds,DraftKings,49.5,over,13.68,1560,,0.0602,0.0602,,1,0.1067,0.0002,0.0465,0.0465,ev,none,pool,,main,1,live,20261027271AB6CD,2026-10-20T18:09:21.143Z
+2026,7,14436,Cole Kmet,CHI,TE,vs NE,receptions,FanDuel,0.5,over,1.67,-281,,0.7375,0.7375,,1,0.7797,0.9280,0.0422,0.0422,ev,none,pool,,main,1,live,2026102347A0BA18,2026-10-20T18:09:21.143Z
+2026,7,11732,Alvin Kamara,NO,RB,vs PIT,recYds,DraftKings,59.5,over,12.13,3100,,0.0313,0.0313,,1,0.0657,0.0000,0.0345,0.0345,ev,none,pool,,main,1,live,20261025A949B13F,2026-10-20T18:09:21.143Z
+2026,7,15895,Chris Olave,NO,WR,vs PIT,recYds,DraftKings,139.5,over,88.02,1000,,0.0909,0.0909,,1,0.1232,0.0469,0.0323,0.0323,ev,none,pool,,main,1,live,20261025A949B13F,2026-10-20T18:09:21.143Z
+2026,7,14657,Rico Dowdle,PIT,RB,at NO,recYds,DraftKings,49.5,over,8.76,1660,,0.0568,0.0568,,1,0.0879,0.0000,0.0311,0.0311,ev,none,pool,,main,1,live,20261025A949B13F,2026-10-20T18:09:21.143Z

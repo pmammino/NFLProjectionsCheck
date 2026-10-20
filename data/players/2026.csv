@@ -3,7 +3,7 @@ PlayerID,Name,Team,Pos
 5648,Joe Flacco,CIN,QB
 5653,Josh Johnson,CIN,QB
 5971,Matthew Stafford,LAR,QB
-7355,Andy Dalton,PHI,QB
+7355,Andy Dalton,ATL,QB
 7357,Tyrod Taylor,GB,QB
 8057,Kirk Cousins,LV,QB
 8065,Case Keenum,CHI,QB
@@ -288,7 +288,7 @@ PlayerID,Name,Team,Pos
 16808,Jahmyr Gibbs,DET,RB
 16810,Keaton Mitchell,LAC,RB
 16834,Mitchell Tinsley,CIN,WR
-16847,Jared Wayne,HOU,WR
+16847,Jared Wayne,MIA,WR
 16849,Marvin Mims,DEN,WR
 16855,Luke Schoonmaker,DAL,TE
 16866,Josh Whyle,GB,TE

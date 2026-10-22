@@ -1,0 +1,39 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,7,15872,Malik Willis,MIA,QB,at NYJ,rushAtt,DraftKings,9.5,over,5.43,437,,0.1862,0.1862,,1,0.2903,0.0491,0.1041,0.1041,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,15872,Malik Willis,MIA,QB,at NYJ,rushAtt,DraftKings,11.5,over,5.43,1200,,0.0769,0.0769,,1,0.1681,0.0068,0.0912,0.0912,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,15872,Malik Willis,MIA,QB,at NYJ,rushAtt,DraftKings,7.5,over,5.43,155,,0.3922,0.3922,,1,0.4787,0.2002,0.0865,0.0865,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,14371,Jordan Love,GB,QB,at DET,rushAtt,DraftKings,5.5,over,2.41,840,,0.1064,0.1064,,1,0.1684,0.0002,0.0620,0.0620,ev,none,pool,,thursday,1,live,202610257AEC5E93,2026-10-22T19:07:30.072Z
+2026,7,16772,Roschon Johnson,CHI,RB,vs NE,rushAtt,DraftKings,11.5,over,8.87,710,,0.1235,0.1235,,1,0.1817,0.2271,0.0582,0.0582,ev,none,pool,,thursday,1,live,2026102347A0BA18,2026-10-22T19:07:30.072Z
+2026,7,15872,Malik Willis,MIA,QB,at NYJ,passAtt,DraftKings,35.5,over,28.17,700,,0.1250,0.1250,,1,0.1820,0.0741,0.0570,0.0570,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,15372,Rhamondre Stevenson,NE,RB,at CHI,rushAtt,DraftKings,17.5,over,9.09,920,,0.0980,0.0980,,1,0.1529,0.0165,0.0548,0.0548,ev,none,pool,,thursday,1,live,2026102347A0BA18,2026-10-22T19:07:30.072Z
+2026,7,8743,Geno Smith,NYJ,QB,vs MIA,passAtt,DraftKings,37.5,over,30.12,597,,0.1435,0.1435,,1,0.1978,0.0834,0.0543,0.0543,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,8743,Geno Smith,NYJ,QB,vs MIA,passAtt,DraftKings,35.5,over,30.12,376,,0.2101,0.2101,,1,0.2628,0.1567,0.0527,0.0527,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,16886,C.J. Stroud,HOU,QB,vs NYG,passAtt,DraftKings,43.5,over,31.7,1020,,0.0893,0.0893,,1,0.1403,0.0184,0.0510,0.0510,ev,none,pool,,thursday,1,live,20261025FD8FC840,2026-10-22T19:07:30.072Z
+2026,7,16886,C.J. Stroud,HOU,QB,vs NYG,passAtt,DraftKings,41.5,over,31.7,640,,0.1351,0.1351,,1,0.1861,0.0414,0.0510,0.0510,ev,none,pool,,thursday,1,live,20261025FD8FC840,2026-10-22T19:07:30.072Z
+2026,7,15872,Malik Willis,MIA,QB,at NYJ,passAtt,DraftKings,33.5,over,28.17,435,,0.1869,0.1869,,1,0.2378,0.1466,0.0509,0.0509,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,15872,Malik Willis,MIA,QB,at NYJ,passAtt,DraftKings,37.5,over,28.17,1100,,0.0833,0.0833,,1,0.1336,0.0329,0.0503,0.0503,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,17967,Tyrone Tracy Jr.,NYG,RB,at HOU,rushYds,BetRivers,39.5,over,23.56,360,,0.2174,0.2174,,1,0.2669,0.2460,0.0495,0.0495,ev,none,pool,,thursday,1,live,20261025FD8FC840,2026-10-22T19:07:30.072Z
+2026,7,15306,Javonte Williams,DAL,RB,at PHI,recYds,DraftKings,49.5,over,13.48,1660,,0.0568,0.0568,,1,0.1061,0.0001,0.0493,0.0493,ev,none,pool,,thursday,1,live,20261027271AB6CD,2026-10-22T19:07:30.072Z
+2026,7,14418,J.K. Dobbins,DEN,RB,at ARI,recYds,DraftKings,39.5,over,8.5,2100,,0.0455,0.0455,,1,0.0934,0.0002,0.0479,0.0479,ev,none,pool,,thursday,1,live,20261025E266E425,2026-10-22T19:07:30.072Z
+2026,7,13449,Devin Singletary,NYG,RB,at HOU,recYds,DraftKings,39.5,over,7.8,1600,,0.0588,0.0588,,1,0.1065,0.0000,0.0476,0.0476,ev,none,pool,,thursday,1,live,20261025FD8FC840,2026-10-22T19:07:30.072Z
+2026,7,14418,J.K. Dobbins,DEN,RB,at ARI,rushAtt,DraftKings,17.5,over,13.47,325,,0.2353,0.2353,,1,0.2809,0.0118,0.0456,0.0456,ev,none,pool,,thursday,1,live,20261025E266E425,2026-10-22T19:07:30.072Z
+2026,7,8743,Geno Smith,NYJ,QB,vs MIA,passAtt,DraftKings,41.5,over,30.12,1380,,0.0676,0.0676,,1,0.1131,0.0165,0.0455,0.0455,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,16886,C.J. Stroud,HOU,QB,vs NYG,passAtt,DraftKings,45.5,over,31.7,1520,,0.0617,0.0617,,1,0.1050,0.0073,0.0432,0.0432,ev,none,pool,,thursday,1,live,20261025FD8FC840,2026-10-22T19:07:30.072Z
+2026,7,16102,Pierre Strong Jr.,GB,RB,at DET,recYds,DraftKings,39.5,over,6.67,1420,,0.0658,0.0658,,1,0.1078,0.0000,0.0420,0.0420,ev,none,pool,,thursday,1,live,202610257AEC5E93,2026-10-22T19:07:30.072Z
+2026,7,15872,Malik Willis,MIA,QB,at NYJ,passAtt,DraftKings,31.5,over,28.17,267,,0.2725,0.2725,,1,0.3134,0.2557,0.0409,0.0409,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,17037,Tyler Shough,NO,QB,vs PIT,rushAtt,DraftKings,5.5,over,4.51,418,,0.1931,0.1931,,1,0.2338,0.0356,0.0407,0.0407,ev,none,pool,,thursday,1,live,20261025A949B13F,2026-10-22T19:07:30.072Z
+2026,7,11839,Patrick Mahomes,KC,QB,at SEA,rushAtt,DraftKings,5.5,over,3.97,468,,0.1761,0.1761,,1,0.2144,0.0787,0.0383,0.0383,ev,none,pool,,thursday,1,live,20261026DD51BBCD,2026-10-22T19:07:30.072Z
+2026,7,15984,Jaylen Warren,PIT,RB,at NO,rushAtt,DraftKings,15.5,over,14.57,160,,0.3846,0.3846,,1,0.4220,0.3673,0.0374,0.0374,ev,none,pool,,thursday,1,live,20261025A949B13F,2026-10-22T19:07:30.072Z
+2026,7,15872,Malik Willis,MIA,QB,at NYJ,rushAtt,Hard Rock,5.5,over,5.43,-165,,0.6226,0.6226,,1,0.6598,0.4887,0.0371,0.0371,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,8743,Geno Smith,NYJ,QB,vs MIA,passAtt,DraftKings,33.5,over,30.12,229,,0.3040,0.3040,,1,0.3393,0.2633,0.0354,0.0354,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,16886,C.J. Stroud,HOU,QB,vs NYG,passAtt,DraftKings,37.5,over,31.7,248,,0.2874,0.2874,,1,0.3216,0.1523,0.0343,0.0343,ev,none,pool,,thursday,1,live,20261025FD8FC840,2026-10-22T19:07:30.072Z
+2026,7,17967,Tyrone Tracy Jr.,NYG,RB,at HOU,recYds,DraftKings,49.5,over,10.5,1800,,0.0526,0.0526,,1,0.0866,0.0000,0.0340,0.0340,ev,none,pool,,thursday,1,live,20261025FD8FC840,2026-10-22T19:07:30.072Z
+2026,7,13590,Tony Pollard,TEN,RB,vs CLE,rushAtt,DraftKings,21.5,over,14.74,416,,0.1938,0.1938,,1,0.2276,0.0842,0.0338,0.0338,ev,none,pool,,thursday,1,live,2026102515D90B76,2026-10-22T19:07:30.072Z
+2026,7,11698,Samaje Perine,CIN,RB,at BAL,recYds,DraftKings,39.5,over,12.33,1200,,0.0769,0.0769,,1,0.1104,0.0001,0.0335,0.0335,ev,none,pool,,thursday,1,live,20261025BEF389F8,2026-10-22T19:07:30.072Z
+2026,7,19309,Chris Bell,MIA,WR,at NYJ,recYds,DraftKings,69.5,over,28.99,1180,,0.0781,0.0781,,1,0.1114,0.0521,0.0333,0.0333,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,14657,Rico Dowdle,PIT,RB,at NO,recYds,DraftKings,49.5,over,8.76,1760,,0.0538,0.0538,,1,0.0868,0.0000,0.0330,0.0330,ev,none,pool,,thursday,1,live,20261025A949B13F,2026-10-22T19:07:30.072Z
+2026,7,8057,Kirk Cousins,LV,QB,vs LAR,rushYds,Hard Rock,19.5,over,7.02,1100,-5000,0.0833,0.0783,0.0637,0,0.1157,0.0246,0.0323,0.0373,ev,multiplicative,pool,,thursday,1,live,2026102556E2086A,2026-10-22T19:07:30.072Z
+2026,7,19309,Chris Bell,MIA,WR,at NYJ,recYds,DraftKings,79.5,over,28.99,1880,,0.0505,0.0505,,1,0.0826,0.0214,0.0321,0.0321,ev,none,pool,,thursday,1,live,202610253360B008,2026-10-22T19:07:30.072Z
+2026,7,11732,Alvin Kamara,NO,RB,vs PIT,recYds,DraftKings,59.5,over,12.13,2700,,0.0357,0.0357,,1,0.0667,0.0000,0.0310,0.0310,ev,none,pool,,thursday,1,live,20261025A949B13F,2026-10-22T19:07:30.072Z
+2026,7,13449,Devin Singletary,NYG,RB,at HOU,recYds,DraftKings,49.5,over,7.8,2700,,0.0357,0.0357,,1,0.0667,0.0000,0.0310,0.0310,ev,none,pool,,thursday,1,live,20261025FD8FC840,2026-10-22T19:07:30.072Z
+2026,7,15984,Jaylen Warren,PIT,RB,at NO,rushAtt,DraftKings,17.5,over,14.57,309,,0.2445,0.2445,,1,0.2748,0.1427,0.0303,0.0303,ev,none,pool,,thursday,1,live,20261025A949B13F,2026-10-22T19:07:30.072Z

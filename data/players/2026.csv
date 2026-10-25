@@ -206,6 +206,7 @@ PlayerID,Name,Team,Pos
 15834,Brock Purdy,SF,QB
 15838,Wan'Dale Robinson,TEN,WR
 15841,Kenny Pickett,CAR,QB
+15846,Velus Jones,SEA,RB
 15849,Jameson Williams,DET,WR
 15850,Jahan Dotson,ATL,WR
 15853,George Pickens,DAL,WR
@@ -273,6 +274,7 @@ PlayerID,Name,Team,Pos
 16701,Lew Nichols,PIT,RB
 16705,Tank Bigsby,PHI,RB
 16706,Cedric Tillman,NO,WR
+16714,Jalin Hyatt,NYG,WR
 16716,Aidan O'Connell,LV,QB
 16719,Charlie Jones,NYG,WR
 16720,Payne Durham,TB,TE
@@ -412,8 +414,10 @@ PlayerID,Name,Team,Pos
 18445,Omarion Hampton,LAC,RB
 18449,Woody Marks,HOU,RB
 18450,Ollie Gordon,MIA,RB
+18453,Andrew Armstrong,KC,WR
 18457,Jack Bech,LV,WR
 18460,Colston Loveland,CHI,TE
+18463,Kalel Mullings,TEN,RB
 18467,Dylan Sampson,CLE,RB
 18472,Harold Fannin,CLE,TE
 18476,LeQuint Allen,JAX,RB
@@ -555,6 +559,7 @@ PlayerID,Name,Team,Pos
 19363,Dallen Bentley,DEN,TE
 19364,Matthew Hibner,BAL,TE
 19368,Athan Kaliakmanis,WAS,QB
+19422,Jaydn Ott,KC,RB
 19425,Chip Trayanum,NYJ,RB
 19426,Josh Cuevas,BAL,TE
 19431,CJ Donaldson,NO,RB

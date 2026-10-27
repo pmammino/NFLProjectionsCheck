@@ -116,6 +116,7 @@ PlayerID,Name,Team,Pos
 13613,Kyler Murray,MIN,QB
 13627,Easton Stick,TB,QB
 13634,David Sills,TB,WR
+13713,Andrew Beck,NYJ,TE
 13736,Drew Lock,SEA,QB
 13741,Gardner Minshew,ARI,QB
 13786,Josh Oliver,MIN,TE
@@ -181,6 +182,7 @@ PlayerID,Name,Team,Pos
 15369,Brevin Jordan,HOU,TE
 15371,Tommy Tremble,CAR,TE
 15372,Rhamondre Stevenson,NE,RB
+15379,Elijah Mitchell,PHI,RB
 15385,Travis Etienne,NO,RB
 15402,Mac Jones,SF,QB
 15404,Jaylen Waddle,DEN,WR
@@ -192,6 +194,7 @@ PlayerID,Name,Team,Pos
 15467,Ben Skowronek,PIT,WR
 15468,Najee Harris,NYG,RB
 15542,Davis Mills,HOU,QB
+15559,Simi Fehoko,ARI,WR
 15566,Luke Farrell,SF,TE
 15579,Kene Nwangwu,NYJ,RB
 15681,Brock Wright,DET,TE
@@ -409,6 +412,7 @@ PlayerID,Name,Team,Pos
 18251,Hayden Rucci,LAC,TE
 18263,Treyton Welch,NO,TE
 18300,British Brooks,HOU,RB
+18301,David Martin-Robinson,TEN,TE
 18307,Kameron Johnson,TB,WR
 18443,DJ Giddens,IND,RB
 18445,Omarion Hampton,LAC,RB
@@ -491,7 +495,9 @@ PlayerID,Name,Team,Pos
 18841,Ke'Shawn Williams,CIN,WR
 18889,Efton Chism,NE,WR
 18938,Jahdae Walker,CHI,WR
+18946,Anthony Tyus,CAR,RB
 18958,Darius Cooper,PHI,WR
+18968,Nick Kallerup,SEA,TE
 19095,Myles Price,MIN,WR
 19126,Kyle Williams,NE,WR
 19230,Ja'Kobi Lane,BAL,WR

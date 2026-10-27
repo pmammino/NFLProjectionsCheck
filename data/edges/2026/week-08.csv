@@ -1,0 +1,2 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,8,17795,MarShawn Lloyd,GB,RB,vs CAR,rushAtt,DraftKings,11.5,over,6.33,1460,,0.0641,0.0641,,1,0.1340,0.0000,0.0699,0.0699,ev,none,pool,,main,1,live,20261030CB911D38,2026-10-27T19:01:52.009Z

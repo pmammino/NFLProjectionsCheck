@@ -1,0 +1,2 @@
+Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,PriceModel,MedianAdj,Bettable,Slot,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
+2026,8,kelly,17795,MarShawn Lloyd,GB,RB,vs CAR,rushAtt,DraftKings,11.5,over,1460,,0.0641,0.0641,,1,0.1340,0.0699,0.0699,5-10%,pool,,1,main,5.5538,1,297.4533,pending,,,,,,,,,opticodds,2026-10-27T19:01:52.009Z

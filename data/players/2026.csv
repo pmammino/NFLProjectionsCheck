@@ -178,6 +178,7 @@ PlayerID,Name,Team,Pos
 15324,Feleipe Franks,CAR,TE
 15330,Zach Wilson,NO,QB
 15332,Amon-Ra St. Brown,DET,WR
+15339,Kenny Yeboah,ARI,TE
 15357,Trevor Lawrence,JAX,QB
 15369,Brevin Jordan,HOU,TE
 15371,Tommy Tremble,CAR,TE
@@ -260,6 +261,7 @@ PlayerID,Name,Team,Pos
 16282,Ko Kieft,TB,TE
 16337,Britain Covey,PHI,WR
 16418,Jake Tonges,SF,TE
+16430,Irvin Charles,SEA,WR
 16473,Brandon Johnson,PIT,WR
 16560,Rashid Shaheed,SEA,WR
 16649,Tucker Kraft,GB,TE
@@ -342,6 +344,7 @@ PlayerID,Name,Team,Pos
 17130,Blake Whiteheart,CLE,TE
 17185,Jalen Brooks,ARI,WR
 17218,E.J. Jenkins,PHI,TE
+17271,Ryan Miller,NE,WR
 17319,Jaleel McLaughlin,CLE,RB
 17330,Brycen Tremayne,CAR,WR
 17335,Julian Hill,NE,TE
@@ -424,6 +427,7 @@ PlayerID,Name,Team,Pos
 18457,Jack Bech,LV,WR
 18460,Colston Loveland,CHI,TE
 18463,Kalel Mullings,TEN,RB
+18466,Xavier Restrepo,TEN,WR
 18467,Dylan Sampson,CLE,RB
 18472,Harold Fannin,CLE,TE
 18476,LeQuint Allen,JAX,RB

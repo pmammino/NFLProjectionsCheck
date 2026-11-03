@@ -340,7 +340,7 @@ PlayerID,Name,Team,Pos
 17043,Roman Wilson,PIT,WR
 17057,Isaiah Davis,NYJ,RB
 17081,Konata Mumpfield,LAR,WR
-17091,Emari Demercado,DAL,RB
+17091,Emari Demercado,HOU,RB
 17130,Blake Whiteheart,CLE,TE
 17185,Jalen Brooks,ARI,WR
 17218,E.J. Jenkins,PHI,TE
@@ -575,6 +575,7 @@ PlayerID,Name,Team,Pos
 19422,Jaydn Ott,KC,RB
 19425,Chip Trayanum,NYJ,RB
 19426,Josh Cuevas,BAL,TE
+19428,Joe Fagnano,BAL,QB
 19431,CJ Donaldson,NO,RB
 19432,Malik Benson,LV,WR
 19443,Kendrick Law,DET,WR

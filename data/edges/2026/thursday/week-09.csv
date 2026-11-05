@@ -1,0 +1,17 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,9,17719,Troy Franklin,DEN,WR,at CAR,receptions,FanDuel,0.5,over,1.28,-205,152,0.6721,0.6288,0.0690,0,0.7529,0.7369,0.0807,0.1241,ev,multiplicative,pool,,thursday,1,live,20261108CCFC048E,2026-11-05T21:25:25.408Z
+2026,9,13822,Foster Moreau,HOU,TE,at LAC,recYds,BetRivers,7.5,under,12.28,140,-215,0.4167,0.3791,0.0992,0,0.4576,0.3774,0.0410,0.0786,ev,multiplicative,pool,,thursday,1,live,20261108F4DE0D2A,2026-11-05T21:25:25.408Z
+2026,9,15872,Malik Willis,MIA,QB,vs DET,rushAtt,DraftKings,7.5,over,5.14,267,,0.2725,0.2725,,1,0.3131,0.1842,0.0406,0.0406,ev,none,pool,,thursday,1,live,202611084E331DB1,2026-11-05T21:25:25.408Z
+2026,9,17673,Drake Maye,NE,QB,vs GB,passYds,BetRivers,274.5,over,249.27,325,,0.2353,0.2353,,1,0.2748,0.3636,0.0395,0.0395,ev,none,pool,,thursday,1,live,2026110805576CFF,2026-11-05T21:25:25.408Z
+2026,9,11690,Christian McCaffrey,SF,RB,vs LV,rushYds,BetRivers,79.5,over,80.63,265,,0.2740,0.2740,,1,0.3132,0.5175,0.0392,0.0392,ev,none,pool,,thursday,1,live,2026110880874AAD,2026-11-05T21:25:25.408Z
+2026,9,8783,Travis Kelce,KC,TE,vs NYJ,receptions,BetRivers,6.5,over,4.58,540,,0.1563,0.1563,,1,0.1910,0.2257,0.0347,0.0347,ev,none,pool,,thursday,1,live,20261108E6519A63,2026-11-05T21:25:25.408Z
+2026,9,14371,Jordan Love,GB,QB,at NE,passYds,BetRivers,324.5,over,259.02,335,,0.2299,0.2299,,1,0.2637,0.1691,0.0338,0.0338,ev,none,pool,,thursday,1,live,2026110805576CFF,2026-11-05T21:25:25.408Z
+2026,9,8783,Travis Kelce,KC,TE,vs NYJ,receptions,BetRivers,7.5,over,4.58,1150,,0.0800,0.0800,,1,0.1125,0.1261,0.0325,0.0325,ev,none,pool,,thursday,1,live,20261108E6519A63,2026-11-05T21:25:25.408Z
+2026,9,14446,Justin Herbert,LAC,QB,vs HOU,rushYds,BetRivers,19.5,over,19.61,-109,,0.5215,0.5215,,1,0.5540,0.5042,0.0325,0.0325,ev,none,pool,,thursday,1,live,20261108F4DE0D2A,2026-11-05T21:25:25.408Z
+2026,9,17830,Joe Milton III,PHI,QB,vs NYG,int,BetRivers,1.5,over,0.74,325,,0.2353,0.2353,,1,0.2672,0.1698,0.0319,0.0319,ev,none,pool,,thursday,1,live,20261108A1A2490E,2026-11-05T21:25:25.408Z
+2026,9,16739,Bijan Robinson,ATL,RB,vs CIN,rushAtt,DraftKings,15.5,over,18.69,-266,,0.7268,0.7268,,1,0.7579,0.8382,0.0311,0.0311,ev,none,pool,,thursday,1,live,20261108F3A0BBC7,2026-11-05T21:25:25.408Z
+2026,9,16739,Bijan Robinson,ATL,RB,vs CIN,rushAtt,DraftKings,17.5,over,18.69,-156,,0.6094,0.6094,,1,0.6403,0.6436,0.0310,0.0310,ev,none,pool,,thursday,1,live,20261108F3A0BBC7,2026-11-05T21:25:25.408Z
+2026,9,15902,Trey McBride,ARI,TE,at SEA,receptions,BetRivers,10.5,over,7.12,650,,0.1333,0.1333,,1,0.1642,0.1224,0.0308,0.0308,ev,none,pool,,thursday,1,live,202611087E24C75B,2026-11-05T21:25:25.408Z
+2026,9,15902,Trey McBride,ARI,TE,at SEA,receptions,BetRivers,11.5,over,7.12,1150,,0.0800,0.0800,,1,0.1106,0.0659,0.0306,0.0306,ev,none,pool,,thursday,1,live,202611087E24C75B,2026-11-05T21:25:25.408Z
+2026,9,18578,Travis Hunter,JAX,WR,at BAL,receptions,BetRivers,2.5,over,1.09,650,,0.1333,0.1333,,1,0.1637,0.1114,0.0303,0.0303,ev,none,pool,,thursday,1,live,202611068C56F196,2026-11-05T21:25:25.408Z
+2026,9,15876,James Cook,BUF,RB,at MIN,rushYds,BetRivers,109.5,over,83.31,350,,0.2222,0.2222,,1,0.2523,0.1694,0.0301,0.0301,ev,none,pool,,thursday,1,live,20261110B86A2B4D,2026-11-05T21:25:25.408Z

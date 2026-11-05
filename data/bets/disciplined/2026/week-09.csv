@@ -1,3 +1,5 @@
 Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,PriceModel,MedianAdj,Bettable,Slot,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
+2026,9,disciplined,15872,Malik Willis,MIA,QB,vs DET,rushAtt,DraftKings,7.5,over,267,,0.2725,0.2725,,1,0.3131,0.0406,0.0406,3-5%,pool,,1,thursday,1,1,100,pending,,,not-found,,,,,,opticodds,2026-11-05T21:25:25.408Z
 2026,9,disciplined,18549,Emeka Egbuka,TB,WR,at CHI,recYds,DraftKings,79.5,over,359,,0.2179,0.2179,,1,0.2570,0.0391,0.0391,3-5%,pool,,1,main,1,1,100,pending,,,not-found,,,,,,opticodds,2026-11-03T20:19:35.178Z
 2026,9,disciplined,16995,Bo Nix,DEN,QB,at CAR,passYds,DraftKings,239.5,over,242,,0.2924,0.2924,,1,0.3306,0.0382,0.0382,3-5%,pool,,1,main,1,1,100,pending,,,not-found,,,,,,opticodds,2026-11-03T20:19:35.178Z
+2026,9,disciplined,16739,Bijan Robinson,ATL,RB,vs CIN,rushAtt,DraftKings,15.5,over,-266,,0.7268,0.7268,,1,0.7579,0.0311,0.0311,3-5%,pool,,1,thursday,1,1,100,pending,,,not-found,,,,,,opticodds,2026-11-05T21:25:25.408Z

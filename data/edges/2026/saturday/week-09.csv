@@ -1,0 +1,18 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,9,19655,Greg Desrosiers Jr.,NYG,RB,at PHI,rushYds,BetRivers,29.5,over,18.16,410,,0.1961,0.1961,,1,0.2737,0.1921,0.0776,0.0776,ev,none,pool,,saturday,1,live,20261108A1A2490E,2026-11-07T19:18:09.280Z
+2026,9,17021,Theo Johnson,NYG,TE,at PHI,receptions,BetRivers,2.5,over,0.93,800,,0.1111,0.1111,,1,0.1606,0.0153,0.0495,0.0495,ev,none,pool,,saturday,1,live,20261108A1A2490E,2026-11-07T19:18:09.280Z
+2026,9,15807,Kyren Williams,LAR,RB,at WAS,rushYds,BetRivers,89.5,over,78.31,440,,0.1852,0.1852,,1,0.2238,0.3302,0.0387,0.0387,ev,none,pool,,saturday,1,live,20261108E8F97F13,2026-11-07T19:18:09.280Z
+2026,9,18958,Darius Cooper,PHI,WR,vs NYG,receptions,BetRivers,4.5,over,2.9,600,,0.1429,0.1429,,1,0.1812,0.2268,0.0383,0.0383,ev,none,pool,,saturday,1,live,20261108A1A2490E,2026-11-07T19:18:09.280Z
+2026,9,19655,Greg Desrosiers Jr.,NYG,RB,at PHI,rushYds,BetRivers,19.5,over,18.16,165,,0.3774,0.3774,,1,0.4123,0.4591,0.0349,0.0349,ev,none,pool,,saturday,1,live,20261108A1A2490E,2026-11-07T19:18:09.280Z
+2026,9,17021,Theo Johnson,NYG,TE,at PHI,receptions,BetRivers,1.5,over,0.93,230,,0.3030,0.3030,,1,0.3376,0.2163,0.0345,0.0345,ev,none,pool,,saturday,1,live,20261108A1A2490E,2026-11-07T19:18:09.280Z
+2026,9,8783,Travis Kelce,KC,TE,vs NYJ,receptions,BetRivers,6.5,over,4.53,575,,0.1481,0.1481,,1,0.1822,0.2172,0.0340,0.0340,ev,none,pool,,saturday,1,live,20261108E6519A63,2026-11-07T19:18:09.280Z
+2026,9,17702,Braelon Allen,NYJ,RB,at KC,rushYds,BetRivers,49.5,over,45.01,280,,0.2632,0.2632,,1,0.2963,0.4124,0.0331,0.0331,ev,none,pool,,saturday,1,live,20261108E6519A63,2026-11-07T19:18:09.280Z
+2026,9,10729,Jared Goff,DET,QB,at MIA,passYds,BetRivers,299.5,over,287.44,275,,0.2667,0.2667,,1,0.2993,0.4344,0.0327,0.0327,ev,none,pool,,saturday,1,live,202611084E331DB1,2026-11-07T19:18:09.280Z
+2026,9,18647,Jordan Watkins,SF,WR,vs LV,recYds,DraftKings,99.5,over,39.38,1760,,0.0538,0.0538,,1,0.0855,0.0379,0.0317,0.0317,ev,none,pool,,saturday,1,live,2026110880874AAD,2026-11-07T19:18:09.280Z
+2026,9,17687,Xavier Worthy,KC,WR,vs NYJ,receptions,BetRivers,5.5,over,3.54,750,,0.1176,0.1176,,1,0.1492,0.1907,0.0315,0.0315,ev,none,pool,,saturday,1,live,20261108E6519A63,2026-11-07T19:18:09.280Z
+2026,9,18516,Quinshon Judkins,CLE,RB,at NO,rushAtt,DraftKings,23.5,over,14.73,700,,0.1250,0.1250,,1,0.1560,0.0071,0.0310,0.0310,ev,none,pool,,saturday,1,live,202611089F22C0A9,2026-11-07T19:18:09.280Z
+2026,9,18478,Tre Harris,LAC,WR,vs HOU,recYds,DraftKings,59.5,over,31.9,453,,0.1808,0.1808,,1,0.2118,0.1945,0.0310,0.0310,ev,none,pool,,saturday,1,live,20261108F4DE0D2A,2026-11-07T19:18:09.280Z
+2026,9,13736,Drew Lock,SEA,QB,vs ARI,passYds,BetRivers,249.5,over,246.36,350,,0.2222,0.2222,,1,0.2528,0.4835,0.0306,0.0306,ev,none,pool,,saturday,1,live,202611087E24C75B,2026-11-07T19:18:09.280Z
+2026,9,8783,Travis Kelce,KC,TE,vs NYJ,receptions,BetRivers,7.5,over,4.53,1200,,0.0769,0.0769,,1,0.1073,0.1193,0.0303,0.0303,ev,none,pool,,saturday,1,live,20261108E6519A63,2026-11-07T19:18:09.280Z
+2026,9,11008,Dak Prescott,DAL,QB,at IND,passYds,BetRivers,274.5,over,283.22,143,,0.4115,0.4115,,1,0.4417,0.5441,0.0301,0.0301,ev,none,pool,,saturday,1,live,20261108A33F3CD3,2026-11-07T19:18:09.280Z
+2026,9,18516,Quinshon Judkins,CLE,RB,at NO,rushAtt,DraftKings,19.5,over,14.73,229,,0.3040,0.3040,,1,0.3339,0.0909,0.0300,0.0300,ev,none,pool,,saturday,1,live,202611089F22C0A9,2026-11-07T19:18:09.280Z

@@ -213,6 +213,7 @@ PlayerID,Name,Team,Pos
 15846,Velus Jones,SEA,RB
 15849,Jameson Williams,DET,WR
 15850,Jahan Dotson,ATL,WR
+15852,Zamir White,NO,RB
 15853,George Pickens,DAL,WR
 15868,Drake London,ATL,WR
 15872,Malik Willis,MIA,QB
@@ -238,6 +239,7 @@ PlayerID,Name,Team,Pos
 15976,Tyler Allgeier,ARI,RB
 15979,Ty Chandler,NO,RB
 15984,Jaylen Warren,PIT,RB
+15989,Jerome Ford,ARI,RB
 15990,Tyler Goodson,DAL,RB
 15996,Jeremy Ruckert,NYJ,TE
 16005,Skyy Moore,GB,WR
@@ -249,6 +251,7 @@ PlayerID,Name,Team,Pos
 16032,Cade Otton,TB,TE
 16033,Isaiah Likely,NYG,TE
 16034,Teagan Quitoriano,ARI,TE
+16035,James Mitchell,DAL,TE
 16036,Daniel Bellinger,TEN,TE
 16039,Grant Calcaterra,PHI,TE
 16042,Chig Okonkwo,WAS,TE
@@ -464,6 +467,7 @@ PlayerID,Name,Team,Pos
 18526,Raheim Sanders,CLE,RB
 18529,Brashard Smith,KC,RB
 18530,Le'Veon Moss,MIA,RB
+18531,Phil Mafah,NYG,RB
 18532,Corey Kiner,NE,RB
 18533,Kaytron Allen,MIA,RB
 18534,Tyler Warren,IND,TE
@@ -580,6 +584,7 @@ PlayerID,Name,Team,Pos
 19428,Joe Fagnano,BAL,QB
 19431,CJ Donaldson,NO,RB
 19432,Malik Benson,LV,WR
+19442,Jordan Hudson,DAL,WR
 19443,Kendrick Law,DET,WR
 19445,Reggie Virgil,ARI,WR
 19447,Colbie Young,CIN,WR
@@ -592,3 +597,4 @@ PlayerID,Name,Team,Pos
 19655,Greg Desrosiers,NYG,RB
 19668,Malik McClain,NYJ,WR
 19681,Seydou Traore,MIA,TE
+19989,Camden Brown,DAL,WR

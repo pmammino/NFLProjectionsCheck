@@ -735,6 +735,19 @@ function render(season, meta, shape, price, ladders, lawBooks, projLaw) {
   })), "");
 
   out.push("## 4. What this says, and what it does not", "");
+  const t = shape.total;
+  const near = price.bands.find((b) => b.label === "near the money");
+  const all = price.bands.find((b) => b.label === "all rungs");
+  const d = (x) => fx(x, 3);
+  out.push(
+    `- **Spread explains most of it, shape little.** Average log-probability on the actual, relative to today's two-piece normal: widened band ${d(t.tpnWide - t.tpn)}, normal with the fitted variance law ${d(t.normalLaw - t.tpn)}, gamma with that law ${d(t.gammaLaw - t.tpn)}, Tweedie ${d(t.tweedie - t.tpn)}. Gamma over the equal-law normal: ${d(t.gammaLaw - t.normalLaw)}; Tweedie over it: ${d(t.tweedie - t.normalLaw)}.`,
+    `- **A gamma fitted to Floor/Median/Ceiling is not an improvement.** Through all three points: ${d(t.gammaExact - t.tpn)}; least squares from zero: ${d(t.gammaLS - t.tpn)}. The band's spread is the problem, and a different shape on the same band does not fix it.`,
+    `- **On the live rungs near the money**, projection-alone Brier: tpn ${f2(near.per.tpn.brier, 4)}, tpnWide ${f2(near.per.tpnWide.brier, 4)}, gammaLaw ${f2(near.per.gammaLaw.brier, 4)}, Tweedie ${f2(near.per.tweedie.brier, 4)}; the books ${f2(near.brierBooks, 4)}. Gamma and Tweedie beat the widened band (${zs(near.per.gammaLaw.diffWide)}; ${zs(near.per.tweedie.diffWide)}) and the equal-law normal (${zs(near.per.gammaLaw.diffNormal)}; ${zs(near.per.tweedie.diffNormal)}), so the skewed positive shape does earn something once the spread is right. All rungs: tpn ${f2(all.per.tpn.brier, 4)} → Tweedie ${f2(all.per.tweedie.brier, 4)}, books ${f2(all.brierBooks, 4)}.`,
+    `- **None of it reaches the price.** Every model is still worse than the books near the money, the shares are indistinguishable from zero, and the walk-forward blend equals the books to four decimals (${f2(price.blendBooks, 4)}). A better-calibrated projection is not new information.`,
+    "- **Books.** Section 3a is the answer to what SD each book quotes: a ratio near 1.00 means its quoted SD matched what the actuals did. Counts (completions, pass attempts) read above 1 at the books that post them, i.e. quoted too tight; rushing and receiving yardage read slightly below 1. Books that only post a main line are in 3b. Pinnacle, Circa and BetMGM do not post usable ladders in these captures, so they appear only in 3b.",
+    "- **Limits.** One season, nine weeks; about 15k of 34k rungs use a projection with hindsight (git history is shallow); the actuals feed omits players with an all-zero line, which tilts outcomes toward overs; quarterback law exponents sit on the grid boundary because quarterbacks span a narrow range of means, so read their SD, not their p; the stochastic-process models are the closed-form terminal-law kind (Feller/CIR gives the gamma, compound Poisson gives Tweedie) because there is no in-game path to calibrate a diffusion to.",
+    "- Nothing here is wired into capture. If a model is adopted, move it into `lib/probability.mjs` and refit the shares on it in the same change, as `spread-fit` says for the widening."
+  );
   return { text: out.join("\n"), out };
 }
 

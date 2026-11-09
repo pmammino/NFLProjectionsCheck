@@ -537,3 +537,24 @@ test("splitStarted treats a kickoff exactly now as started, and an unknown kicko
 test("splitStarted on an empty week is empty", () => {
   assert.deepEqual(splitStarted([], Date.now()), { open: [], started: [] });
 });
+
+test("ourProbability: the spread law widens a long shot, and no law leaves the price alone", () => {
+  const splits = {
+    F: { RecYards: "30" },
+    M: { RecYards: "50" },
+    C: { RecYards: "70" },
+  };
+  const market = { line: 130.5, statKey: "recYds" };
+  const band = ourProbability(market, splits);
+  assert.equal(ourProbability(market, splits, null, null), band);
+  assert.equal(ourProbability(market, splits, null, { recYds: null }), band, "a stat with no fitted law prices as before");
+  const wide = ourProbability(market, splits, null, { recYds: { phi: 25, p: 1.3, n: 500 } });
+  assert.ok(wide > 2 * band, `${wide} vs ${band}`);
+  // Poisson stats never take a spread law.
+  const td = { M: { RecTDs: "0.4" } };
+  assert.equal(ourProbability({ line: 0.5, statKey: "recTD" }, td, null, { recTD: { phi: 1, p: 1.5, n: 9 } }), ourProbability({ line: 0.5, statKey: "recTD" }, td));
+});
+
+test("PROPS_COLUMNS record which spread priced each row", () => {
+  assert.ok(PROPS_COLUMNS.includes("SpreadModel"));
+});

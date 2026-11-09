@@ -1335,6 +1335,32 @@ daily snapshots in git history and so needs a full clone (`git fetch --unshallow
 > The conclusion — that it is worse than the market near the money — survives
 > that advantage, and would be at least as strong on point-in-time data.
 
+#### The Tweedie spread (on by default)
+
+`npm run dist-lab` (report: `data/pricing/{season}/dist-lab.md`). The Floor/Ceiling band is
+too narrow, and a gamma through the same three points does not fix it: the fix is to take
+the spread from what players actually did. `lib/spread-law.mjs` keeps the projection's
+location (the mean of a gamma fitted to Floor/Median/Ceiling) and sets the variance to
+`phi * mean^p`, fitted per stat on the actuals of weeks **strictly before** the one priced,
+priced off a compound Poisson-gamma (a Tweedie law, which has a point mass at zero).
+Measured against the two-piece normal on 2026 it gave +0.48 average log-probability on the
+actual outcome, against +0.19 for the best widening of the band; a normal given the same
+variance law scored +0.43, so most of the gain is the spread and a little (z -2.6 to -4.7
+near the money) the skewed positive shape.
+
+`capture-props --spread-model tweedie|off` (default `tweedie`). A stat with too little
+history, a band it cannot use, and every Poisson stat price exactly as before. Each row
+records `SpreadModel`. It cannot be combined with `--price-model blend`, which was fitted on
+band-based projection probabilities.
+
+**It does not raise the projection's weight in the pool.** Through the pipeline's own share
+fit the mean share used is 0.000 as projected and 0.004 with the Tweedie spread (4% of
+markets get any weight, max 0.14); every unpenalised interval still contains zero and the
+pool's Brier equals the books' to four decimals. A better-calibrated projection is not new
+information. Shares are refitted from `data/` on every capture, so rows written from now on
+carry the Tweedie `ProjProb` and older rows the band's; the mix is harmless while the share is
+zero but should be re-read once a few weeks of Tweedie rows exist.
+
 #### Is the projection's band too narrow?
 
 `npm run spread-fit`. The Floor/Median/Ceiling band is treated as the 25th/50th/75th

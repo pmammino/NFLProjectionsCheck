@@ -128,6 +128,7 @@ import { predict as predictPrice } from "./lib/pricing.mjs";
 import { weightedConsensusProb, shareFor, weightsForStat } from "./lib/source-weights.mjs";
 import { loadSourceModel } from "./lib/source-model.mjs";
 import { fitFromData, adjustedPoints, multiplierFor, formatFits } from "./lib/median-correction.mjs";
+import { fitSpreadLaws, probOverTweedie, lawFor, formatLaws, isSpreadStat, SPREAD_MODELS } from "./lib/spread-law.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -159,6 +160,7 @@ export const PROPS_COLUMNS = [
   "DevigMethod",
   "PriceModel", // which model produced OurProb: projection | blend | pool
   "MedianAdj", // multiplier applied to the projected median before pricing; blank = none
+  "SpreadModel", // tweedie = the projection's spread came from the fitted variance law; blank = the Floor/Ceiling band
   "Slot", // which capture of the week this is: main (the Tuesday drop) or a later one
   "Bettable", // 1 = a bet could be placed here; 0 = reference price only, never staked
   "LineSource", // live | closing | opening — see historicalToMarkets
@@ -186,6 +188,12 @@ function parseArgs(argv) {
     // publishes, so it is switched on deliberately and not by upgrading.
     medianCorrectionMode: "off",
     medianCorrection: null,
+    // The projection's spread: the Tweedie variance law fitted on earlier weeks'
+    // actuals (lib/spread-law.mjs), or "off" for the Floor/Ceiling band as given.
+    // On by default: the band is too narrow on every board measured, and the law
+    // falls back to the band wherever it has too little history to price.
+    spreadModel: "tweedie",
+    spreadLaws: null,
     historical: false,
     slot: SLOT_MAIN,
     dryRun: false,
@@ -202,6 +210,7 @@ function parseArgs(argv) {
       case "--devig-method": a.devigMethod = next(); break;
       case "--price-model": a.priceModel = next(); break;
       case "--median-correction": a.medianCorrectionMode = next(); break;
+      case "--spread-model": a.spreadModel = next(); break;
       case "--price-model-set": a.priceModelSet = next(); break;
       case "--price-model-file": a.priceModelFile = next(); break;
       case "--source-weights-file": a.sourceWeightsFile = next(); break;
@@ -242,6 +251,16 @@ function parseArgs(argv) {
   }
   if (!["off", "auto"].includes(a.medianCorrectionMode)) {
     throw new Error("--median-correction must be one of: off, auto");
+  }
+  if (!SPREAD_MODELS.includes(a.spreadModel)) {
+    throw new Error(`--spread-model must be one of: ${SPREAD_MODELS.join(", ")}`);
+  }
+  // The blend was fitted on projection probabilities from the Floor/Ceiling band.
+  // A wider, differently shaped projection changes its input distribution
+  // without refitting it. (The pool, the default, takes the projection as a
+  // share that is refitted from data on every capture.)
+  if (a.spreadModel === "tweedie" && a.priceModel === "blend") {
+    throw new Error("--spread-model tweedie cannot be combined with --price-model blend: the blend was fitted on band-based projection probabilities. Use --spread-model off, or refit the blend.");
   }
   // The blend was fitted on projection probabilities that were NOT corrected.
   // Feeding it corrected ones would change its input distribution without
@@ -347,7 +366,7 @@ function sumCols(row, cols) {
 // for the stats it covers, F/M/C are re-centred before the distribution is
 // built. Null — the default — is exactly the long-standing price. Poisson stats
 // never take one: they use the projected count, not the F/M/C band.
-export function ourProbability({ line, statKey }, splits, correction = null) {
+export function ourProbability({ line, statKey }, splits, correction = null, spreadLaws = null) {
   const statDef = STAT_DEFS[statKey];
   if (!statDef || statDef.bet === false || !splits || !splits.M) return null;
   if (statDef.kind === "poisson") {
@@ -359,7 +378,10 @@ export function ourProbability({ line, statKey }, splits, correction = null) {
   const m = sumCols(splits.M, statDef.projCols);
   const c = sumCols(splits.C, statDef.projCols);
   const pts = adjustedPoints({ F: f, M: m, C: c }, correction, statKey);
-  return probOverContinuous(line, pts.F, pts.M, pts.C);
+  // The spread law, where one is fitted for this stat; otherwise (and for any
+  // band it cannot use) exactly the two-piece normal.
+  const law = spreadLaws ? lawFor(spreadLaws, statKey) : null;
+  return law ? probOverTweedie(line, pts, law) : probOverContinuous(line, pts.F, pts.M, pts.C);
 }
 
 // Games still to be played, and games already under way or finished, as of `now`
@@ -627,8 +649,10 @@ function writeCsvIfChanged(path, csv, a) {
 // P(over) and P(under) sum to 1 after de-vigging, but the PRICES do not, so a
 // market can carry an edge on one side, both, or neither.
 function priceMarket(market, splits, a, reject = null) {
-  const probOver = ourProbability(market, splits, a.medianCorrection);
+  const probOver = ourProbability(market, splits, a.medianCorrection, a.spreadLaws);
   if (probOver === null) return [];
+  // Recorded per row: which rows were priced off the law and which off the band.
+  const spreadModel = a.spreadLaws && isSpreadStat(market.statKey) && lawFor(a.spreadLaws, market.statKey) ? "tweedie" : "";
   // What multiplier priced this row, if any. The support floor below still
   // gates on the RAW projected median: it asks whether the player is projected
   // for a real role, which is a statement about the feed, not about the shape
@@ -672,6 +696,7 @@ function priceMarket(market, splits, a, reject = null) {
       projProb: probOver,
       bettable: market.bettable,
       medianAdj,
+      spreadModel,
       impliedProb: rawOver,
       fairProb: fair,
       hold: devigged ? devigged.hold : null,
@@ -693,6 +718,7 @@ function priceMarket(market, splits, a, reject = null) {
       projProb: probUnder,
       bettable: market.bettable,
       medianAdj,
+      spreadModel,
       impliedProb: rawUnder,
       fairProb: devigged.fairProbUnder,
       hold: devigged.hold,
@@ -965,6 +991,19 @@ async function main() {
         : `  median correction: no completed weeks before week ${a.week} to fit on — nothing applied.`
     );
     for (const line of formatFits(fits)) console.log(`    ${line}`);
+  }
+  // Spread law, fitted AS OF this week for the same reason as the median
+  // correction: only weeks strictly before it, so a backfill of an old week
+  // prices with what that week could have known.
+  if (a.spreadModel === "tweedie") {
+    const { laws, weeksUsed } = fitSpreadLaws({ dataDir: join(ROOT, a.dataDir), season: a.season, beforeWeek: a.week });
+    a.spreadLaws = laws;
+    console.log(
+      weeksUsed.length
+        ? `  spread law (Tweedie), fitted on weeks ${weeksUsed.join(", ")} (strictly before week ${a.week}):`
+        : `  spread law: no completed weeks before week ${a.week} to fit on — priced off the Floor/Ceiling band.`
+    );
+    for (const line of formatLaws(laws)) console.log(`    ${line}`);
   }
   const playerIndex = buildPlayerIndex(loadRoster(a.dataDir, a.season));
   console.log(`  roster: ${playerIndex.size} players available to join against.`);
@@ -1256,6 +1295,7 @@ async function main() {
     DevigMethod: p.oneSided ? "none" : a.devigMethod,
     PriceModel: p.priceModel ?? "projection",
     MedianAdj: p.medianAdj === null || p.medianAdj === undefined ? "" : p.medianAdj.toFixed(4),
+    SpreadModel: p.spreadModel ?? "",
     Slot: a.slot,
     Bettable: p.bettable === false ? 0 : 1,
     LineSource: p.lineSource ?? "live",
@@ -1536,6 +1576,16 @@ const HELP = `Capture OpticOdds prop lines and price them against our projection
                                    row records the multiplier in MedianAdj.
                                    Cannot be combined with --price-model blend or pool.
                                    See lib/median-correction.mjs.
+  --spread-model <m>       tweedie | off (default: tweedie)
+                           tweedie replaces the projection's Floor-to-Ceiling spread with
+                                   a variance law, Var = phi * mean^p, fitted on the
+                                   actuals of weeks strictly BEFORE the one priced, and
+                                   prices off a compound Poisson-gamma. The band is too
+                                   narrow on every board measured (see
+                                   data/pricing/{season}/dist-lab.md). Stats with too
+                                   little history, and Poisson stats, price as before.
+                                   Each row records SpreadModel. Cannot be combined
+                                   with --price-model blend. See lib/spread-law.mjs.
   --price-model-set <s>    which fitted market set to price off (default: retail)
   --price-model-file <p>   fit to load (default: data/pricing/{season}/model.json)
   --sides <s>              both | over | under (default: both)

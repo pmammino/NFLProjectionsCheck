@@ -34,7 +34,7 @@ import { projectionFor } from "./lib/lines-index.mjs";
 import { sigmoid, bookFairProb, estimateHoldByStat, DEFAULT_ASSUMED_HOLD } from "./lib/consensus.mjs";
 import { canonicalBookKey } from "./lib/books.mjs";
 import { pairedBrierDiff, NEAR_MONEY_MAX } from "./lib/pricing.mjs";
-import { bookVotes, poolVotes, weightsForStat, fitProjectionShare } from "./lib/source-weights.mjs";
+import { bookVotes, poolVotes, weightsForStat, fitProjectionShare, sharesAsOf, shareFor, SHARE_BAND } from "./lib/source-weights.mjs";
 import { buildSourceModel, outcomeFrom, loadLiveClosing, withLiveClosing } from "./lib/source-model.mjs";
 import { LIVE_SLOTS, isLiveSlot } from "./lib/backtest-live.mjs";
 import { gitSnapshots, snapshotAt } from "./lib/projection-history.mjs";
@@ -457,6 +457,54 @@ function priceSection(rows, cdfOf, lawAt, widthAt) {
   }
   const blendBooks = blendRows.length ? brier(blendRows, (r) => r.pBooks) : null;
 
+  // The weight the projection gets in the pool, the way the pipeline fits it:
+  // one share per (stat, slot) cell, penalised and marked down, from earlier
+  // weeks only, on markets within SHARE_BAND of even. Run for the as-projected
+  // band, the widened band and the Tweedie spread, on every row and on the rows
+  // whose projection was the one the capture really had.
+  const weight = {};
+  for (const [subset, keep] of [["all rows", () => true], ["point-in-time projection only", (r) => r.pit]]) {
+    const out = {};
+    for (const m of ["tpn", "tpnWide", "tweedie"]) {
+      const obs = ok.filter((r) => keep(r) && Math.abs(r.pBooks - 0.5) <= SHARE_BAND).map((r) => ({ stat: r.stat, slot: r.slot, week: r.week, cluster: r.cluster, pBooks: r.pBooks, pProj: r.p[m], lBooks: clampLogit(r.pBooks), lProj: clampLogit(r.p[m]), y: r.y }));
+      const wks = [...new Set(obs.map((o) => o.week))].sort((x, y) => x - y);
+      const scored = [];
+      for (const w of wks.slice(1)) {
+        const shares = sharesAsOf(obs, w);
+        for (const o of obs.filter((x) => x.week === w)) {
+          const b = shareFor(shares, o.stat, o.slot);
+          scored.push({ ...o, share: b, pBlend: sigmoid(o.lBooks + b * (o.lProj - o.lBooks)) });
+        }
+      }
+      // Fitted once on everything, unpenalised: the evidence on the weight itself.
+      const unpen = { priorClusters: 0, caution: 0, cap: Infinity };
+      const byStat = {};
+      for (const st of STATS) {
+        const so = obs.filter((o) => o.stat === st);
+        const fr = so.length ? fitProjectionShare(so, unpen) : null;
+        byStat[st] = fr ? { n: so.length, clusters: fr.clusters, share: fr.raw, se: fr.se } : null;
+      }
+      const g = (gr) => {
+        const so = obs.filter((o) => GROUP[o.stat] === gr);
+        const fr = so.length ? fitProjectionShare(so, unpen) : null;
+        return fr ? { n: so.length, clusters: fr.clusters, share: fr.raw, se: fr.se } : null;
+      };
+      out[m] = {
+        n: scored.length,
+        meanShare: mean(scored.map((o) => o.share)),
+        shareAboveZero: scored.length ? scored.filter((o) => o.share > 0).length / scored.length : null,
+        maxShare: scored.length ? Math.max(...scored.map((o) => o.share)) : null,
+        brierBlend: brier(scored, (o) => o.pBlend),
+        brierBooks: brier(scored, (o) => o.pBooks),
+        vsBooks: pairedBrierDiff(scored.map((o) => ({ p: o.pBlend, q: o.pBooks, y: o.y, cluster: o.cluster }))),
+        yards: g("yards"),
+        counts: g("counts"),
+        byStat,
+      };
+    }
+    weight[subset] = out;
+  }
+
   // Reliability of the tails: where the price says 1–10%, what happened.
   const tail = {};
   for (const m of MODELS) {
@@ -465,7 +513,7 @@ function priceSection(rows, cdfOf, lawAt, widthAt) {
       return { lo, hi, n: b.length, said: mean(b.map((r) => r.p[m])), happened: mean(b.map((r) => r.y)) };
     });
   }
-  return { weeks: scoredWeeks, n: ok.length, bands, blend: blendOut, blendBooks, blendWeeks, tail };
+  return { weeks: scoredWeeks, n: ok.length, bands, blend: blendOut, blendBooks, blendWeeks, tail, weight };
 }
 
 // ---------------------------------------------------------------------------
@@ -698,6 +746,21 @@ function render(season, meta, shape, price, ladders, lawBooks, projLaw) {
     return [m, x.n.toLocaleString(), f2(x.meanShare), f2(x.brier, 4), zs(x.vsBooks), m === "tpn" ? "—" : zs(x.vsTpn)];
   })), "");
 
+  out.push("### Does a better spread raise the projection's weight in the pool?", "");
+  out.push(
+    "The pool prices each market as the books' weighted consensus with the projection taking a *share* of the logit (0 = books only, 0.75 = the cap). The pipeline fits one share per (stat, slot) cell from earlier weeks, penalised toward zero and marked down by its standard error. Here that exact fit is run for the as-projected band, the widened band and the Tweedie spread, on markets within 25 points of even. *Mean share used* is what the walk-forward would actually have applied; *> 0* is the fraction of markets that got any weight at all. The unpenalised shares are the evidence on the weight itself.",
+    ""
+  );
+  for (const [subset, res] of Object.entries(price.weight)) {
+    out.push(`**${subset}**`, "");
+    out.push(table(["model", "markets", "mean share used", "markets with share > 0", "max share used", "pool Brier", "books Brier", "pool − books", "unpenalised share: yards", "counts"], ["tpn", "tpnWide", "tweedie"].map((m) => {
+      const x = res[m];
+      const sh = (v) => (v ? `${f2(v.share)} ±${v.se === null ? "–" : f2(1.96 * v.se)}` : "–");
+      return [m, x.n.toLocaleString(), f2(x.meanShare, 3), pct(x.shareAboveZero, 0), f2(x.maxShare, 2), f2(x.brierBlend, 4), f2(x.brierBooks, 4), zs(x.vsBooks), sh(x.yards), sh(x.counts)];
+    })), "");
+    out.push(table(["stat", ...["tpn", "tpnWide", "tweedie"].map((m) => `${m}: unpenalised share ±95%`)], STATS.map((st) => [st, ...["tpn", "tpnWide", "tweedie"].map((m) => { const v = res[m].byStat[st]; return v ? `${f2(v.share)} ±${v.se === null ? "–" : f2(1.96 * v.se)} (${v.clusters})` : "–"; })])), "");
+  }
+
   out.push("## 3. Books: what standard deviation is each one quoting?", "");
   out.push("Books are keyed by canonical name (`Hard Rock` and `hardrock` are one). Each book's latest board per player-week is used; a price is de-vigged where both sides were quoted and stripped of an assumed hold otherwise.", "");
   out.push("### 3a. From each book's own alternate-line ladder", "");
@@ -744,6 +807,7 @@ function render(season, meta, shape, price, ladders, lawBooks, projLaw) {
     `- **A gamma fitted to Floor/Median/Ceiling is not an improvement.** Through all three points: ${d(t.gammaExact - t.tpn)}; least squares from zero: ${d(t.gammaLS - t.tpn)}. The band's spread is the problem, and a different shape on the same band does not fix it.`,
     `- **On the live rungs near the money**, projection-alone Brier: tpn ${f2(near.per.tpn.brier, 4)}, tpnWide ${f2(near.per.tpnWide.brier, 4)}, gammaLaw ${f2(near.per.gammaLaw.brier, 4)}, Tweedie ${f2(near.per.tweedie.brier, 4)}; the books ${f2(near.brierBooks, 4)}. Gamma and Tweedie beat the widened band (${zs(near.per.gammaLaw.diffWide)}; ${zs(near.per.tweedie.diffWide)}) and the equal-law normal (${zs(near.per.gammaLaw.diffNormal)}; ${zs(near.per.tweedie.diffNormal)}), so the skewed positive shape does earn something once the spread is right. All rungs: tpn ${f2(all.per.tpn.brier, 4)} → Tweedie ${f2(all.per.tweedie.brier, 4)}, books ${f2(all.brierBooks, 4)}.`,
     `- **None of it reaches the price.** Every model is still worse than the books near the money, the shares are indistinguishable from zero, and the walk-forward blend equals the books to four decimals (${f2(price.blendBooks, 4)}). A better-calibrated projection is not new information.`,
+    `- **Does it raise the projection's weight in the pool? Barely, and not significantly.** Run through the pipeline's own share fit (per stat and slot, from earlier weeks, penalised): mean share used ${f2(price.weight["all rows"].tpn.meanShare, 3)} as projected, ${f2(price.weight["all rows"].tpnWide.meanShare, 3)} widened, ${f2(price.weight["all rows"].tweedie.meanShare, 3)} with the Tweedie spread (${pct(price.weight["all rows"].tweedie.shareAboveZero, 0)} of markets got any weight, max ${f2(price.weight["all rows"].tweedie.maxShare, 2)}); on point-in-time projections only, ${f2(price.weight["point-in-time projection only"].tweedie.meanShare, 3)}. The unpenalised point estimates move up for most stats, but every interval still contains zero, and the pool's Brier equals the books' (${f2(price.weight["all rows"].tweedie.brierBlend, 4)} vs ${f2(price.weight["all rows"].tweedie.brierBooks, 4)}).`,
     "- **Books.** Section 3a is the answer to what SD each book quotes: a ratio near 1.00 means its quoted SD matched what the actuals did. Counts (completions, pass attempts) read above 1 at the books that post them, i.e. quoted too tight; rushing and receiving yardage read slightly below 1. Books that only post a main line are in 3b. Pinnacle, Circa and BetMGM do not post usable ladders in these captures, so they appear only in 3b.",
     "- **Limits.** One season, nine weeks; about 15k of 34k rungs use a projection with hindsight (git history is shallow); the actuals feed omits players with an all-zero line, which tilts outcomes toward overs; quarterback law exponents sit on the grid boundary because quarterbacks span a narrow range of means, so read their SD, not their p; the stochastic-process models are the closed-form terminal-law kind (Feller/CIR gives the gamma, compound Poisson gives Tweedie) because there is no in-game path to calibrate a diffusion to.",
     "- Nothing here is wired into capture. If a model is adopted, move it into `lib/probability.mjs` and refit the shares on it in the same change, as `spread-fit` says for the widening."

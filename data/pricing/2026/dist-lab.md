@@ -138,6 +138,46 @@ The price as the pipeline would build it: near the money, a share per stat group
 | gammaLaw | 17,533 | 0.01 | 0.2335 | +0.0000 (z 0.2) | +0.0000 (z 0.2) |
 | tweedie | 17,533 | 0.01 | 0.2335 | +0.0000 (z 0.2) | +0.0000 (z 0.2) |
 
+### Does a better spread raise the projection's weight in the pool?
+
+The pool prices each market as the books' weighted consensus with the projection taking a *share* of the logit (0 = books only, 0.75 = the cap). The pipeline fits one share per (stat, slot) cell from earlier weeks, penalised toward zero and marked down by its standard error. Here that exact fit is run for the as-projected band, the widened band and the Tweedie spread, on markets within 25 points of even. *Mean share used* is what the walk-forward would actually have applied; *> 0* is the fraction of markets that got any weight at all. The unpenalised shares are the evidence on the weight itself.
+
+**all rows**
+
+| model | markets | mean share used | markets with share > 0 | max share used | pool Brier | books Brier | pool − books | unpenalised share: yards | counts |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| tpn | 17,533 | 0.000 | 0% | 0.00 | 0.2335 | 0.2335 | -0.0000 (z -0.4) | -0.05 ±0.13 | 0.01 ±0.15 |
+| tpnWide | 17,533 | 0.000 | 0% | 0.00 | 0.2335 | 0.2335 | -0.0000 (z -0.4) | -0.08 ±0.19 | 0.04 ±0.19 |
+| tweedie | 17,533 | 0.004 | 4% | 0.14 | 0.2335 | 0.2335 | -0.0000 (z -0.4) | 0.10 ±0.24 | 0.25 ±0.28 |
+
+| stat | tpn: unpenalised share ±95% | tpnWide: unpenalised share ±95% | tweedie: unpenalised share ±95% |
+| --- | --- | --- | --- |
+| passYds | 0.21 ±0.71 (136) | 0.21 ±0.71 (136) | 0.23 ±0.80 (136) |
+| passAtt | 0.16 ±0.68 (123) | 0.22 ±0.98 (123) | 0.39 ±0.96 (123) |
+| completions | 0.31 ±0.91 (125) | 0.31 ±0.91 (125) | 0.38 ±0.95 (125) |
+| rushYds | -0.02 ±0.20 (340) | -0.06 ±0.29 (340) | 0.14 ±0.37 (340) |
+| rushAtt | -0.11 ±0.29 (193) | -0.05 ±0.51 (193) | -0.04 ±0.52 (193) |
+| receptions | 0.03 ±0.20 (680) | 0.02 ±0.21 (680) | 0.33 ±0.36 (680) |
+| recYds | -0.10 ±0.16 (681) | -0.18 ±0.23 (681) | 0.03 ±0.34 (681) |
+
+**point-in-time projection only**
+
+| model | markets | mean share used | markets with share > 0 | max share used | pool Brier | books Brier | pool − books | unpenalised share: yards | counts |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| tpn | 8,177 | 0.000 | 0% | 0.00 | 0.2343 | 0.2343 | +0.0000 (z 0.1) | -0.05 ±0.15 | -0.02 ±0.18 |
+| tpnWide | 8,177 | 0.000 | 0% | 0.00 | 0.2343 | 0.2343 | +0.0000 (z 0.1) | -0.06 ±0.22 | 0.01 ±0.22 |
+| tweedie | 8,177 | 0.000 | 0% | 0.04 | 0.2343 | 0.2343 | +0.0000 (z 0.6) | 0.09 ±0.30 | 0.17 ±0.33 |
+
+| stat | tpn: unpenalised share ±95% | tpnWide: unpenalised share ±95% | tweedie: unpenalised share ±95% |
+| --- | --- | --- | --- |
+| passYds | 0.80 ±1.04 (85) | 0.80 ±1.04 (85) | 0.86 ±1.11 (85) |
+| passAtt | 0.39 ±0.86 (85) | 0.53 ±1.24 (85) | 0.65 ±1.22 (85) |
+| completions | 0.62 ±1.17 (85) | 0.62 ±1.17 (85) | 0.65 ±1.21 (85) |
+| rushYds | -0.09 ±0.23 (224) | -0.16 ±0.34 (224) | 0.04 ±0.44 (224) |
+| rushAtt | -0.15 ±0.34 (127) | -0.17 ±0.63 (127) | -0.25 ±0.63 (127) |
+| receptions | -0.02 ±0.21 (465) | -0.02 ±0.23 (465) | 0.20 ±0.40 (465) |
+| recYds | -0.12 ±0.18 (464) | -0.19 ±0.26 (464) | -0.08 ±0.41 (464) |
+
 ## 3. Books: what standard deviation is each one quoting?
 
 Books are keyed by canonical name (`Hard Rock` and `hardrock` are one). Each book's latest board per player-week is used; a price is de-vigged where both sides were quoted and stripped of an assumed hold otherwise.
@@ -283,6 +323,7 @@ Reference means: passYds 228.5, passAtt 31.4, completions 20.5, rushYds 27.8, ru
 - **A gamma fitted to Floor/Median/Ceiling is not an improvement.** Through all three points: -0.436; least squares from zero: +0.052. The band's spread is the problem, and a different shape on the same band does not fix it.
 - **On the live rungs near the money**, projection-alone Brier: tpn 0.2493, tpnWide 0.2427, gammaLaw 0.2396, Tweedie 0.2403; the books 0.2336. Gamma and Tweedie beat the widened band (-0.0031 (z -2.0); -0.0025 (z -2.9)) and the equal-law normal (-0.0064 (z -2.6); -0.0058 (z -4.7)), so the skewed positive shape does earn something once the spread is right. All rungs: tpn 0.1861 → Tweedie 0.1807, books 0.1763.
 - **None of it reaches the price.** Every model is still worse than the books near the money, the shares are indistinguishable from zero, and the walk-forward blend equals the books to four decimals (0.2335). A better-calibrated projection is not new information.
+- **Does it raise the projection's weight in the pool? Barely, and not significantly.** Run through the pipeline's own share fit (per stat and slot, from earlier weeks, penalised): mean share used 0.000 as projected, 0.000 widened, 0.004 with the Tweedie spread (4% of markets got any weight, max 0.14); on point-in-time projections only, 0.000. The unpenalised point estimates move up for most stats, but every interval still contains zero, and the pool's Brier equals the books' (0.2335 vs 0.2335).
 - **Books.** Section 3a is the answer to what SD each book quotes: a ratio near 1.00 means its quoted SD matched what the actuals did. Counts (completions, pass attempts) read above 1 at the books that post them, i.e. quoted too tight; rushing and receiving yardage read slightly below 1. Books that only post a main line are in 3b. Pinnacle, Circa and BetMGM do not post usable ladders in these captures, so they appear only in 3b.
 - **Limits.** One season, nine weeks; about 15k of 34k rungs use a projection with hindsight (git history is shallow); the actuals feed omits players with an all-zero line, which tilts outcomes toward overs; quarterback law exponents sit on the grid boundary because quarterbacks span a narrow range of means, so read their SD, not their p; the stochastic-process models are the closed-form terminal-law kind (Feller/CIR gives the gamma, compound Poisson gives Tweedie) because there is no in-game path to calibrate a diffusion to.
 - Nothing here is wired into capture. If a model is adopted, move it into `lib/probability.mjs` and refit the shares on it in the same change, as `spread-fit` says for the widening.

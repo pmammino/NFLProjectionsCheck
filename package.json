@@ -13,6 +13,7 @@
     "median-correction": "node scripts/median-correction.mjs",
     "source-weights": "node scripts/source-weights.mjs",
     "spread-fit": "node scripts/spread-fit.mjs",
+    "dist-lab": "node --max-old-space-size=8192 scripts/dist-lab.mjs",
     "projection-miss": "node scripts/projection-miss.mjs",
     "backtest-live": "node scripts/backtest-live.mjs",
     "ingest": "node scripts/ingest.mjs",

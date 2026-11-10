@@ -1,0 +1,3 @@
+Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,PriceModel,MedianAdj,Bettable,Slot,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
+2026,10,disciplined,18642,Isaac TeSlaa,DET,WR,vs NE,recYds,DraftKings,49.5,over,590,,0.1449,0.1449,,1,0.1876,0.0427,0.0427,3-5%,pool,,1,main,1,1,100,pending,,,,,,,,,opticodds,2026-11-10T20:38:16.402Z
+2026,10,disciplined,18532,Corey Kiner,NE,RB,at DET,rushAtt,DraftKings,15.5,over,185,,0.3509,0.3509,,1,0.3917,0.0408,0.0408,3-5%,pool,,1,main,1,1,100,pending,,,,,,,,,opticodds,2026-11-10T20:38:16.402Z

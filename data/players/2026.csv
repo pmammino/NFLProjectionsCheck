@@ -1,13 +1,13 @@
 PlayerID,Name,Team,Pos
 4307,Aaron Rodgers,PIT,QB
 5648,Joe Flacco,CIN,QB
-5653,Josh Johnson,CIN,QB
+5653,Josh Johnson,ARI,QB
 5971,Matthew Stafford,LAR,QB
 7355,Andy Dalton,ATL,QB
 7357,Tyrod Taylor,GB,QB
-8057,Kirk Cousins,LV,QB
+8057,Kirk Cousins,MIN,QB
 8065,Case Keenum,CHI,QB
-8627,Keenan Allen,IND,WR
+8627,Keenan Allen,SF,WR
 8743,Geno Smith,NYJ,QB
 8781,Zach Ertz,PHI,TE
 8783,Travis Kelce,KC,TE
@@ -32,7 +32,7 @@ PlayerID,Name,Team,Pos
 10819,Derrick Henry,BAL,RB
 10854,Tyler Higbee,LAR,TE
 10856,Carson Wentz,MIN,QB
-10919,Jacoby Brissett,ARI,QB
+10919,Jacoby Brissett,BAL,QB
 10949,Nick Vannett,BAL,TE
 10988,Sterling Shepard,NYJ,WR
 10994,Chris Moore,BAL,WR
@@ -454,6 +454,7 @@ PlayerID,Name,Team,Pos
 18503,Gunnar Helm,TEN,TE
 18505,Quinn Ewers,JAX,QB
 18506,Trevor Etienne,CAR,RB
+18507,Thomas Fidone,NYG,TE
 18512,Will Howard,PIT,QB
 18513,Riley Leonard,IND,QB
 18514,Cam Skattebo,NYG,RB

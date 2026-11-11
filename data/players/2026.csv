@@ -184,6 +184,7 @@ PlayerID,Name,Team,Pos
 15369,Brevin Jordan,HOU,TE
 15371,Tommy Tremble,CAR,TE
 15372,Rhamondre Stevenson,NE,RB
+15376,Chris Blair,ATL,WR
 15379,Elijah Mitchell,PHI,RB
 15385,Travis Etienne,NO,RB
 15402,Mac Jones,SF,QB
@@ -278,7 +279,7 @@ PlayerID,Name,Team,Pos
 16666,Michael Mayer,LV,TE
 16676,Evan Hull,ARI,RB
 16686,Tanner McKee,PHI,QB
-16689,Josh Downs,IND,WR
+16689,Josh Downs,KC,WR
 16690,Parker Washington,JAX,WR
 16694,Tre Tucker,LV,WR
 16697,Dalton Kincaid,BUF,TE
@@ -429,6 +430,7 @@ PlayerID,Name,Team,Pos
 18445,Omarion Hampton,LAC,RB
 18449,Woody Marks,HOU,RB
 18450,Ollie Gordon,MIA,RB
+18451,Robert Henry,WAS,RB
 18453,Andrew Armstrong,KC,WR
 18457,Jack Bech,LV,WR
 18460,Colston Loveland,CHI,TE
@@ -509,6 +511,7 @@ PlayerID,Name,Team,Pos
 18841,Ke'Shawn Williams,CIN,WR
 18886,Lan Larison,NE,RB
 18889,Efton Chism,NE,WR
+18906,Keleki Latu,BUF,TE
 18938,Jahdae Walker,CHI,WR
 18946,Anthony Tyus,CAR,RB
 18958,Darius Cooper,PHI,WR

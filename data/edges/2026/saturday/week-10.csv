@@ -1,0 +1,13 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,SpreadModel,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,10,17673,Drake Maye,NE,QB,at DET,rushAtt,DraftKings,7.5,over,5.65,610,,0.1408,0.1408,,1,0.2180,0.2145,0.0771,0.0771,ev,none,pool,,tweedie,saturday,1,live,202611158A2B48E7,2026-11-14T19:48:50.123Z
+2026,10,17673,Drake Maye,NE,QB,at DET,rushAtt,DraftKings,5.5,over,5.65,188,,0.3472,0.3472,,1,0.4186,0.4015,0.0714,0.0714,ev,none,pool,,tweedie,saturday,1,live,202611158A2B48E7,2026-11-14T19:48:50.123Z
+2026,10,18573,Gavin Bartholomew,MIN,TE,at GB,receptions,BetRivers,5.5,over,2.64,1200,,0.0769,0.0769,,1,0.1401,0.1000,0.0631,0.0631,ev,none,pool,,tweedie,saturday,1,live,20261115D0F8A395,2026-11-14T19:48:50.123Z
+2026,10,18573,Gavin Bartholomew,MIN,TE,at GB,receptions,BetRivers,4.5,over,2.64,510,,0.1639,0.1639,,1,0.2199,0.1953,0.0559,0.0559,ev,none,pool,,tweedie,saturday,1,live,20261115D0F8A395,2026-11-14T19:48:50.123Z
+2026,10,18647,Jordan Watkins,SF,WR,at DAL,recYds,BetRivers,49.5,over,27.08,420,,0.1923,0.1923,,1,0.2416,0.1751,0.0493,0.0493,ev,none,pool,,tweedie,saturday,1,live,20261115ED92AE3E,2026-11-14T19:48:50.123Z
+2026,10,18536,Ben Yurosek,MIN,TE,at GB,receptions,BetRivers,3.5,over,1.96,1100,,0.0833,0.0833,,1,0.1284,0.1996,0.0450,0.0450,ev,none,pool,,tweedie,saturday,1,live,20261115D0F8A395,2026-11-14T19:48:50.123Z
+2026,10,11690,Christian McCaffrey,SF,RB,at DAL,rushYds,BetRivers,89.5,over,80.47,410,,0.1961,0.1961,,1,0.2376,0.3892,0.0416,0.0416,ev,none,pool,,tweedie,saturday,1,live,20261115ED92AE3E,2026-11-14T19:48:50.123Z
+2026,10,17795,MarShawn Lloyd,GB,RB,vs MIN,rushYds,BetRivers,29.5,over,12.04,380,,0.2083,0.2083,,1,0.2448,0.1389,0.0365,0.0365,ev,none,pool,,tweedie,saturday,1,live,20261115D0F8A395,2026-11-14T19:48:50.123Z
+2026,10,19607,Kaelon Black,SF,RB,at DAL,rushYds,BetRivers,49.5,over,33.57,280,,0.2632,0.2632,,1,0.2993,0.3927,0.0361,0.0361,ev,none,pool,,tweedie,saturday,1,live,20261115ED92AE3E,2026-11-14T19:48:50.123Z
+2026,10,19281,Fernando Mendoza,LV,QB,vs SEA,passYds,BetRivers,224.5,over,177.95,310,,0.2439,0.2439,,1,0.2794,0.2604,0.0355,0.0355,ev,none,pool,,tweedie,saturday,1,live,202611157FFA5024,2026-11-14T19:48:50.123Z
+2026,10,18536,Ben Yurosek,MIN,TE,at GB,recYds,BetRivers,19.5,over,18.41,255,,0.2817,0.2817,,1,0.3139,0.4388,0.0322,0.0322,ev,none,pool,,tweedie,saturday,1,live,20261115D0F8A395,2026-11-14T19:48:50.123Z
+2026,10,19300,Mike Washington,LV,RB,vs SEA,rushYds,BetRivers,39.5,over,26,265,,0.2740,0.2740,,1,0.3050,0.3781,0.0310,0.0310,ev,none,pool,,tweedie,saturday,1,live,202611157FFA5024,2026-11-14T19:48:50.123Z

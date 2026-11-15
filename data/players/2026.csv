@@ -47,6 +47,7 @@ PlayerID,Name,Team,Pos
 11718,Chris Godwin,TB,WR
 11732,Alvin Kamara,NO,RB
 11734,David Njoku,LAC,TE
+11751,Zay Jones,ARI,WR
 11763,Aaron Jones,MIN,RB
 11767,Jeremy McNichols,WAS,RB
 11768,Dare Ogunbowale,HOU,RB
@@ -139,6 +140,7 @@ PlayerID,Name,Team,Pos
 14411,CeeDee Lamb,DAL,WR
 14416,Jalen Hurts,PHI,QB
 14418,J.K. Dobbins,DEN,RB
+14421,Jalen Reagor,MIA,WR
 14430,Van Jefferson,WAS,WR
 14436,Cole Kmet,CHI,TE
 14442,Joe Burrow,CIN,QB
@@ -166,6 +168,7 @@ PlayerID,Name,Team,Pos
 15229,Tutu Atwell,LAR,WR
 15242,Chuba Hubbard,CAR,RB
 15245,Kylen Granson,TEN,TE
+15246,Hunter Long,ARI,TE
 15265,Kyle Pitts,ATL,TE
 15267,Pat Freiermuth,PIT,TE
 15273,Michael Carter,TEN,RB
@@ -265,10 +268,12 @@ PlayerID,Name,Team,Pos
 16163,Jordan Mason,MIN,RB
 16277,Drew Ogletree,IND,TE
 16282,Ko Kieft,TB,TE
+16286,Nick Muse,ATL,TE
 16337,Britain Covey,PHI,WR
 16418,Jake Tonges,SF,TE
 16430,Irvin Charles,SEA,WR
 16473,Brandon Johnson,PIT,WR
+16530,Zaire Mitchell-Paden,CLE,TE
 16560,Rashid Shaheed,SEA,WR
 16649,Tucker Kraft,GB,TE
 16653,Anthony Richardson,IND,QB
@@ -349,6 +354,7 @@ PlayerID,Name,Team,Pos
 17081,Konata Mumpfield,LAR,WR
 17091,Emari Demercado,HOU,RB
 17130,Blake Whiteheart,CLE,TE
+17135,Princeton Fant,DAL,TE
 17185,Jalen Brooks,ARI,WR
 17218,E.J. Jenkins,PHI,TE
 17271,Ryan Miller,NE,WR
@@ -369,6 +375,7 @@ PlayerID,Name,Team,Pos
 17688,Jordan Whittington,LAR,WR
 17689,J.J. McCarthy,NYG,QB
 17690,Blake Corum,LAR,RB
+17691,Jeshaun Jones,MIN,WR
 17692,Jayden Daniels,WAS,QB
 17693,Brock Bowers,LV,TE
 17695,Caleb Williams,CHI,QB
@@ -411,6 +418,7 @@ PlayerID,Name,Team,Pos
 17916,Jawhar Jordan,HOU,RB
 17919,Josh Williams,TB,RB
 17947,Isaac Guerendo,SF,RB
+17965,Devin Culp,MIN,TE
 17966,Tip Reiman,ARI,TE
 17967,Tyrone Tracy,NYG,RB
 17968,George Holani,SEA,RB
@@ -419,9 +427,11 @@ PlayerID,Name,Team,Pos
 17975,Devaughn Vele,NO,WR
 17976,Jalen Coker,CAR,WR
 17977,Isaiah Williams,NYJ,WR
+18107,Mason Tipton,NO,WR
 18160,Colson Yankoff,WAS,TE
 18251,Hayden Rucci,LAC,TE
 18263,Treyton Welch,NO,TE
+18281,Cole Burgess,PIT,WR
 18284,Cam Grandy,CIN,TE
 18300,British Brooks,HOU,RB
 18301,David Martin-Robinson,TEN,TE
@@ -499,12 +509,14 @@ PlayerID,Name,Team,Pos
 18573,Gavin Bartholomew,MIN,TE
 18574,Jaxson Dart,NYG,QB
 18578,Travis Hunter,JAX,WR
+18623,Moliki Matavao,NO,TE
 18641,Chimere Dike,TEN,WR
 18642,Isaac TeSlaa,DET,WR
 18643,Jaylin Lane,WAS,WR
 18645,Theo Wease,LAC,WR
 18646,Arian Smith,NYJ,WR
 18647,Jordan Watkins,SF,WR
+18648,Beaux Collins,ATL,WR
 18650,KeAndre Lambert-Smith,LAC,WR
 18652,Max Brosmer,MIN,QB
 18811,Jacory Croskey-Merritt,WAS,RB
@@ -513,12 +525,14 @@ PlayerID,Name,Team,Pos
 18889,Efton Chism,NE,WR
 18894,Nate Carter,KC,RB
 18906,Keleki Latu,BUF,TE
+18920,Mark Redman,GB,TE
 18938,Jahdae Walker,CHI,WR
 18946,Anthony Tyus,CAR,RB
 18958,Darius Cooper,PHI,WR
 18968,Nick Kallerup,SEA,TE
 19095,Myles Price,MIN,WR
 19126,Kyle Williams,NE,WR
+19137,Drake Dabney,GB,TE
 19230,Ja'Kobi Lane,BAL,WR
 19231,Makai Lemon,PHI,WR
 19233,Jordyn Tyson,NO,WR
@@ -571,10 +585,12 @@ PlayerID,Name,Team,Pos
 19326,Lewis Bond,HOU,WR
 19327,J. Michael Sturdivant,GB,WR
 19330,De'Zhaun Stribling,SF,WR
+19331,Harrison Wallace,ARI,WR
 19335,Eli Heidenreich,PIT,RB
 19336,Barion Brown,NO,WR
 19340,Kaden Wetjen,PIT,WR
 19343,Caleb Douglas,MIA,WR
+19344,Jeff Caldwell,KC,WR
 19348,Eli Raridon,NE,TE
 19349,Tanner Koziol,JAX,TE
 19351,John Michael Gyllenborg,KC,TE
@@ -587,6 +603,7 @@ PlayerID,Name,Team,Pos
 19422,Jaydn Ott,KC,RB
 19425,Chip Trayanum,NYJ,RB
 19426,Josh Cuevas,BAL,TE
+19427,Joey Aguilar,ARI,QB
 19428,Joe Fagnano,BAL,QB
 19431,CJ Donaldson,NO,RB
 19432,Malik Benson,LV,WR
@@ -603,4 +620,6 @@ PlayerID,Name,Team,Pos
 19655,Greg Desrosiers,NYG,RB
 19668,Malik McClain,NYJ,WR
 19681,Seydou Traore,MIA,TE
+19959,Alex Bullock,JAX,WR
 19989,Camden Brown,DAL,WR
+19996,Jacob De Jesus,KC,WR

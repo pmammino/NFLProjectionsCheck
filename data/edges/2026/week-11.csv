@@ -1,0 +1,5 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,SpreadModel,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,11,12483,Josh Allen,BUF,QB,vs MIA,rushAtt,DraftKings,9.5,over,6.58,455,,0.1802,0.1802,,1,0.2497,0.2920,0.0695,0.0695,ev,none,pool,,tweedie,main,1,live,202611222F686879,2026-11-17T21:56:26.253Z
+2026,11,12483,Josh Allen,BUF,QB,vs MIA,rushAtt,DraftKings,7.5,over,6.58,154,,0.3937,0.3937,,1,0.4521,0.4613,0.0584,0.0584,ev,none,pool,,tweedie,main,1,live,202611222F686879,2026-11-17T21:56:26.253Z
+2026,11,12483,Josh Allen,BUF,QB,vs MIA,rushAtt,DraftKings,11.5,over,6.58,1300,,0.0714,0.0714,,1,0.1282,0.1687,0.0568,0.0568,ev,none,pool,,tweedie,main,1,live,202611222F686879,2026-11-17T21:56:26.253Z
+2026,11,17788,Audric Estime,NO,RB,at CHI,rushYds,BetRivers,39.5,over,18.84,450,,0.1818,0.1818,,1,0.2146,0.2048,0.0327,0.0327,ev,none,pool,,tweedie,main,1,live,2026112288508D1D,2026-11-17T21:56:26.253Z

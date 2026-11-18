@@ -116,13 +116,20 @@ export function settle(actualsByWeek, { week, playerId, stat, line, side }) {
 // One board's candidate rows.
 //
 //   board   { slot, week, rows }   rows are the props CSV rows (strings)
-//   ctx     { model, actualsByWeek, closeIndex }
+//   ctx     { model, actualsByWeek, closeIndex, minEdge? }
 //
+// `ctx.minEdge` is the smallest edge, under any of the three prices, that earns
+// a row (default MIN_CANDIDATE_EDGE). The tab needs the default: it keeps the
+// shipped file small. Research that asks what an edge ADDS to another one needs
+// the rows where the other prices show nothing, which that cut removes by
+// construction — pass -Infinity to keep the whole board.
+
 // Returns { players: Map id -> {...}, rows: [...] }. A row is a plain object; the
 // writer packs it.
 export function candidatesForBoard(board, ctx) {
   const { slot, week } = board;
   const { model, actualsByWeek, closeIndex } = ctx;
+  const minEdge = ctx.minEdge ?? MIN_CANDIDATE_EDGE;
   const m = model.at(week);
   const priced = asPoolPriced(board.rows, m, slot);
   const quotes = board.rows.map((r) => readPropRow(r, slot));
@@ -180,7 +187,7 @@ export function candidatesForBoard(board, ctx) {
     const pFair = flip(mk.pBooks);
 
     const best = Math.max(pProj !== null ? pProj - implied : -1, pPool !== null ? pPool - implied : -1, pSharp !== null ? pSharp - implied : -1);
-    if (!(best >= MIN_CANDIDATE_EDGE)) return;
+    if (!(best >= minEdge)) return;
 
     const { status, actual } = settle(actualsByWeek, { week, playerId: q.playerId, stat: q.stat, line: q.line, side });
     const closeFair = slot === "closing" ? null : closeFairFor(closeIndex, { week, playerId: q.playerId, stat: q.stat, line: q.line, book: r.Book, side });

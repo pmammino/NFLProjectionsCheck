@@ -1409,6 +1409,69 @@ assessment read `ProjProb`, refuse a re-priced row that does not carry one
 cannot be combined with `--median-correction auto` (the projection's share was
 earned by the uncorrected projection).
 
+### Does it pay to move the price harder when the projection and the sharp books agree?
+
+```bash
+npm run agreement-study -- --write     # data/pricing/{season}/agreement.md
+```
+
+Paper trading turned up a subset that looks profitable: the projection shows an edge
+**and** the sharp books say the price is off too. `agreement-study` tests that subset, and
+the pricing change it suggests, the way a pricing change has to be judged: on rows that were
+not used to find it, against the price it would replace, with errors clustered on
+player-week. The bar for shipping it is written into `decide()` before the walk-forward is
+read: the gated price must beat the pool out of sample under the pipeline's own cautious
+rule **and** at face value, and the agree cell's projection share must have an interval
+above zero.
+
+"Agree" has two definitions, because the data supports one far better. *books*: the
+lead-weighted pool against the plain median of the same books (every market with two
+books). *sharp*: Pinnacle/Circa alone against the pool (about 8% of markets — Pinnacle
+prices main lines, not the ladder — and within ~0.03 logit of the pool, so it splits
+noise-sized differences).
+
+As of 2026 week 10 (live boards, near the money):
+
+| | result |
+|---|---|
+| Subset, as paper trading shows it | the tab's controls (projection ≥ 3%, sharp confirm ≥ 2%, every capture) read +13.6% on 51 bets. One bet per market at the first capture, full board, clustered, Overs on omitted players counted as losses: Pinnacle/Circa confirm ≥ 0% is **−0.6% ±15% on 200 bets**, ≥ 1% **+7.5% ±25% on 78**, ≥ 2% **−1.0% ±44% on 27**. A cell picked from a grid |
+| Projection's share of the price, agree cell | books **+0.04 ±0.15**, sharp **−0.18 ±0.21**; overall −0.00 ±0.10 |
+| Where the late market goes (toward the projection, per unit gap) | agree +0.016 ±0.022, disagree +0.040 ±0.019, all +0.030 ±0.007 — agreement does not make the market follow the projection harder |
+| Walk-forward, gated price vs the pool | cautious: identical to the pool (every share is 0). Face value: +0.00001 Brier (worse), z 0.97 |
+
+**Verdict: do not change the price.** The sample cannot support it either way — the interval
+on the agree-cell share is wider than any share worth pricing (0.1 is about one point of
+probability) — and no test points toward it.
+
+What the bets do show, and where the profit comes from. Holding the *books'* confirmation
+fixed and varying only the projection (CLV, positive = the late market moved toward the bet):
+
+| books pool confirms the price (≥ 0%) | bets | CLV |
+|---|---|---|
+| projection edge ≥ 3% | 266 | **+1.20 ±0.48 pts**, 70% beat the close |
+| projection ≤ 0 (against) | 248 | **+0.43 ±0.42 pts**, 62% |
+| agrees − against | | **+0.76 ±0.64 pts (z ≈ 2.3)** |
+
+And the projection alone, with the books saying the price is bad: **−2.56 pts**, beating the
+close 12% of the time. So: the subset is a **stale-price** effect (a bettable book out of
+line with the weighted rest — the books' confirmation carries it, and it survives the
+projection being against), and the projection adds a modest *bet-selection* increment on top
+of it. That increment is the only thing here worth following, and it is not yet a result: it
+sits in one of six similar comparisons, was found on weeks 1–10, and does not show up in the
+price-level tests. **Weeks 11 onward are the holdout**: rerun after each week and read only
+that comparison.
+
+Three cautions that apply to any subset hunt in this repo: the paper-trading file stores only
+rows with a 3% edge under some price, which makes "books confirm, projection against"
+nearly empty (the study rebuilds from the full board, `minEdge: -Infinity`); "every capture"
+counts the same prop up to three times; and the tab's ROI band is per bet, not per
+player-week. A side finding: as a predictor of the late board's median the lead-weighted
+pool is about 3% worse in squared error than the plain median of the same books (z 6.6,
+mostly receiving yards) — the late market comes back from where the leaders have moved it,
+rather than following. It is measured against a median of the same books, which favours a
+median, and against outcomes the two are indistinguishable (above), so it is a flag for the
+weights, not a verdict on them.
+
 ### Using it in the betting path
 
 The report changes nothing by itself. To price off the blend:

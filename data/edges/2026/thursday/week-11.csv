@@ -1,0 +1,9 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,SpreadModel,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,11,16163,Jordan Mason,MIN,RB,at SF,rushYds,DraftKings,59.5,over,48.38,286,,0.2591,0.2591,,1,0.3000,0.2816,0.0410,0.0410,ev,none,pool,,tweedie,thursday,1,live,2026112301C91980,2026-11-19T22:37:48.768Z
+2026,11,19281,Fernando Mendoza,LV,QB,at DEN,rushAtt,DraftKings,7.5,over,3.56,539,,0.1565,0.1565,,1,0.1970,0.0588,0.0405,0.0405,ev,none,pool,,tweedie,thursday,1,live,20261122C86407D1,2026-11-19T22:37:48.768Z
+2026,11,15876,James Cook,BUF,RB,vs MIA,rushAtt,DraftKings,27.5,over,21.44,950,,0.0952,0.0952,,1,0.1337,0.1995,0.0384,0.0384,ev,none,pool,,tweedie,thursday,1,live,202611222F686879,2026-11-19T22:37:48.768Z
+2026,11,16163,Jordan Mason,MIN,RB,at SF,rushYds,DraftKings,49.5,over,48.38,167,,0.3745,0.3745,,1,0.4127,0.3777,0.0382,0.0382,ev,none,pool,,tweedie,thursday,1,live,2026112301C91980,2026-11-19T22:37:48.768Z
+2026,11,18520,Kyle Monangai,CHI,RB,vs NO,rushYds,BetRivers,69.5,over,39.19,450,,0.1818,0.1818,,1,0.2195,0.3506,0.0377,0.0377,ev,none,pool,,tweedie,thursday,1,live,2026112288508D1D,2026-11-19T22:37:48.768Z
+2026,11,16163,Jordan Mason,MIN,RB,at SF,rushYds,DraftKings,69.5,over,48.38,469,,0.1757,0.1757,,1,0.2092,0.2049,0.0335,0.0335,ev,none,pool,,tweedie,thursday,1,live,2026112301C91980,2026-11-19T22:37:48.768Z
+2026,11,15976,Tyler Allgeier,ARI,RB,at KC,recYds,DraftKings,19.5,over,13.16,469,,0.1757,0.1757,,1,0.2071,0.3505,0.0314,0.0314,ev,none,pool,,tweedie,thursday,1,live,20261122578B9721,2026-11-19T22:37:48.768Z
+2026,11,15902,Trey McBride,ARI,TE,at KC,recYds,DraftKings,69.5,over,51.14,308,,0.2451,0.2451,,1,0.2758,0.2645,0.0307,0.0307,ev,none,pool,,tweedie,thursday,1,live,20261122578B9721,2026-11-19T22:37:48.768Z

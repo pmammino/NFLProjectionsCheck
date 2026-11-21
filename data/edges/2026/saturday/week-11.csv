@@ -1,0 +1,16 @@
+Season,Week,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Proj,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,ProjProb,Edge,ModelEdge,EdgeBasis,DevigMethod,PriceModel,MedianAdj,SpreadModel,Slot,Bettable,LineSource,FixtureID,CapturedAt
+2026,11,12483,Josh Allen,BUF,QB,vs MIA,rushAtt,DraftKings,7.5,over,6.95,258,,0.2793,0.2793,,1,0.3560,0.5016,0.0767,0.0767,ev,none,pool,,tweedie,saturday,1,live,202611222F686879,2026-11-21T20:50:03.339Z
+2026,11,19281,Fernando Mendoza,LV,QB,at DEN,rushAtt,DraftKings,7.5,over,3.55,650,,0.1333,0.1333,,1,0.1827,0.0582,0.0494,0.0494,ev,none,pool,,tweedie,saturday,1,live,20261122C86407D1,2026-11-21T20:50:03.339Z
+2026,11,12483,Josh Allen,BUF,QB,vs MIA,rushAtt,DraftKings,9.5,over,6.95,840,,0.1064,0.1064,,1,0.1512,0.3296,0.0448,0.0448,ev,none,pool,,tweedie,saturday,1,live,202611222F686879,2026-11-21T20:50:03.339Z
+2026,11,11690,Christian McCaffrey,SF,RB,vs MIN,rushYds,BetRivers,69.5,over,67.91,295,,0.2532,0.2532,,1,0.2914,0.4401,0.0382,0.0382,ev,none,pool,,tweedie,saturday,1,live,2026112301C91980,2026-11-21T20:50:03.339Z
+2026,11,18520,Kyle Monangai,CHI,RB,vs NO,rushYds,BetRivers,69.5,over,39.27,360,,0.2174,0.2174,,1,0.2543,0.3518,0.0369,0.0369,ev,none,pool,,tweedie,saturday,1,live,2026112288508D1D,2026-11-21T20:50:03.339Z
+2026,11,5653,Josh Johnson,ARI,QB,at KC,passYds,DraftKings,249.5,over,175.18,1020,,0.0893,0.0893,,1,0.1254,0.1413,0.0361,0.0361,ev,none,pool,,tweedie,saturday,1,live,20261122578B9721,2026-11-21T20:50:03.339Z
+2026,11,5653,Josh Johnson,ARI,QB,at KC,rushYds,DraftKings,19.5,over,6.81,146,,0.4065,0.4065,,1,0.4417,0.0988,0.0352,0.0352,ev,none,pool,,tweedie,saturday,1,live,20261122578B9721,2026-11-21T20:50:03.339Z
+2026,11,13429,Deebo Samuel Sr.,SF,WR,vs MIN,rushYds,DraftKings,19.5,over,8.04,372,,0.2119,0.2119,,1,0.2461,0.1770,0.0343,0.0343,ev,none,pool,,tweedie,saturday,1,live,2026112301C91980,2026-11-21T20:50:03.339Z
+2026,11,15976,Tyler Allgeier,ARI,RB,at KC,rushYds,BetRivers,49.5,over,28.32,425,,0.1905,0.1905,,1,0.2246,0.2569,0.0341,0.0341,ev,none,pool,,tweedie,saturday,1,live,20261122578B9721,2026-11-21T20:50:03.339Z
+2026,11,13590,Tony Pollard,TEN,RB,at DAL,receptions,Caesars,2.5,over,3.12,-165,,0.6226,0.6226,,1,0.6562,0.6547,0.0336,0.0336,ev,none,pool,,tweedie,saturday,1,live,202611224903DD53,2026-11-21T20:50:03.339Z
+2026,11,12483,Josh Allen,BUF,QB,vs MIA,rushAtt,theScore,9.5,over,6.95,750,,0.1176,0.1176,,1,0.1512,0.3296,0.0336,0.0336,ev,none,pool,,tweedie,saturday,1,live,202611222F686879,2026-11-21T20:50:03.339Z
+2026,11,17043,Roman Wilson,PIT,WR,at PHI,receptions,BetRivers,3.5,over,1.55,575,,0.1481,0.1481,,1,0.1808,0.1550,0.0326,0.0326,ev,none,pool,,tweedie,saturday,1,live,2026112258E549E0,2026-11-21T20:50:03.339Z
+2026,11,14394,D'Andre Swift,CHI,RB,vs NO,rushYds,BetRivers,89.5,over,69.96,360,,0.2174,0.2174,,1,0.2493,0.3327,0.0319,0.0319,ev,none,pool,,tweedie,saturday,1,live,2026112288508D1D,2026-11-21T20:50:03.339Z
+2026,11,5653,Josh Johnson,ARI,QB,at KC,rushYds,DraftKings,29.5,over,6.81,371,,0.2123,0.2123,,1,0.2437,0.0283,0.0314,0.0314,ev,none,pool,,tweedie,saturday,1,live,20261122578B9721,2026-11-21T20:50:03.339Z
+2026,11,19607,Kaelon Black,SF,RB,vs MIN,rushYds,BetRivers,49.5,over,27.53,440,,0.1852,0.1852,,1,0.2163,0.3220,0.0312,0.0312,ev,none,pool,,tweedie,saturday,1,live,2026112301C91980,2026-11-21T20:50:03.339Z

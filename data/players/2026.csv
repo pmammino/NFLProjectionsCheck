@@ -148,6 +148,7 @@ PlayerID,Name,Team,Pos
 14436,Cole Kmet,CHI,TE
 14442,Joe Burrow,CIN,QB
 14446,Justin Herbert,LAC,QB
+14453,Salvon Ahmed,CHI,RB
 14455,Jonathan Taylor,IND,RB
 14458,Jerry Jeudy,CLE,WR
 14463,Colby Parkinson,LAR,TE
@@ -250,6 +251,7 @@ PlayerID,Name,Team,Pos
 15974,Skylar Thompson,BAL,QB
 15976,Tyler Allgeier,ARI,RB
 15979,Ty Chandler,NO,RB
+15980,Jashaun Corbin,DAL,RB
 15984,Jaylen Warren,PIT,RB
 15989,Jerome Ford,ARI,RB
 15990,Tyler Goodson,DAL,RB
@@ -537,6 +539,7 @@ PlayerID,Name,Team,Pos
 18811,Jacory Croskey-Merritt,WAS,RB
 18822,Caleb Lohner,DEN,TE
 18841,Ke'Shawn Williams,CIN,WR
+18863,Carter Runyon,LV,TE
 18886,Lan Larison,NE,RB
 18889,Efton Chism,NE,WR
 18894,Nate Carter,KC,RB
@@ -548,6 +551,7 @@ PlayerID,Name,Team,Pos
 18968,Nick Kallerup,SEA,TE
 19007,Jimmy Holiday,KC,WR
 19095,Myles Price,MIN,WR
+19120,Max Hurleman,PIT,WR
 19126,Kyle Williams,NE,WR
 19137,Drake Dabney,GB,TE
 19230,Ja'Kobi Lane,BAL,WR

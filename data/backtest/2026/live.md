@@ -1,4 +1,4 @@
-# Live backtest — 2026, through week 10
+# Live backtest — 2026, through week 11
 
 Live means the main, thursday, saturday captures: the prices and the projection that existed when the board was taken. Backfilled boards (opening, closing) are reconstructions with hindsight and are excluded. The Firehose takes every bettable edge of at least 3% at one unit, at the best price per player and stat.
 
@@ -28,6 +28,9 @@ Live means the main, thursday, saturday captures: the prices and the projection 
 | 10 | main | pool | 4,931 | 1,712 | 8 | 56 | 73% | 10 |
 | 10 | saturday | pool | 24,095 | 6,779 | 9 | 1,016 | 67% | 12 |
 | 10 | thursday | pool | 22,567 | 6,580 | 9 | 688 | 69% | 28 |
+| 11 | main | pool | 8,205 | 2,770 | 8 | 72 | 73% | 4 |
+| 11 | saturday | pool | 22,095 | 6,196 | 9 | 912 | 67% | 15 |
+| 11 | thursday | pool | 19,866 | 5,787 | 9 | 806 | 68% | 8 |
 
 ## 2. Pricing on live boards
 
@@ -37,15 +40,16 @@ Brier score against what happened, markets within 0.25 of 50/50 by the book's pr
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | week 1 | 449 | 178 | 0.2490 | 0.2602 | 0.2488 | +0.0112 (z 1.5) | -0.0002 (z -1.3) |
 | week 2 | 124 | 14 | 0.2523 | 0.2979 | 0.2522 | +0.0457 (z 2.5) | -0.0001 (z -0.3) |
-| week 3 | 233 | 27 | 0.2331 | 0.2398 | 0.2333 | +0.0067 (z 0.6) | +0.0002 (z 0.5) |
+| week 3 | 233 | 27 | 0.2330 | 0.2398 | 0.2333 | +0.0067 (z 0.6) | +0.0002 (z 0.5) |
 | week 4 | 469 | 50 | 0.2391 | 0.2563 | 0.2392 | +0.0172 (z 1.7) | +0.0001 (z 0.5) |
 | week 5 | 4,557 | 198 | 0.2341 | 0.2466 | 0.2341 | +0.0125 (z 2.6) | +0.0000 (z 0.1) |
 | week 6 | 4,409 | 193 | 0.2305 | 0.2497 | 0.2305 | +0.0192 (z 2.8) | -0.0001 (z -0.5) |
 | week 7 | 4,390 | 194 | 0.2357 | 0.2428 | 0.2356 | +0.0071 (z 1.1) | -0.0001 (z -0.6) |
 | week 8 | 3,454 | 194 | 0.2357 | 0.2564 | 0.2355 | +0.0207 (z 3.6) | -0.0002 (z -1.7) |
 | week 9 | 3,728 | 204 | 0.2305 | 0.2462 | 0.2301 | +0.0157 (z 2.8) | -0.0004 (z -2.9) |
-| week 10 | 3,687 | 199 | 0.2365 | 0.2476 | 0.2365 | +0.0111 (z 2.4) | +0.0000 (z 0.3) |
-| **all weeks** | 25,500 | 1451 | 0.2342 | 0.2485 | 0.2341 | +0.0143 (z 6.2) | -0.0001 (z -2.1) |
+| week 10 | 3,686 | 199 | 0.2364 | 0.2475 | 0.2364 | +0.0111 (z 2.4) | +0.0000 (z 0.3) |
+| week 11 | 3,647 | 187 | 0.2319 | 0.2403 | 0.2315 | +0.0084 (z 1.6) | -0.0003 (z -2.6) |
+| **all weeks** | 29,146 | 1638 | 0.2339 | 0.2475 | 0.2338 | +0.0135 (z 6.4) | -0.0001 (z -2.8) |
 
 The z-scores use cluster-robust errors, which are unreliable under about 30 player-weeks (weeks 2, 3). Read the all-weeks row.
 
@@ -60,15 +64,16 @@ share = how far to move the books' price toward the projection to match what hap
 | week 2 | 41 | 13 | 0.08 ±0.67 | 10.2% | 8.2% | 14.6% |
 | week 3 | 94 | 26 | 0.30 ±0.57 | 9.7% | 7.9% | 4.3% |
 | week 4 | 227 | 47 | -0.31 ±0.27 | 9.4% | 5.1% | 18.1% |
-| week 5 | 2,245 | 198 | 0.15 ±0.25 | 9.2% | 6.0% | 10.6% |
+| week 5 | 2,244 | 198 | 0.15 ±0.25 | 9.1% | 6.0% | 10.7% |
 | week 6 | 2,123 | 192 | 0.13 ±0.19 | 9.3% | 5.9% | 6.3% |
 | week 7 | 2,149 | 192 | 0.08 ±0.23 | 9.3% | 5.4% | 7.1% |
 | week 8 | 1,429 | 194 | 0.01 ±0.20 | 9.7% | 5.8% | 9.4% |
 | week 9 | 1,509 | 201 | 0.15 ±0.23 | 9.8% | 6.1% | 7.6% |
 | week 10 | 1,525 | 196 | 0.18 ±0.43 | 9.9% | 11.6% | 9.9% |
-| **all weeks** | 11,342 | 1259 | 0.09 ±0.09 | 9.5% | 6.6% | 8.6% |
+| week 11 | 1,435 | 187 | 0.04 ±0.39 | 10.2% | 12.6% | 7.8% |
+| **all weeks** | 12,776 | 1446 | 0.09 ±0.09 | 9.6% | 7.3% | 8.5% |
 
-Walk-forward (each week priced with the share fitted on earlier weeks, floored at 0; weeks 4 @ 0.19, 5 @ 0.00, 6 @ 0.07, 7 @ 0.10, 8 @ 0.09, 9 @ 0.07, 10 @ 0.08): Brier -0.0000 against the books' pool (z -0.3, 1220 player-weeks). Positive = worse than the books, negative = better.
+Walk-forward (each week priced with the share fitted on earlier weeks, floored at 0; weeks 4 @ 0.19, 5 @ 0.00, 6 @ 0.07, 7 @ 0.10, 8 @ 0.09, 9 @ 0.07, 10 @ 0.08, 11 @ 0.09): Brier -0.0000 against the books' pool (z -0.3, 1407 player-weeks). Positive = worse than the books, negative = better.
 
 **Status: no evidence.** Nothing a price could use yet.
 
@@ -100,7 +105,10 @@ Walk-forward (each week priced with the share fitted on earlier weeks, floored a
 | 10 | main | pool | 10 | 3 | 3 | 0 | -100.0% ±0% | -100.0% | 0% of 2, -1.8 pts |
 | 10 | saturday | pool | 12 | 9 | 9 | 0 | -100.0% ±0% | -100.0% | 33% of 9, +1.0 pts |
 | 10 | thursday | pool | 28 | 15 | 15 | 0 | -8.3% ±85% | -8.3% | 69% of 13, +2.3 pts |
-| **all** |  |  |  | 437 | 406 | 0 + 19 no line + 12 ungradable | **+0.9% ±23%** | -2.3% | 40% of 355, +0.3 pts |
+| 11 | main | pool | 4 | 1 | 0 | 1 | – | – | – |
+| 11 | saturday | pool | 15 | 11 | 11 | 0 | -57.1% ±86% | -57.1% | 40% of 10, +0.7 pts |
+| 11 | thursday | pool | 8 | 5 | 5 | 0 | -100.0% ±0% | -100.0% | 60% of 5, +2.9 pts |
+| **all** |  |  |  | 454 | 422 | 1 + 19 no line + 12 ungradable | **-1.8% ±22%** | -4.8% | 40% of 370, +0.3 pts |
 
 Verdict on the live total: **within noise**. "Rows at the edge bar" are the rows on the board that clear the minimum edge; the bets are what is left after the Firehose keeps one price per player and stat and the calibration guards (support floor, 20-point disagreement cap) are applied.
 
@@ -109,7 +117,7 @@ By the price the board was captured under:
 | price | bets | settled | ROI (±2σ) | CLV: beat the close |
 | --- | --- | --- | --- | --- |
 | projection | 227 | 208 | +10.9% ±28% | 40% of 164, -0.5 pts |
-| pool | 210 | 198 | -9.7% ±36% | 40% of 191, +0.9 pts |
+| pool | 227 | 214 | -14.2% ±34% | 41% of 206, +1.0 pts |
 
 ## 3b. CLV by book
 
@@ -117,17 +125,17 @@ Where the bets came from and what their prices were worth. Each bet is taken at 
 
 | book | bets | settled | ROI (±2σ) | own close: measurable · beat · avg | market close: measurable · beat · avg |
 | --- | --- | --- | --- | --- | --- |
-| DraftKings | 189 | 179 | -9.1% ±36% | 160 · 47% · +0.7 pts | 81 · 68% · +1.2 ±0.7 pts |
-| BetRivers | 97 | 84 | +13.5% ±49% | 83 · 48% · +1.1 pts | 80 · 81% · +2.9 ±0.8 pts |
+| DraftKings | 198 | 188 | -10.9% ±35% | 168 · 47% · +0.7 pts | 87 · 69% · +1.4 ±0.7 pts |
+| BetRivers | 104 | 90 | +5.9% ±46% | 89 · 48% · +1.1 pts | 87 · 82% · +3.0 ±0.8 pts |
 | Hard Rock | 82 | 78 | -35.1% ±22% | 60 · 10% · -2.6 pts | 23 · 52% · +0.7 ±1.2 pts |
 | FanDuel | 26 | 25 | +14.7% ±55% | 22 · 41% · +0.2 pts | 22 · 45% · +0.5 ±2.2 pts |
-| Caesars | 23 | 21 | +28.1% ±96% | 19 · 37% · +1.9 pts † | 19 · 53% · +1.1 ±3.2 pts † |
+| Caesars | 24 | 22 | +22.2% ±92% | 20 · 35% · +1.8 pts | 20 · 55% · +1.3 ±3.1 pts |
 | theScore | 13 | 12 | +215.4% ±335% | 10 · 50% · +1.8 pts † | 5 · 80% · +4.2 ±2.9 pts † |
 | Betr | 3 | 3 | -36.4% ±127% | – | – |
 | BetMGM | 2 | 2 | +76.7% ±28% | 1 · 0% · -2.4 pts † | 2 · 50% · -0.5 ±3.7 pts † |
 | Circa | 2 | 2 | -4.5% ±191% | – | – |
 
-9 books. 205 of 437 bets have no market close: fewer than two other books quoted that exact line at the close, which is common for the one-sided alternate lines the slow books post.
+9 books. 208 of 454 bets have no market close: fewer than two other books quoted that exact line at the close, which is common for the one-sided alternate lines the slow books post.
 
 ## 4. The same live boards under the other price
 
@@ -137,27 +145,27 @@ Each live board re-priced under the model it was *not* captured under and run th
 | --- | --- | --- | --- | --- | --- |
 | projection-priced boards (5): as captured | 227 | 208 | 0 + 8 no line + 11 ungradable | +10.9% ±28% | 40% of 164, -0.5 pts |
 | … re-priced with the pool | 14 | 14 | 0 | +195.6% ±225% | 79% of 14, +3.5 pts |
-| pool-priced boards (17): as captured | 210 | 198 | 0 + 11 no line + 1 ungradable | -9.7% ±36% | 40% of 191, +0.9 pts |
-| … re-priced with the projection | 3095 | 2843 | 29 + 109 no line + 114 ungradable | +0.2% ±5% | 30% of 2667, -0.5 pts |
+| pool-priced boards (20): as captured | 227 | 214 | 1 + 11 no line + 1 ungradable | -14.2% ±34% | 41% of 206, +1.0 pts |
+| … re-priced with the projection | 3576 | 3285 | 19 + 138 no line + 134 ungradable | +0.6% ±5% | 31% of 3055, -0.4 pts |
 
-Boards: week 1 main, week 2 main, week 3 main, week 4 main, week 5 main (projection → pool); week 5 saturday, week 5 thursday, week 6 main, week 6 saturday, week 6 thursday, week 7 main, week 7 saturday, week 7 thursday, week 8 main, week 8 saturday, week 8 thursday, week 9 main, week 9 saturday, week 9 thursday, week 10 main, week 10 saturday, week 10 thursday (pool → projection).
+Boards: week 1 main, week 2 main, week 3 main, week 4 main, week 5 main (projection → pool); week 5 saturday, week 5 thursday, week 6 main, week 6 saturday, week 6 thursday, week 7 main, week 7 saturday, week 7 thursday, week 8 main, week 8 saturday, week 8 thursday, week 9 main, week 9 saturday, week 9 thursday, week 10 main, week 10 saturday, week 10 thursday, week 11 main, week 11 saturday, week 11 thursday (pool → projection).
 
 ## 5. Every persona, live only
 
 | persona | bets | settled | pending | ROI (±2σ) | CLV: beat the close |
 | --- | --- | --- | --- | --- | --- |
-| The Firehose | 437 | 406 | 0 + 19 no line + 12 ungradable | +0.9% ±23% | 40% of 355, +0.3 pts |
-| The Disciplined Flat Bettor | 56 | 55 | 0 + 1 no line | -72.1% ±28% | 57% of 46, +1.1 pts |
-| The Line Shopper | 60 | 56 | 0 + 4 no line | -43.2% ±36% | 52% of 50, +1.1 pts |
-| The Kelly Compounder | 152 | 144 | 0 + 8 no line | +5.8% ±54% | 41% of 139, +0.7 pts |
-| The Weekly Budget | 60 | 56 | 0 + 4 no line | -44.8% ±36% | 52% of 50, +1.1 pts |
+| The Firehose | 454 | 422 | 1 + 19 no line + 12 ungradable | -1.8% ±22% | 40% of 370, +0.3 pts |
+| The Disciplined Flat Bettor | 63 | 62 | 0 + 1 no line | -67.7% ±29% | 55% of 53, +1.1 pts |
+| The Line Shopper | 70 | 65 | 1 + 4 no line | -51.0% ±32% | 49% of 59, +1.0 pts |
+| The Kelly Compounder | 166 | 157 | 1 + 8 no line | +1.6% ±50% | 41% of 152, +0.7 pts |
+| The Weekly Budget | 70 | 65 | 1 + 4 no line | -52.6% ±32% | 49% of 59, +1.0 pts |
 | The Purist | 22 | 21 | 0 + 1 no line | +16.5% ±52% | 33% of 15, -0.5 pts |
 
 ## 6. Can you read it?
 
-- **Settled live bets: 406.** A verdict needs at least 200, and the per-bet spread is 2.29 units.
-- Seeing an ROI of +0.9% at two sigma takes about 286,345 settled bets; you have 406.
-- Seeing a **5%** ROI takes about 8,392 settled bets. At the current 41 settled a week that is about 197 more weeks — longer than a season.
+- **Settled live bets: 422.** A verdict needs at least 200, and the per-bet spread is 2.26 units.
+- Seeing an ROI of -1.8% at two sigma takes about 59,801 settled bets; you have 422.
+- Seeing a **5%** ROI takes about 8,183 settled bets. At the current 38 settled a week that is about 203 more weeks — longer than a season.
 - CLV resolves far faster than ROI because it is a price difference, not a coin flip, but it is partly mechanical: a slow book's off-market price stays off-market until the close.
 - Pending bets in finished weeks have no stat line. For an over that is almost always a loss the settlement cannot see; the conservative column counts them.
 - Bets on one player are correlated, so the bands are if anything too narrow.

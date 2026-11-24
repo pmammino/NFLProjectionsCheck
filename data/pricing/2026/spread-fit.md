@@ -1,6 +1,6 @@
 # Is the projection's band too narrow? — 2026
 
-47,292 live markets (every rung of every ladder) with a graded outcome, weeks 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. Every projection is the one that capture actually had, rebuilt from git history.
+53,898 live markets (every rung of every ladder) with a graded outcome, weeks 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11. Every projection is the one that capture actually had, rebuilt from git history.
 
 ## 1. Is the band too narrow?
 
@@ -10,25 +10,25 @@ The projection's own P(over) against how often the over happened, all rungs, all
 
 | projection says | rungs | projection | widened | happened |
 | --- | --- | --- | --- | --- |
-| 0–3% | 4,465 | 0.9% | 5.7% | 9.5% |
-| 3–10% | 3,684 | 6.2% | 16.6% | 13.3% |
-| 10–25% | 4,777 | 17.0% | 27.4% | 21.8% |
-| 25–50% | 6,643 | 38.0% | 42.4% | 37.7% |
-| 50–75% | 8,847 | 62.2% | 57.8% | 54.0% |
-| 75–90% | 3,853 | 81.9% | 71.7% | 73.2% |
-| 90–100% | 808 | 93.3% | 82.8% | 85.4% |
+| 0–3% | 4,940 | 0.9% | 5.7% | 9.6% |
+| 3–10% | 4,066 | 6.2% | 16.6% | 13.2% |
+| 10–25% | 5,370 | 17.1% | 27.4% | 21.4% |
+| 25–50% | 7,503 | 38.0% | 42.3% | 36.9% |
+| 50–75% | 10,055 | 62.3% | 57.8% | 53.4% |
+| 75–90% | 4,423 | 81.9% | 71.7% | 73.1% |
+| 90–100% | 974 | 93.4% | 83.0% | 84.8% |
 
 **counts** (passAtt, completions, rushAtt, receptions) — best multiplier 1.30
 
 | projection says | rungs | projection | widened | happened |
 | --- | --- | --- | --- | --- |
-| 0–3% | 1,218 | 1.1% | 3.6% | 8.5% |
-| 3–10% | 1,651 | 6.3% | 11.8% | 10.1% |
-| 10–25% | 2,472 | 17.0% | 23.0% | 17.5% |
-| 25–50% | 3,492 | 38.0% | 40.7% | 37.8% |
-| 50–75% | 3,413 | 61.6% | 59.1% | 58.9% |
-| 75–90% | 1,592 | 82.1% | 76.2% | 79.0% |
-| 90–100% | 377 | 93.3% | 87.8% | 77.2% |
+| 0–3% | 1,411 | 1.1% | 3.5% | 9.0% |
+| 3–10% | 1,904 | 6.2% | 11.8% | 10.3% |
+| 10–25% | 2,879 | 17.1% | 23.1% | 17.2% |
+| 25–50% | 4,042 | 38.0% | 40.7% | 37.4% |
+| 50–75% | 4,012 | 61.6% | 59.0% | 58.4% |
+| 75–90% | 1,862 | 82.1% | 76.1% | 78.1% |
+| 90–100% | 457 | 93.4% | 88.0% | 78.6% |
 
 "Happened" tends to sit a little above any price: the actuals feed omits players with an all-zero line, which tilts outcomes toward overs.
 
@@ -58,25 +58,27 @@ Multiplier on the floor and ceiling distances from the median (1 = as projected)
 | going into week 9 | counts | 9,544 | 974 | 1.30 | 0.06 | **1.24** | applied |
 | going into week 10 | yards | 28,723 | 1241 | 1.60 | 0.08 | **1.52** | applied |
 | going into week 10 | counts | 11,814 | 1167 | 1.30 | 0.07 | **1.23** | applied |
+| going into week 11 | yards | 33,077 | 1439 | 1.60 | 0.07 | **1.53** | applied |
+| going into week 11 | counts | 14,215 | 1358 | 1.30 | 0.07 | **1.23** | applied |
 
 Each week on its own (best multiplier from that week's rows alone; – under 150 rows):
 
-| group | wk 1 | wk 2 | wk 3 | wk 4 | wk 5 | wk 6 | wk 7 | wk 8 | wk 9 | wk 10 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| yards | 2.50 | 2.50 | 1.20 | 2.50 | 1.70 | 1.40 | 1.60 | 1.70 | 1.50 | 1.70 |
-| counts | 2.50 | – | – | 1.30 | 1.20 | 1.70 | 1.10 | 1.50 | 1.10 | 1.50 |
+| group | wk 1 | wk 2 | wk 3 | wk 4 | wk 5 | wk 6 | wk 7 | wk 8 | wk 9 | wk 10 | wk 11 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| yards | 2.50 | 2.50 | 1.20 | 2.50 | 1.70 | 1.40 | 1.60 | 1.70 | 1.50 | 1.70 | 1.60 |
+| counts | 2.50 | – | – | 1.30 | 1.20 | 1.70 | 1.10 | 1.50 | 1.10 | 1.50 | 1.50 |
 
 It is above 1 everywhere it can be measured, but how far above moves with the week and the amount of ladder. That is why the used number is pooled, marked down and capped rather than the best fit.
 
 ## 3. Walk-forward: does it price the projection better?
 
-Weeks 2, 3, 5, 6, 7, 8, 9, 10, each priced with the multiplier fitted on the weeks before it. Projection-alone Brier against what happened (lower is better); the difference is widened − as-projected, clustered by player-week, so negative is better.
+Weeks 2, 3, 5, 6, 7, 8, 9, 10, 11, each priced with the multiplier fitted on the weeks before it. Projection-alone Brier against what happened (lower is better); the difference is widened − as-projected, clustered by player-week, so negative is better.
 
 |  | markets | player-weeks | as projected | widened | widened − projected | log-loss: projected → widened |
 | --- | --- | --- | --- | --- | --- | --- |
-| near the money | 23,846 | 1223 | 0.2501 | 0.2441 | -0.0060 (z -8.1) | 0.7133 → 0.6933 |
-| long-shot overs (books 3–15%) | 10,661 | 1212 | 0.0794 | 0.0817 | +0.0023 (z 2.5) | 0.3431 → 0.3187 |
-| all rungs | 45,948 | 1224 | 0.1869 | 0.1850 | -0.0020 (z -3.3) | 0.5788 → 0.5601 |
+| near the money | 27,381 | 1410 | 0.2501 | 0.2440 | -0.0062 (z -9.0) | 0.7127 → 0.6920 |
+| long-shot overs (books 3–15%) | 12,029 | 1399 | 0.0793 | 0.0820 | +0.0028 (z 3.3) | 0.3447 → 0.3206 |
+| all rungs | 52,554 | 1411 | 0.1875 | 0.1855 | -0.0020 (z -3.6) | 0.5804 → 0.5610 |
 
 ## 3b. Does the cap decide it?
 
@@ -84,10 +86,10 @@ The same walk-forward under other caps, so the choice of cap does not quietly de
 
 | cap | near the money: Brier | z | share near the money | all rungs: Brier | z |
 | --- | --- | --- | --- | --- | --- |
-| 1.2 | -0.0035 | -10.0 | -0.04 ±0.12 | -0.0017 | -6.3 |
-| 1.4 | -0.0052 | -8.9 | -0.04 ±0.13 | -0.0021 | -4.5 |
-| 1.6 | -0.0060 | -8.1 | -0.05 ±0.13 | -0.0020 | -3.3 |
-| 2.0 | -0.0061 | -7.6 | -0.05 ±0.13 | -0.0016 | -2.4 |
+| 1.2 | -0.0036 | -10.9 | -0.01 ±0.11 | -0.0017 | -6.8 |
+| 1.4 | -0.0054 | -9.8 | -0.02 ±0.12 | -0.0021 | -4.9 |
+| 1.6 | -0.0062 | -9.0 | -0.02 ±0.12 | -0.0020 | -3.6 |
+| 2.0 | -0.0063 | -8.5 | -0.02 ±0.12 | -0.0017 | -2.7 |
 
 ## 4. Does a better-calibrated projection earn a share of the price?
 
@@ -95,13 +97,13 @@ The share of the books' price to move toward the projection to match what happen
 
 |  | markets | player-weeks | share: as projected | share: widened | Brier: projected | widened | books |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| near the money | 23,846 | 1223 | -0.03 ±0.10 | -0.05 ±0.13 | 0.2501 | 0.2441 | 0.2338 |
-| long-shot overs (books 3–15%) | 10,661 | 1212 | 0.09 ±0.09 | 0.08 ±0.12 | 0.0794 | 0.0817 | 0.0766 |
-| all rungs | 45,948 | 1224 | 0.04 ±0.07 | 0.01 ±0.09 | 0.1869 | 0.1850 | 0.1762 |
+| near the money | 27,381 | 1410 | -0.01 ±0.09 | -0.02 ±0.12 | 0.2501 | 0.2440 | 0.2337 |
+| long-shot overs (books 3–15%) | 12,029 | 1399 | 0.08 ±0.08 | 0.06 ±0.11 | 0.0793 | 0.0820 | 0.0762 |
+| all rungs | 52,554 | 1411 | 0.04 ±0.06 | 0.02 ±0.09 | 0.1875 | 0.1855 | 0.1765 |
 
 ## 5. Reading it
 
-- **Widening prices the projection better** (walk-forward, each week fitted on earlier ones): near the money -0.0060 Brier, z -8.1; all rungs -0.0020 Brier, z -3.3.
-- Better-calibrated is not better than the books: near the money the widened projection scores 0.2441 against the books' 0.2338.
-- It earns **no share near the money** (-0.05 ±0.13). Better calibration is not new information: the books already carry what the projection knows, and the share is what the price uses.
+- **Widening prices the projection better** (walk-forward, each week fitted on earlier ones): near the money -0.0062 Brier, z -9.0; all rungs -0.0020 Brier, z -3.6.
+- Better-calibrated is not better than the books: near the money the widened projection scores 0.2440 against the books' 0.2337.
+- It earns **no share near the money** (-0.02 ±0.12). Better calibration is not new information: the books already carry what the projection knows, and the share is what the price uses.
 - Nothing here reaches a price. The fit lives in `lib/spread-fit.mjs` and is not wired into capture: the shares in use were fitted on the projection as it was, and mixing the two would move them under the price. If the share clears zero, wire it in and refit the shares on the widened projection in the same change.

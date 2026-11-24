@@ -8,6 +8,7 @@ PlayerID,Name,Team,Pos
 8057,Kirk Cousins,MIN,QB
 8065,Case Keenum,CHI,QB
 8627,Keenan Allen,SF,WR
+8628,Robert Woods,LAR,WR
 8743,Geno Smith,NYJ,QB
 8781,Zach Ertz,PHI,TE
 8783,Travis Kelce,KC,TE
@@ -199,6 +200,7 @@ PlayerID,Name,Team,Pos
 15402,Mac Jones,SF,QB
 15404,Jaylen Waddle,DEN,WR
 15406,DeVonta Smith,PHI,WR
+15413,Trey Sermon,ATL,RB
 15416,Justin Fields,KC,QB
 15447,Joshua Palmer,BUF,WR
 15459,Noah Gray,KC,TE
@@ -447,6 +449,7 @@ PlayerID,Name,Team,Pos
 18263,Treyton Welch,NO,TE
 18281,Cole Burgess,PIT,WR
 18284,Cam Grandy,CIN,TE
+18298,Thomas Yassmin,GB,TE
 18300,British Brooks,HOU,RB
 18301,David Martin-Robinson,TEN,TE
 18307,Kameron Johnson,TB,WR
@@ -619,7 +622,7 @@ PlayerID,Name,Team,Pos
 19357,Sam Roush,CHI,TE
 19359,Jaren Kanak,TEN,TE
 19363,Dallen Bentley,DEN,TE
-19364,Matthew Hibner,BAL,TE
+19364,Matt Hibner,BAL,TE
 19368,Athan Kaliakmanis,WAS,QB
 19422,Jaydn Ott,KC,RB
 19425,Chip Trayanum,NYJ,RB
@@ -640,6 +643,8 @@ PlayerID,Name,Team,Pos
 19607,Kaelon Black,SF,RB
 19608,Carsen Ryan,CLE,TE
 19631,Cyrus Allen,KC,WR
+19642,Jack Strand,ATL,QB
+19645,Matthew Caldwell,LAR,QB
 19655,Greg Desrosiers,NYG,RB
 19668,Malik McClain,NYJ,WR
 19681,Seydou Traore,MIA,TE
@@ -649,3 +654,4 @@ PlayerID,Name,Team,Pos
 19989,Camden Brown,DAL,WR
 19996,Jacob De Jesus,KC,WR
 20059,Squirrel White,CHI,WR
+20074,Myles Montgomery,NE,RB

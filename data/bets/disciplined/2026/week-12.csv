@@ -1,3 +1,3 @@
 Season,Week,Persona,PlayerID,Name,Team,Pos,Opp,Stat,Book,Line,Side,Odds,OppositeOdds,ImpliedProb,FairProb,Hold,OneSided,OurProb,Edge,ModelEdge,EdgeBucket,PriceModel,MedianAdj,Bettable,Slot,StakeUnits,ScaledBy,BankrollBefore,Status,Actual,PnlUnits,ClvStatus,ClvProb,ClvPct,ClosingOdds,ClosingLine,LineMove,Source,CapturedAt
-2026,12,disciplined,18484,Tez Johnson,TB,WR,vs CAR,recYds,DraftKings,69.5,over,1980,,0.0481,0.0481,,1,0.0816,0.0335,0.0335,3-5%,pool,,1,main,1,1,100,pending,,,,,,,,,opticodds,2026-11-24T23:18:23.015Z
-2026,12,disciplined,18647,Jordan Watkins,SF,WR,vs SEA,recYds,DraftKings,49.5,over,1760,,0.0538,0.0538,,1,0.0862,0.0324,0.0324,3-5%,pool,,1,main,1,1,100,pending,,,,,,,,,opticodds,2026-11-24T23:18:23.015Z
+2026,12,disciplined,18484,Tez Johnson,TB,WR,vs CAR,recYds,DraftKings,69.5,over,1980,,0.0481,0.0481,,1,0.0816,0.0335,0.0335,3-5%,pool,,1,main,1,1,100,pending,,,not-found,,,,,,opticodds,2026-11-24T23:18:23.015Z
+2026,12,disciplined,18647,Jordan Watkins,SF,WR,vs SEA,recYds,DraftKings,49.5,over,1760,,0.0538,0.0538,,1,0.0862,0.0324,0.0324,3-5%,pool,,1,main,1,1,100,pending,,,not-found,,,,,,opticodds,2026-11-24T23:18:23.015Z

@@ -107,6 +107,7 @@ PlayerID,Name,Team,Pos
 13484,Travis Homer,PIT,RB
 13491,Daniel Jones,IND,QB
 13502,Hollywood Brown,PHI,WR
+13504,Jake Browning,LAC,QB
 13517,Jakobi Meyers,JAX,WR
 13522,Darius Slayton,IND,WR
 13525,Parris Campbell,DAL,WR
@@ -443,7 +444,7 @@ PlayerID,Name,Team,Pos
 17975,Devaughn Vele,NO,WR
 17976,Jalen Coker,CAR,WR
 17977,Isaiah Williams,NYJ,WR
-17979,Kedon Slovis,BAL,QB
+17979,Kedon Slovis,ARI,QB
 18107,Mason Tipton,NO,WR
 18160,Colson Yankoff,WAS,TE
 18251,Hayden Rucci,LAC,TE
